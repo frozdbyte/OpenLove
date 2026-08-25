@@ -18,13 +18,13 @@ export const POST: RequestHandler = async ({ request }) => {
 				auth: keys.auth
 			},
 			{
-				title: 'OpenLove Connected! ❤️',
+				title: 'Open Love Connected! ❤️',
 				body: 'Milestone notifications are active and ready for your special days.',
 				type: 'test'
 			}
 		);
 
-		return json({ success: result.success });
+		return json({ success: result.success, error: result.error });
 	} catch (error: any) {
 		console.error('Error sending test push notification:', error);
 		return json({ error: 'Failed to send test push' }, { status: 500 });

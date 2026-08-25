@@ -57,6 +57,26 @@ export async function subscribeToPush(): Promise<{ success: boolean; error?: str
 		const convertedKey = urlBase64ToUint8Array(publicKey);
 		let subscription = await registration.pushManager.getSubscription();
 
+		if (subscription) {
+			try {
+				const existingRawKey = subscription.options.applicationServerKey;
+				if (existingRawKey) {
+					const existingKeyArray = new Uint8Array(existingRawKey);
+					const isKeyMatch =
+						existingKeyArray.length === convertedKey.length &&
+						existingKeyArray.every((val, i) => val === convertedKey[i]);
+
+					if (!isKeyMatch) {
+						console.log('VAPID public key mismatch detected. Re-subscribing...');
+						await subscription.unsubscribe();
+						subscription = null;
+					}
+				}
+			} catch (keyCheckErr) {
+				console.warn('Could not verify existing subscription key:', keyCheckErr);
+			}
+		}
+
 		if (!subscription) {
 			subscription = await registration.pushManager.subscribe({
 				userVisibleOnly: true,

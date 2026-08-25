@@ -17,10 +17,46 @@ export interface PushPayload {
 	data?: Record<string, any>;
 }
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const DATA_DIR = process.env.DATA_DIR || path.resolve(process.cwd(), 'data');
 const VAPID_FILE = path.join(DATA_DIR, 'vapid.json');
 
 let vapidKeys: VapidKeys | null = null;
+
+/**
+ * Resolve a valid VAPID subject compliant with RFC 8292 & Apple APNs (web.push.apple.com).
+ * Apple strictly rejects .local, localhost, or invalid domains with 403 Forbidden.
+ */
+export function getVapidSubject(): string {
+	if (process.env.VAPID_SUBJECT && process.env.VAPID_SUBJECT.trim()) {
+		const sub = process.env.VAPID_SUBJECT.trim();
+		if (sub.startsWith('mailto:') || sub.startsWith('https://') || sub.startsWith('http://')) {
+			return sub;
+		}
+		if (sub.includes('@')) {
+			return `mailto:${sub}`;
+		}
+		return `https://${sub}`;
+	}
+
+	// Check Coolify / SvelteKit / generic FQDN environment variables
+	const fqdn =
+		process.env.ORIGIN ||
+		process.env.SERVICE_FQDN_OPENLOVE_3000 ||
+		process.env.SERVICE_FQDN_OPENLOVE ||
+		process.env.APP_URL ||
+		process.env.COOLIFY_FQDN;
+
+	if (fqdn && fqdn.trim()) {
+		const clean = fqdn.trim();
+		if (clean.startsWith('http://') || clean.startsWith('https://')) {
+			return clean;
+		}
+		return `https://${clean}`;
+	}
+
+	// Valid public fallback acceptable by Apple APNs, Google FCM, and Mozilla Autopush
+	return 'https://github.com/frozdbyte/OpenLove';
+}
 
 /**
  * Initialize or retrieve VAPID keys.
@@ -35,7 +71,7 @@ export function getOrCreateVapidKeys(): VapidKeys {
 	const envPriv = process.env.PRIVATE_VAPID_KEY;
 
 	if (envPub && envPriv) {
-		vapidKeys = { publicKey: envPub, privateKey: envPriv };
+		vapidKeys = { publicKey: envPub.trim(), privateKey: envPriv.trim() };
 	} else {
 		// 2. Check persistent vapid.json file
 		try {
@@ -73,7 +109,7 @@ export function getOrCreateVapidKeys(): VapidKeys {
 		};
 	}
 
-	const subject = process.env.VAPID_SUBJECT || 'mailto:admin@openlove.local';
+	const subject = getVapidSubject();
 	webPush.setVapidDetails(subject, vapidKeys.publicKey, vapidKeys.privateKey);
 
 	return vapidKeys;
@@ -93,8 +129,9 @@ export function getVapidPublicKey(): string {
 export async function sendPushNotification(
 	subscription: { endpoint: string; p256dh: string; auth: string },
 	payload: PushPayload
-): Promise<{ success: boolean; shouldDelete?: boolean }> {
-	getOrCreateVapidKeys();
+): Promise<{ success: boolean; shouldDelete?: boolean; error?: string }> {
+	const keys = getOrCreateVapidKeys();
+	const subject = getVapidSubject();
 
 	const pushSubscription = {
 		endpoint: subscription.endpoint,
@@ -109,16 +146,25 @@ export async function sendPushNotification(
 			pushSubscription,
 			JSON.stringify(payload),
 			{
-				TTL: 60 * 60 * 24 // 24 hours
+				TTL: 60 * 60 * 24, // 24 hours
+				vapidDetails: {
+					subject,
+					publicKey: keys.publicKey,
+					privateKey: keys.privateKey
+				}
 			}
 		);
 		return { success: true };
 	} catch (error: any) {
-		console.error('WebPush delivery error for endpoint:', subscription.endpoint, error.statusCode);
+		console.error(
+			`WebPush delivery error for endpoint ${subscription.endpoint}:`,
+			error.statusCode,
+			error.body || error.message
+		);
 		// If subscription expired or gone (410 Gone / 404 Not Found), signal for cleanup
 		if (error.statusCode === 410 || error.statusCode === 404) {
-			return { success: false, shouldDelete: true };
+			return { success: false, shouldDelete: true, error: error.message };
 		}
-		return { success: false };
+		return { success: false, error: error.body || error.message || `HTTP ${error.statusCode}` };
 	}
 }
