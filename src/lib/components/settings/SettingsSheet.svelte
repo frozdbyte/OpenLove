@@ -145,6 +145,14 @@
 		await profileStore.update({ customMilestones: updated });
 	}
 
+	async function handleResetData() {
+		if (confirm('Are you sure you want to reset all data?')) {
+			await profileStore.reset();
+			open = false;
+			onclose?.();
+		}
+	}
+
 	const palettes: { id: ColorPalette; name: string; bg: string }[] = [
 		{ id: 'rose', name: 'Rose', bg: 'bg-rose-500' },
 		{ id: 'lavender', name: 'Lavender', bg: 'bg-purple-500' },
@@ -444,11 +452,7 @@
 				<span>Restore from JSON Backup</span>
 			</Button>
 
-			<Button variant="ghost" class="w-full text-destructive hover:bg-destructive/10" onclick={() => {
-				if (confirm('Are you sure you want to reset all data?')) {
-					profileStore.reset();
-				}
-			}}>
+			<Button variant="ghost" class="w-full text-destructive hover:bg-destructive/10" onclick={handleResetData}>
 				<RotateCcw class="h-4 w-4 mr-1.5" />
 				<span>Reset All Data</span>
 			</Button>
