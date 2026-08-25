@@ -13,7 +13,7 @@
 
 <div
 	class={cn(
-		"rounded-3xl border border-border/60 bg-card/85 text-card-foreground shadow-sm backdrop-blur-md transition-all",
+		"w-full min-w-0 max-w-full overflow-hidden rounded-3xl border border-border/60 bg-card/85 text-card-foreground shadow-sm backdrop-blur-md transition-all",
 		className
 	)}
 	{...restProps}

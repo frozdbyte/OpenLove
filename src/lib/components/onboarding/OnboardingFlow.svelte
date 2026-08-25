@@ -262,14 +262,14 @@
 					<p class="text-xs sm:text-sm text-muted-foreground">When did your special journey begin?</p>
 				</div>
 
-				<Card class="p-4 sm:p-5 bg-card border-border shadow-sm">
-					<div class="space-y-2 text-left w-full min-w-0">
-						<label for="onboarding-date" class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Anniversary Date</label>
+				<Card class="p-4 sm:p-5 bg-card border-border shadow-sm w-full min-w-0 max-w-full overflow-hidden">
+					<div class="space-y-2 text-left w-full min-w-0 max-w-full overflow-hidden">
+						<label for="onboarding-date" class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Anniversary Date</label>
 						<Input
 							id="onboarding-date"
 							type="date"
 							bind:value={dateInput}
-							class="text-base w-full min-w-0"
+							class="text-base w-full min-w-0 max-w-full"
 						/>
 					</div>
 				</Card>
