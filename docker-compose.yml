@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   openlove:
-    image: openlove:latest
+    image: frozdbyte/openlove:latest
     build:
       context: .
       dockerfile: Dockerfile
