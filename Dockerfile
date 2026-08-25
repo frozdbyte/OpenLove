@@ -1,19 +1,20 @@
 # ==========================================
-# Stage 1: Build dependencies & application
+# Stage 1: Build dependencies & application (Native speed on host)
 # ==========================================
-FROM node:22-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
-# Install build essentials & tools
-RUN apk add --no-cache openssl libc6-compat
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install native tools for build stage
+RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN npm install -g pnpm@9
 
 # Copy package manifests & prisma schema
-COPY package.json pnpm-lock.yaml .npmrc* ./
+COPY package.json pnpm-lock.yaml* .npmrc* ./
 COPY prisma ./prisma/
+COPY prisma.config.ts ./
 
-# Install dependencies (including devDependencies for build)
+# Install dependencies for build
 RUN pnpm install --frozen-lockfile
 
 # Copy application source code
@@ -21,38 +22,33 @@ COPY . .
 
 # Generate Prisma Client & Build SvelteKit production bundle
 ENV NODE_ENV=production
-RUN pnpm run prisma:generate
-RUN pnpm run build
-RUN pnpm prune --prod
+RUN npx prisma generate
+RUN npx vite build
 
 # ==========================================
-# Stage 2: Production runtime
+# Stage 2: Production runtime (Zero RUN steps for 100% reliable cross-arch assembly)
 # ==========================================
-FROM node:22-alpine AS runner
+FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
-
-# Install runtime dependencies for SQLite & Prisma
-RUN apk add --no-cache openssl libc6-compat ca-certificates
 
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
 ENV DATABASE_URL="file:/app/data/openlove.db"
 
-# Copy built app and dependencies from builder
+# Copy built application, config and dependencies from builder
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/entrypoint.sh ./entrypoint.sh
-
-# Make entrypoint executable
-RUN chmod +x ./entrypoint.sh
 
 # Persistent storage volume for SQLite DB & VAPID keys
 VOLUME ["/app/data"]
 
 EXPOSE 3000
 
-ENTRYPOINT ["./entrypoint.sh"]
+# Execute entrypoint via shell (avoids needing chmod +x inside foreign architectures)
+ENTRYPOINT ["sh", "./entrypoint.sh"]

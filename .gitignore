@@ -22,7 +22,7 @@ Thumbs.db
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-/src/lib/server/generated
+/src/lib/generated
 /data/uploads
 *.db
 *.db-journal
