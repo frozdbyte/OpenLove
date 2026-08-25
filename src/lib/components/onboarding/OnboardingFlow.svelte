@@ -19,9 +19,11 @@
 		Monitor,
 		Smartphone,
 		Bell,
+		BellRing,
 		Share2
 	} from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
+	import { subscribeToPush, isPushSupported } from '$lib/push/client';
 
 	let step = $state(1);
 	const totalSteps = 5;
@@ -31,6 +33,24 @@
 	let selectedTheme = $state<UIThemeId>(profileStore.profile.uiTheme || 'modern');
 	let selectedColorMode = $state<ColorMode>(profileStore.profile.colorMode || 'system');
 	let fileInputRef = $state<HTMLInputElement | null>(null);
+
+	// Push state during onboarding
+	let pushOptedIn = $state(false);
+	let pushLoading = $state(false);
+
+	async function handleOnboardingPushToggle() {
+		pushLoading = true;
+		try {
+			const res = await subscribeToPush();
+			if (res.success) {
+				pushOptedIn = true;
+			}
+		} catch (err) {
+			console.error(err);
+		} finally {
+			pushLoading = false;
+		}
+	}
 
 	// Detect OS for PWA installation guide
 	let userOS = $state<'ios' | 'android' | 'desktop'>('desktop');
@@ -373,6 +393,24 @@
 								</p>
 							</div>
 						</div>
+					{/if}
+				</Card>
+
+				<!-- Push Notification Opt-in -->
+				<Card class="p-4 bg-card border-border flex items-center justify-between gap-3 text-left">
+					<div class="space-y-0.5">
+						<div class="text-xs font-bold text-foreground flex items-center gap-1.5">
+							<BellRing class="h-4 w-4 text-primary" />
+							<span>Anniversary Notifications</span>
+						</div>
+						<p class="text-[11px] text-muted-foreground">Receive reminders on your special milestones</p>
+					</div>
+					{#if pushOptedIn}
+						<span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">✓ Enabled</span>
+					{:else}
+						<Button size="sm" variant="outline" class="text-xs shrink-0" onclick={handleOnboardingPushToggle} disabled={pushLoading}>
+							<span>Enable</span>
+						</Button>
 					{/if}
 				</Card>
 			</div>

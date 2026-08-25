@@ -21,8 +21,10 @@
 		PartyPopper,
 		HeartHandshake,
 		Plus,
-		Check
+		Check,
+		BellRing
 	} from '@lucide/svelte';
+	import { subscribeToPush, unsubscribeFromPush, sendTestPush, isPushSupported } from '$lib/push/client';
 
 	interface Props {
 		open?: boolean;
@@ -34,6 +36,49 @@
 
 	let fileInputRef = $state<HTMLInputElement | null>(null);
 	let backupInputRef = $state<HTMLInputElement | null>(null);
+
+	// Push state
+	let isPushLoading = $state(false);
+	let pushStatusMessage = $state('');
+
+	async function handlePushToggle(enable: boolean) {
+		isPushLoading = true;
+		pushStatusMessage = '';
+		try {
+			if (enable) {
+				const res = await subscribeToPush();
+				if (!res.success) {
+					pushStatusMessage = res.error || 'Failed to enable notifications';
+				} else {
+					pushStatusMessage = 'Push notifications enabled!';
+				}
+			} else {
+				await unsubscribeFromPush();
+				pushStatusMessage = 'Push notifications disabled';
+			}
+		} catch (err: any) {
+			pushStatusMessage = err.message || 'Error updating push notifications';
+		} finally {
+			isPushLoading = false;
+		}
+	}
+
+	async function handleTestPush() {
+		isPushLoading = true;
+		pushStatusMessage = 'Sending test notification...';
+		try {
+			const res = await sendTestPush();
+			if (res.success) {
+				pushStatusMessage = 'Test notification sent!';
+			} else {
+				pushStatusMessage = res.error || 'Failed to send test push';
+			}
+		} catch (err: any) {
+			pushStatusMessage = err.message || 'Error sending test push';
+		} finally {
+			isPushLoading = false;
+		}
+	}
 
 	// Milestone filter tab
 	let selectedMilestoneTab = $state<'all' | 'months' | 'years' | 'days' | 'custom'>('all');
@@ -261,6 +306,37 @@
 						{/each}
 					</div>
 				</div>
+			{/if}
+		</section>
+
+		<!-- Push Notifications Toggle -->
+		<section class="p-3 rounded-2xl bg-card border border-border space-y-3">
+			<div class="flex items-center justify-between">
+				<div class="space-y-0.5">
+					<div class="text-sm font-semibold flex items-center gap-1.5">
+						<BellRing class="h-4 w-4 text-primary" />
+						<span>Milestone Notifications</span>
+					</div>
+					<div class="text-xs text-muted-foreground">Get alerted on anniversaries & special days</div>
+				</div>
+				<Switch
+					checked={profileStore.profile.pushSubscribed}
+					disabled={isPushLoading}
+					onchange={handlePushToggle}
+				/>
+			</div>
+
+			{#if profileStore.profile.pushSubscribed}
+				<div class="pt-2 border-t border-border/50 flex items-center justify-between gap-2">
+					<span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓ Device Connected</span>
+					<Button size="sm" variant="outline" class="h-7 text-xs px-2.5" onclick={handleTestPush} disabled={isPushLoading}>
+						<span>Send Test Push</span>
+					</Button>
+				</div>
+			{/if}
+
+			{#if pushStatusMessage}
+				<p class="text-xs text-muted-foreground italic">{pushStatusMessage}</p>
 			{/if}
 		</section>
 

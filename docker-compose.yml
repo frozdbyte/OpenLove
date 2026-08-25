@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  openlove:
+    image: openlove:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openlove
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=file:/app/data/openlove.db
+      # Optional: Custom VAPID keys. If left unset, OpenLove auto-generates them into /app/data/vapid.json
+      # - PUBLIC_VAPID_KEY=
+      # - PRIVATE_VAPID_KEY=
+      # - VAPID_SUBJECT=mailto:admin@yourdomain.com
+    volumes:
+      - openlove_data:/app/data
+
+volumes:
+  openlove_data:
+    driver: local
