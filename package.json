@@ -10,7 +10,13 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "image:build": "node scripts/build-image.js",
+    "image:publish": "node scripts/publish-image.js",
+    "image:release": "node scripts/release.js",
+    "podman:build": "node scripts/build-image.js",
+    "podman:publish": "node scripts/publish-image.js",
+    "podman:release": "node scripts/release.js"
   },
   "dependencies": {
     "@lucide/svelte": "^1.34.0",
