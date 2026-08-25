@@ -245,11 +245,11 @@
 			{#if profileStore.profile.uiTheme === 'modern'}
 				<div class="pt-2">
 					<span class="text-[11px] text-muted-foreground font-medium block mb-2">Accent Color</span>
-					<div class="flex items-center gap-2">
+					<div class="flex items-center gap-3 px-2">
 						{#each palettes as p}
 							<button
 								type="button"
-								class="h-8 w-8 rounded-full {p.bg} transition-transform cursor-pointer flex items-center justify-center {profileStore.profile.colorPalette === p.id ? 'ring-4 ring-primary/30 scale-110' : 'opacity-80 hover:opacity-100'}"
+								class="h-8 w-8 rounded-full {p.bg} transition-transform cursor-pointer flex items-center justify-center {profileStore.profile.colorPalette === p.id ? 'ring-5 ring-primary/30 scale-110' : 'opacity-80 hover:opacity-100'}"
 								onclick={() => profileStore.setColorPalette(p.id)}
 								title={p.name}
 								aria-label={p.name}
