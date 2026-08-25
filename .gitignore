@@ -26,3 +26,5 @@ vite.config.ts.timestamp-*
 /data/uploads
 *.db
 *.db-journal
+
+vapid.json
