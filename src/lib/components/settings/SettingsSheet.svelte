@@ -22,9 +22,11 @@
 		HeartHandshake,
 		Plus,
 		Check,
-		BellRing
+		BellRing,
+		QrCode
 	} from '@lucide/svelte';
 	import { subscribeToPush, unsubscribeFromPush, sendTestPush, isPushSupported } from '$lib/push/client';
+	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
 
 	interface Props {
 		open?: boolean;
@@ -33,6 +35,8 @@
 	}
 
 	let { open = $bindable(false), milestones, onclose }: Props = $props();
+
+	let isScanModalOpen = $state(false);
 
 	let fileInputRef = $state<HTMLInputElement | null>(null);
 	let backupInputRef = $state<HTMLInputElement | null>(null);
@@ -440,6 +444,11 @@
 
 		<!-- Backup & Reset -->
 		<section class="pt-2 border-t border-border space-y-2">
+			<Button variant="outline" class="w-full" onclick={() => (isScanModalOpen = true)}>
+				<QrCode class="h-4 w-4 mr-1.5" />
+				<span>Sync with Partner / Scan QR</span>
+			</Button>
+
 			<input
 				type="file"
 				accept=".json"
@@ -459,3 +468,5 @@
 		</section>
 	</div>
 </Modal>
+
+<ScanImportModal bind:open={isScanModalOpen} />

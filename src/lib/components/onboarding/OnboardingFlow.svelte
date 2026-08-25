@@ -18,16 +18,19 @@
 		Monitor,
 		Smartphone,
 		BellRing,
-		Share2
+		Share2,
+		QrCode
 	} from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
 	import { subscribeToPush } from '$lib/push/client';
 	import { isRunningAsPWA } from '$lib/utils/pwa';
+	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
 
 	type OnboardingStepKey = 'pwa_install' | 'names' | 'date' | 'photo' | 'style';
 
 	let isStandalone = $state(false);
 	let currentStepIndex = $state(0);
+	let isScanModalOpen = $state(false);
 
 	// Detect standalone PWA mode and user OS on mount
 	let userOS = $state<'ios' | 'android' | 'desktop'>('desktop');
@@ -224,6 +227,17 @@
 				<p class="text-[11px] text-muted-foreground">
 					Installed? Open it from your home screen, or continue setup right here in your browser.
 				</p>
+
+				<div class="pt-1">
+					<button
+						type="button"
+						class="text-xs font-semibold text-primary hover:underline flex items-center justify-center gap-1.5 mx-auto py-1 px-3 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer"
+						onclick={() => (isScanModalOpen = true)}
+					>
+						<QrCode class="h-3.5 w-3.5" />
+						<span>Sync with Partner / Scan QR</span>
+					</button>
+				</div>
 			</div>
 		{:else if currentStepKey === 'names'}
 			<!-- Step: Names -->
@@ -249,6 +263,17 @@
 						<p class="text-[11px] text-muted-foreground pt-0.5">Stored 100% locally in your browser for privacy.</p>
 					</div>
 				</Card>
+
+				<div>
+					<button
+						type="button"
+						class="text-xs font-semibold text-primary hover:underline flex items-center justify-center gap-1.5 mx-auto py-1 px-3 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer"
+						onclick={() => (isScanModalOpen = true)}
+					>
+						<QrCode class="h-3.5 w-3.5" />
+						<span>Sync with Partner / Scan QR Code</span>
+					</button>
+				</div>
 			</div>
 		{:else if currentStepKey === 'date'}
 			<!-- Step: Date -->
@@ -462,3 +487,5 @@
 		</Button>
 	</footer>
 </div>
+
+<ScanImportModal bind:open={isScanModalOpen} />

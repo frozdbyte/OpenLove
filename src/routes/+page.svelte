@@ -2,13 +2,20 @@
 	import { profileStore } from '$lib/stores/profile.svelte';
 	import { calculateTimeBreakdown, calculateMilestones } from '$lib/utils/time';
 	import { getThemeComponent } from '$lib/components/themes/registry';
+	import { isRunningAsPWA } from '$lib/utils/pwa';
 	import SettingsSheet from '$lib/components/settings/SettingsSheet.svelte';
 	import ShareModal from '$lib/components/share/ShareModal.svelte';
+	import PartnerInviteModal from '$lib/components/share/PartnerInviteModal.svelte';
 	import OnboardingFlow from '$lib/components/onboarding/OnboardingFlow.svelte';
 	import { Heart } from '@lucide/svelte';
+	import confetti from 'canvas-confetti';
 
 	let isSettingsOpen = $state(false);
 	let isShareOpen = $state(false);
+	let isInviteModalOpen = $state(false);
+	let pendingInviteJson = $state('');
+	let pendingInviteRaw = $state('');
+	let pendingPartnerNames = $state('');
 	let currentTime = $state(new Date());
 
 	// Update live clock every second
@@ -24,18 +31,51 @@
 	$effect(() => {
 		if (typeof window !== 'undefined' && window.location.hash.startsWith('#import=')) {
 			try {
-				const raw = decodeURIComponent(window.location.hash.replace('#import=', ''));
+				const encoded = window.location.hash.replace('#import=', '');
+				const raw = decodeURIComponent(encoded);
 				const json = atob(raw);
-				profileStore.importJSON(json).then((success) => {
-					if (success) {
-						window.history.replaceState(null, '', window.location.pathname);
-					}
-				});
+				const parsed = JSON.parse(json);
+
+				pendingInviteJson = json;
+				pendingInviteRaw = raw;
+				pendingPartnerNames = parsed.names || 'Your Partner';
+
+				const isStandalone = isRunningAsPWA();
+				if (isStandalone) {
+					// In standalone PWA mode, auto-import directly into PWA storage!
+					profileStore.importJSON(json).then((success) => {
+						if (success) {
+							window.history.replaceState(null, '', window.location.pathname);
+							confetti({
+								particleCount: 120,
+								spread: 70,
+								origin: { y: 0.6 }
+							});
+						}
+					});
+				} else {
+					// In standard browser, show smart landing modal explaining PWA install vs code copy vs browser use
+					isInviteModalOpen = true;
+				}
 			} catch (err) {
 				console.error('Failed to parse share hash:', err);
 			}
 		}
 	});
+
+	async function handleAcceptBrowserInvite() {
+		if (pendingInviteJson) {
+			await profileStore.importJSON(pendingInviteJson);
+			window.history.replaceState(null, '', window.location.pathname);
+			if (typeof window !== 'undefined') {
+				confetti({
+					particleCount: 120,
+					spread: 70,
+					origin: { y: 0.6 }
+				});
+			}
+		}
+	}
 
 	let timeBreakdown = $derived(
 		calculateTimeBreakdown(profileStore.profile.togetherSince, currentTime)
@@ -89,4 +129,14 @@
 <ShareModal
 	bind:open={isShareOpen}
 	onclose={() => (isShareOpen = false)}
+/>
+
+<PartnerInviteModal
+	bind:open={isInviteModalOpen}
+	partnerNames={pendingPartnerNames}
+	importRaw={pendingInviteRaw}
+	onAcceptBrowser={handleAcceptBrowserInvite}
+	onclose={() => {
+		isInviteModalOpen = false;
+	}}
 />

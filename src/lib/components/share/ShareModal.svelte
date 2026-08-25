@@ -4,6 +4,7 @@
 	import Button from '$lib/components/ui/button';
 	import { Copy, Check, QrCode, Download, Heart } from '@lucide/svelte';
 	import QRCode from 'qrcode';
+	import { copyToClipboard } from '$lib/utils/clipboard';
 
 	interface Props {
 		open?: boolean;
@@ -14,6 +15,7 @@
 
 	let qrDataUrl = $state<string>('');
 	let copied = $state(false);
+	let copiedCode = $state(false);
 
 	$effect(() => {
 		if (open && typeof window !== 'undefined') {
@@ -43,13 +45,32 @@
 		try {
 			const json = profileStore.exportJSON();
 			const shareUrl = `${window.location.origin}/#import=${encodeURIComponent(btoa(json))}`;
-			await navigator.clipboard.writeText(shareUrl);
-			copied = true;
-			setTimeout(() => {
-				copied = false;
-			}, 2500);
+			const ok = await copyToClipboard(shareUrl);
+			if (ok) {
+				copied = true;
+				setTimeout(() => {
+					copied = false;
+				}, 2500);
+			}
 		} catch (err) {
 			console.error('Failed to copy share link:', err);
+		}
+	}
+
+	async function copySyncCode() {
+		if (typeof window === 'undefined') return;
+		try {
+			const json = profileStore.exportJSON();
+			const code = btoa(json);
+			const ok = await copyToClipboard(code);
+			if (ok) {
+				copiedCode = true;
+				setTimeout(() => {
+					copiedCode = false;
+				}, 2500);
+			}
+		} catch (err) {
+			console.error('Failed to copy sync code:', err);
 		}
 	}
 
@@ -85,7 +106,7 @@
 		</div>
 
 		<p class="text-xs text-muted-foreground max-w-xs">
-			Have your partner scan this QR code with their camera to instantly load your relationship counter.
+			Have your partner scan this QR code with their camera or from their Open Love app.
 		</p>
 
 		<!-- Actions -->
@@ -100,9 +121,19 @@
 				{/if}
 			</Button>
 
-			<Button variant="outline" class="w-full" onclick={downloadBackupJSON}>
-				<Download class="h-4 w-4" />
-				<span>Download JSON Backup</span>
+			<Button variant="outline" class="w-full" onclick={copySyncCode}>
+				{#if copiedCode}
+					<Check class="h-4 w-4 text-green-500" />
+					<span>Copied Sync Code!</span>
+				{:else}
+					<QrCode class="h-4 w-4" />
+					<span>Copy Sync Code (for PWA Paste)</span>
+				{/if}
+			</Button>
+
+			<Button variant="ghost" size="sm" class="w-full text-xs text-muted-foreground hover:text-foreground" onclick={downloadBackupJSON}>
+				<Download class="h-3.5 w-3.5 mr-1" />
+				<span>Download JSON File</span>
 			</Button>
 		</div>
 	</div>
