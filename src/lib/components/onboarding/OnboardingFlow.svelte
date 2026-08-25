@@ -316,115 +316,127 @@
 			</div>
 		{:else if currentStepKey === 'style'}
 			<!-- Step: UI Theme, Dark Mode & Notifications -->
-			<div class="space-y-2.5 sm:space-y-3.5 text-center animate-in fade-in duration-300">
-				<div class="space-y-0.5">
+			<div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
+				<div class="space-y-1">
 					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">Choose Your Style</h1>
-					<p class="text-xs text-muted-foreground">You can customize this anytime in Settings</p>
+					<p class="text-xs sm:text-sm text-muted-foreground">Customize your appearance and notifications</p>
 				</div>
 
-				<div class="space-y-2.5 text-left">
+				<div class="space-y-3 text-left">
 					<!-- Theme selector cards -->
-					<div class="grid grid-cols-2 gap-2 sm:gap-2.5">
+					<div class="grid grid-cols-2 gap-2.5 sm:gap-3">
 						<button
 							type="button"
-							class="p-2.5 sm:p-3 rounded-2xl border text-left transition-all cursor-pointer {selectedTheme === 'modern'
-								? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground'
+							class="p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between {selectedTheme === 'modern'
+								? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
 								: 'border-border bg-card text-foreground hover:bg-accent'}"
 							onclick={() => {
 								selectedTheme = 'modern';
 								profileStore.setUITheme('modern');
 							}}
 						>
-							<div class="flex items-center justify-between font-bold text-xs sm:text-sm">
-								<span>Modern UI</span>
+							<div class="flex items-center justify-between w-full">
+								<div class="flex items-center gap-1.5 font-bold text-sm text-foreground">
+									<Sparkles class="h-4 w-4 text-primary shrink-0" />
+									<span>Modern</span>
+								</div>
 								{#if selectedTheme === 'modern'}
-									<Check class="h-3.5 w-3.5 text-primary" />
+									<div class="h-5 w-5 rounded-full bg-primary text-white flex items-center justify-center shrink-0">
+										<Check class="h-3 w-3 stroke-[3]" />
+									</div>
 								{/if}
 							</div>
-							<p class="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">Card layout with progress rings</p>
+							<p class="text-xs text-muted-foreground mt-2 leading-snug">Card layout with progress rings</p>
 						</button>
 
 						<button
 							type="button"
-							class="p-2.5 sm:p-3 rounded-2xl border text-left transition-all cursor-pointer {selectedTheme === 'traditional'
-								? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground'
+							class="p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between {selectedTheme === 'traditional'
+								? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
 								: 'border-border bg-card text-foreground hover:bg-accent'}"
 							onclick={() => {
 								selectedTheme = 'traditional';
 								profileStore.setUITheme('traditional');
 							}}
 						>
-							<div class="flex items-center justify-between font-bold text-xs sm:text-sm">
-								<span>Traditional</span>
+							<div class="flex items-center justify-between w-full">
+								<div class="flex items-center gap-1.5 font-bold text-sm text-foreground">
+									<Heart class="h-4 w-4 text-rose-600 shrink-0" />
+									<span>Classic</span>
+								</div>
 								{#if selectedTheme === 'traditional'}
-									<Check class="h-3.5 w-3.5 text-primary" />
+									<div class="h-5 w-5 rounded-full bg-primary text-white flex items-center justify-center shrink-0">
+										<Check class="h-3 w-3 stroke-[3]" />
+									</div>
 								{/if}
 							</div>
-							<p class="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">Classic crimson top bar design</p>
+							<p class="text-xs text-muted-foreground mt-2 leading-snug">Crimson top bar layout</p>
 						</button>
 					</div>
 
 					<!-- Dark mode selector -->
 					<div>
-						<span class="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">Color Mode</span>
-						<div class="grid grid-cols-3 gap-1.5 sm:gap-2">
+						<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">Color Appearance</span>
+						<div class="grid grid-cols-3 gap-2">
 							<button
 								type="button"
-								class="flex flex-col items-center gap-1 p-2 sm:p-2.5 rounded-xl border transition-all cursor-pointer text-foreground {selectedColorMode === 'system'
-									? 'border-primary bg-primary/15 font-bold shadow-xs'
+								class="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-2xl border transition-all cursor-pointer text-foreground {selectedColorMode === 'system'
+									? 'border-primary bg-primary/15 font-bold shadow-xs ring-1 ring-primary/30'
 									: 'border-border bg-card hover:bg-accent'}"
 								onclick={() => {
 									selectedColorMode = 'system';
 									profileStore.setColorMode('system');
 								}}
 							>
-								<Monitor class="h-3.5 w-3.5" />
-								<span class="text-[11px]">System</span>
+								<Monitor class="h-4 w-4 sm:h-5 sm:w-5" />
+								<span class="text-xs font-medium">System</span>
 							</button>
 
 							<button
 								type="button"
-								class="flex flex-col items-center gap-1 p-2 sm:p-2.5 rounded-xl border transition-all cursor-pointer text-foreground {selectedColorMode === 'light'
-									? 'border-primary bg-primary/15 font-bold shadow-xs'
+								class="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-2xl border transition-all cursor-pointer text-foreground {selectedColorMode === 'light'
+									? 'border-primary bg-primary/15 font-bold shadow-xs ring-1 ring-primary/30'
 									: 'border-border bg-card hover:bg-accent'}"
 								onclick={() => {
 									selectedColorMode = 'light';
 									profileStore.setColorMode('light');
 								}}
 							>
-								<Sun class="h-3.5 w-3.5" />
-								<span class="text-[11px]">Light</span>
+								<Sun class="h-4 w-4 sm:h-5 sm:w-5" />
+								<span class="text-xs font-medium">Light</span>
 							</button>
 
 							<button
 								type="button"
-								class="flex flex-col items-center gap-1 p-2 sm:p-2.5 rounded-xl border transition-all cursor-pointer text-foreground {selectedColorMode === 'dark'
-									? 'border-primary bg-primary/15 font-bold shadow-xs'
+								class="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-2xl border transition-all cursor-pointer text-foreground {selectedColorMode === 'dark'
+									? 'border-primary bg-primary/15 font-bold shadow-xs ring-1 ring-primary/30'
 									: 'border-border bg-card hover:bg-accent'}"
 								onclick={() => {
 									selectedColorMode = 'dark';
 									profileStore.setColorMode('dark');
 								}}
 							>
-								<Moon class="h-3.5 w-3.5" />
-								<span class="text-[11px]">Dark</span>
+								<Moon class="h-4 w-4 sm:h-5 sm:w-5" />
+								<span class="text-xs font-medium">Dark</span>
 							</button>
 						</div>
 					</div>
 
 					<!-- Push Notification Opt-in -->
-					<Card class="p-2.5 sm:p-3 bg-card border-border flex items-center justify-between gap-2.5 text-left">
-						<div class="space-y-0.5 min-w-0 flex-1">
-							<div class="text-xs font-bold text-foreground flex items-center gap-1.5">
-								<BellRing class="h-3.5 w-3.5 text-primary shrink-0" />
-								<span class="truncate">Milestone Notifications</span>
+					<Card class="p-3.5 sm:p-4 bg-card border-border flex items-center justify-between gap-3 text-left rounded-2xl">
+						<div class="flex items-center gap-3 min-w-0 flex-1">
+							<div class="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+								<BellRing class="h-5 w-5" />
 							</div>
-							<p class="text-[10px] text-muted-foreground truncate">Reminders on special anniversaries</p>
+							<div class="space-y-0.5 min-w-0 flex-1">
+								<div class="text-xs sm:text-sm font-bold text-foreground truncate">Anniversary Reminders</div>
+								<p class="text-[11px] sm:text-xs text-muted-foreground truncate">Get notified on special milestones</p>
+							</div>
 						</div>
 						{#if pushOptedIn}
-							<span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">✓ Enabled</span>
+							<span class="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1.5 rounded-xl shrink-0">✓ Enabled</span>
 						{:else}
-							<Button size="sm" variant="outline" class="h-7 text-xs px-2.5 shrink-0" onclick={handleOnboardingPushToggle} disabled={pushLoading}>
+							<Button size="sm" variant="outline" class="h-8 px-3 text-xs font-semibold rounded-xl shrink-0" onclick={handleOnboardingPushToggle} disabled={pushLoading}>
 								<span>Enable</span>
 							</Button>
 						{/if}
