@@ -5,8 +5,11 @@ FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
+# Set build environment variables
+ENV DATABASE_URL="file:./data/openlove.db"
+
 # Install native tools for build stage
-RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -y && apt-get install -y openssl ca-certificates python3 make g++ && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm@9
 
 # Copy package manifests & prisma schema
@@ -14,21 +17,33 @@ COPY package.json pnpm-lock.yaml* .npmrc* ./
 COPY prisma ./prisma/
 COPY prisma.config.ts ./
 
-# Install dependencies for build
-RUN pnpm install --frozen-lockfile
+# Install dependencies and compile native addons
+RUN pnpm install --frozen-lockfile && pnpm rebuild
 
 # Copy application source code
 COPY . .
 
+# Generate SvelteKit types (tsconfig.json extends .svelte-kit/tsconfig.json)
+RUN pnpm exec svelte-kit sync
+
 # Generate Prisma Client & Build SvelteKit production bundle
-ENV NODE_ENV=production
-RUN npx prisma generate
-RUN npx vite build
+RUN pnpm exec prisma generate
+RUN NODE_ENV=production pnpm exec vite build
+
+# ==========================================
+# Intermediate: Provide openssl binary for the target platform (no RUN needed)
+# ==========================================
+FROM node:22-bookworm AS openssl-src
 
 # ==========================================
 # Stage 2: Production runtime (Zero RUN steps for 100% reliable cross-arch assembly)
 # ==========================================
 FROM node:22-bookworm-slim AS runner
+
+# Provide openssl so Prisma can detect the libssl version (bookworm-slim lacks openssl + libssl3)
+COPY --from=openssl-src /usr/bin/openssl /usr/bin/openssl
+COPY --from=openssl-src /usr/lib/*/libssl.so.3 /usr/lib/
+COPY --from=openssl-src /usr/lib/*/libcrypto.so.3 /usr/lib/
 
 WORKDIR /app
 

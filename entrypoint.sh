@@ -6,7 +6,7 @@ mkdir -p /app/data
 
 # Sync SQLite database schema
 echo "📦 Running Prisma DB migrations..."
-npx prisma db push --skip-generate
+./node_modules/.bin/prisma db push
 
 # Start SvelteKit Node server
 echo "🚀 Starting OpenLove server on port ${PORT:-3000}..."
