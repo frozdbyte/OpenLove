@@ -380,43 +380,43 @@
 						<div class="grid grid-cols-3 gap-2">
 							<button
 								type="button"
-								class="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-2xl border transition-all cursor-pointer text-foreground {selectedColorMode === 'system'
-									? 'border-primary bg-primary/15 font-bold shadow-xs ring-1 ring-primary/30'
-									: 'border-border bg-card hover:bg-accent'}"
+								class="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-2xl border transition-all cursor-pointer {selectedColorMode === 'system'
+									? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
+									: 'border-border bg-card text-foreground hover:bg-accent'}"
 								onclick={() => {
 									selectedColorMode = 'system';
 									profileStore.setColorMode('system');
 								}}
 							>
-								<Monitor class="h-4 w-4 sm:h-5 sm:w-5" />
+								<Monitor class="h-4 w-4 sm:h-5 sm:w-5 {selectedColorMode === 'system' ? 'text-primary' : 'text-muted-foreground'}" />
 								<span class="text-xs font-medium">System</span>
 							</button>
 
 							<button
 								type="button"
-								class="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-2xl border transition-all cursor-pointer text-foreground {selectedColorMode === 'light'
-									? 'border-primary bg-primary/15 font-bold shadow-xs ring-1 ring-primary/30'
-									: 'border-border bg-card hover:bg-accent'}"
+								class="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-2xl border transition-all cursor-pointer {selectedColorMode === 'light'
+									? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
+									: 'border-border bg-card text-foreground hover:bg-accent'}"
 								onclick={() => {
 									selectedColorMode = 'light';
 									profileStore.setColorMode('light');
 								}}
 							>
-								<Sun class="h-4 w-4 sm:h-5 sm:w-5" />
+								<Sun class="h-4 w-4 sm:h-5 sm:w-5 {selectedColorMode === 'light' ? 'text-primary' : 'text-muted-foreground'}" />
 								<span class="text-xs font-medium">Light</span>
 							</button>
 
 							<button
 								type="button"
-								class="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-2xl border transition-all cursor-pointer text-foreground {selectedColorMode === 'dark'
-									? 'border-primary bg-primary/15 font-bold shadow-xs ring-1 ring-primary/30'
-									: 'border-border bg-card hover:bg-accent'}"
+								class="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-2xl border transition-all cursor-pointer {selectedColorMode === 'dark'
+									? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
+									: 'border-border bg-card text-foreground hover:bg-accent'}"
 								onclick={() => {
 									selectedColorMode = 'dark';
 									profileStore.setColorMode('dark');
 								}}
 							>
-								<Moon class="h-4 w-4 sm:h-5 sm:w-5" />
+								<Moon class="h-4 w-4 sm:h-5 sm:w-5 {selectedColorMode === 'dark' ? 'text-primary' : 'text-muted-foreground'}" />
 								<span class="text-xs font-medium">Dark</span>
 							</button>
 						</div>
