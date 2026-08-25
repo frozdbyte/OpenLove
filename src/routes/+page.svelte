@@ -4,8 +4,8 @@
 	import { getThemeComponent } from '$lib/components/themes/registry';
 	import SettingsSheet from '$lib/components/settings/SettingsSheet.svelte';
 	import ShareModal from '$lib/components/share/ShareModal.svelte';
+	import OnboardingFlow from '$lib/components/onboarding/OnboardingFlow.svelte';
 	import { Heart } from '@lucide/svelte';
-	import Button from '$lib/components/ui/button';
 
 	let isSettingsOpen = $state(false);
 	let isShareOpen = $state(false);
@@ -62,22 +62,11 @@
 		<div class="h-16 w-16 rounded-full bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center text-primary animate-heartbeat shadow-lg">
 			<Heart class="h-8 w-8 fill-primary" />
 		</div>
-		<p class="text-sm font-serif text-muted-foreground animate-pulse">Loading your memories...</p>
+		<p class="text-sm font-medium text-muted-foreground animate-pulse">Loading your memories...</p>
 	</div>
 {:else if !profileStore.profile.isConfigured}
-	<!-- First-run placeholder until Stage 4 onboarding is loaded -->
-	<div class="min-h-screen flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto space-y-6">
-		<div class="h-20 w-20 rounded-full bg-rose-100 dark:bg-rose-950 flex items-center justify-center text-primary shadow-xl">
-			<Heart class="h-10 w-10 fill-primary animate-heartbeat" />
-		</div>
-		<div class="space-y-2">
-			<h1 class="text-3xl font-bold font-serif text-foreground">Welcome to OpenLove</h1>
-			<p class="text-sm text-muted-foreground">A private, self-hosted tracker to celebrate your time together.</p>
-		</div>
-		<Button class="w-full" size="lg" onclick={() => (isSettingsOpen = true)}>
-			Setup Your Counter
-		</Button>
-	</div>
+	<!-- Onboarding Setup Wizard on first run -->
+	<OnboardingFlow />
 {:else}
 	<!-- Active UI Theme Rendered Dynamically -->
 	<CurrentThemeComponent

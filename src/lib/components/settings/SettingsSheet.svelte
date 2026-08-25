@@ -161,8 +161,8 @@
 				<button
 					type="button"
 					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {profileStore.profile.uiTheme === 'modern'
-						? 'border-primary bg-primary/10 ring-2 ring-primary/20'
-						: 'border-border bg-card hover:bg-accent'}"
+						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground'
+						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
 					onclick={() => profileStore.setUITheme('modern')}
 				>
 					<div class="flex items-center justify-between font-bold text-sm">
@@ -177,8 +177,8 @@
 				<button
 					type="button"
 					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {profileStore.profile.uiTheme === 'traditional'
-						? 'border-primary bg-primary/10 ring-2 ring-primary/20'
-						: 'border-border bg-card hover:bg-accent'}"
+						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground'
+						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
 					onclick={() => profileStore.setUITheme('traditional')}
 				>
 					<div class="flex items-center justify-between font-bold text-sm">
@@ -198,9 +198,9 @@
 			<div class="grid grid-cols-3 gap-2">
 				<button
 					type="button"
-					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {profileStore.profile.colorMode === 'system'
-						? 'border-primary bg-primary/10 font-bold'
-						: 'border-border hover:bg-accent'}"
+					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer text-foreground {profileStore.profile.colorMode === 'system'
+						? 'border-primary bg-primary/15 font-bold shadow-sm'
+						: 'border-border bg-card/60 hover:bg-accent'}"
 					onclick={() => profileStore.setColorMode('system')}
 				>
 					<Monitor class="h-4 w-4" />
@@ -209,9 +209,9 @@
 
 				<button
 					type="button"
-					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {profileStore.profile.colorMode === 'light'
-						? 'border-primary bg-primary/10 font-bold'
-						: 'border-border hover:bg-accent'}"
+					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer text-foreground {profileStore.profile.colorMode === 'light'
+						? 'border-primary bg-primary/15 font-bold shadow-sm'
+						: 'border-border bg-card/60 hover:bg-accent'}"
 					onclick={() => profileStore.setColorMode('light')}
 				>
 					<Sun class="h-4 w-4" />
@@ -220,9 +220,9 @@
 
 				<button
 					type="button"
-					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {profileStore.profile.colorMode === 'dark'
-						? 'border-primary bg-primary/10 font-bold'
-						: 'border-border hover:bg-accent'}"
+					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer text-foreground {profileStore.profile.colorMode === 'dark'
+						? 'border-primary bg-primary/15 font-bold shadow-sm'
+						: 'border-border bg-card/60 hover:bg-accent'}"
 					onclick={() => profileStore.setColorMode('dark')}
 				>
 					<Moon class="h-4 w-4" />

@@ -12,7 +12,7 @@
 </script>
 
 <h3
-	class={cn("text-xl font-bold leading-none tracking-tight font-serif text-foreground", className)}
+	class={cn("text-xl font-bold leading-none tracking-tight text-foreground", className)}
 	{...restProps}
 >
 	{@render children?.()}

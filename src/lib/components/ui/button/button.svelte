@@ -23,12 +23,12 @@
 	}: Props = $props();
 
 	const variantStyles: Record<ButtonVariant, string> = {
-		default: "bg-primary text-primary-foreground shadow hover:bg-primary/90 active:scale-[0.98]",
-		destructive: "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
-		outline: "border border-input bg-background/60 backdrop-blur-sm shadow-sm hover:bg-accent hover:text-accent-foreground",
-		secondary: "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
-		ghost: "hover:bg-accent hover:text-accent-foreground",
-		link: "text-primary underline-offset-4 hover:underline"
+		default: "bg-primary text-white shadow-md hover:opacity-95 active:scale-[0.98] font-semibold",
+		destructive: "bg-destructive text-white shadow-sm hover:bg-destructive/90 font-semibold",
+		outline: "border border-border bg-card/80 text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground font-medium",
+		secondary: "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80 font-medium",
+		ghost: "text-foreground hover:bg-accent hover:text-accent-foreground font-medium",
+		link: "text-primary underline-offset-4 hover:underline font-medium"
 	};
 
 	const sizeStyles: Record<ButtonSize, string> = {

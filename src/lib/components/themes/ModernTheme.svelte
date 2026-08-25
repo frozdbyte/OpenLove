@@ -62,10 +62,10 @@
 			</div>
 
 			<div>
-				<h1 class="text-2xl font-bold font-serif text-foreground tracking-tight">
+				<h1 class="text-2xl font-extrabold text-foreground tracking-tight">
 					{profile.names}
 				</h1>
-				<p class="text-xs text-muted-foreground mt-0.5">
+				<p class="text-xs text-muted-foreground mt-0.5 font-medium">
 					Since {timeBreakdown.startDateFormatted}
 				</p>
 			</div>
@@ -76,7 +76,7 @@
 			<Badge variant="romantic" class="mx-auto uppercase tracking-widest text-[10px]">
 				Together for
 			</Badge>
-			<h2 class="text-3xl font-extrabold font-serif text-primary tracking-tight py-1">
+			<h2 class="text-3xl font-black text-primary tracking-tight py-1">
 				{timeBreakdown.primaryFormatted}
 			</h2>
 			{#if profile.showSeconds}
@@ -94,7 +94,7 @@
 					<Calendar class="h-5 w-5" />
 				</div>
 				<div class="text-left">
-					<div class="text-lg font-bold font-serif leading-none">{timeBreakdown.totalMonths.toLocaleString()}</div>
+					<div class="text-xl font-bold leading-none">{timeBreakdown.totalMonths.toLocaleString()}</div>
 					<div class="text-[11px] text-muted-foreground font-medium mt-1">Months</div>
 				</div>
 			</Card>
@@ -104,7 +104,7 @@
 					<Sparkles class="h-5 w-5" />
 				</div>
 				<div class="text-left">
-					<div class="text-lg font-bold font-serif leading-none">{timeBreakdown.totalWeeks.toLocaleString()}</div>
+					<div class="text-xl font-bold leading-none">{timeBreakdown.totalWeeks.toLocaleString()}</div>
 					<div class="text-[11px] text-muted-foreground font-medium mt-1">Weeks</div>
 				</div>
 			</Card>
@@ -114,7 +114,7 @@
 					<Heart class="h-5 w-5" />
 				</div>
 				<div class="text-left">
-					<div class="text-lg font-bold font-serif leading-none">{timeBreakdown.totalDays.toLocaleString()}</div>
+					<div class="text-xl font-bold leading-none">{timeBreakdown.totalDays.toLocaleString()}</div>
 					<div class="text-[11px] text-muted-foreground font-medium mt-1">Days</div>
 				</div>
 			</Card>
@@ -124,7 +124,7 @@
 					<Hourglass class="h-5 w-5" />
 				</div>
 				<div class="text-left">
-					<div class="text-lg font-bold font-serif leading-none">{timeBreakdown.totalHours.toLocaleString()}</div>
+					<div class="text-xl font-bold leading-none">{timeBreakdown.totalHours.toLocaleString()}</div>
 					<div class="text-[11px] text-muted-foreground font-medium mt-1">Hours</div>
 				</div>
 			</Card>

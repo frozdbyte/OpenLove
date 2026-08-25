@@ -1,85 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 @import "tailwindcss";
+
+@theme {
+  --color-background: var(--bg-color);
+  --color-foreground: var(--fg-color);
+  --color-card: var(--card-bg);
+  --color-card-foreground: var(--card-fg);
+  --color-popover: var(--card-bg);
+  --color-popover-foreground: var(--card-fg);
+  --color-primary: var(--primary-color);
+  --color-primary-foreground: var(--primary-fg);
+  --color-secondary: var(--secondary-bg);
+  --color-secondary-foreground: var(--secondary-fg);
+  --color-muted: var(--muted-bg);
+  --color-muted-foreground: var(--muted-fg);
+  --color-accent: var(--accent-bg);
+  --color-accent-foreground: var(--accent-fg);
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--border-color);
+  --color-input: var(--input-color);
+  --color-ring: var(--primary-color);
+
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, Cambria, 'Times New Roman', serif;
+}
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 346.8 77.2% 49.8%;
-    --primary-foreground: 355.7 100% 97.3%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 346.8 77.2% 96%;
-    --accent-foreground: 346.8 77.2% 40%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 346.8 77.2% 49.8%;
-    --radius: 1rem;
+    --bg-color: #fff1f2;
+    --fg-color: #1c1917;
+    --card-bg: rgba(255, 255, 255, 0.9);
+    --card-fg: #1c1917;
+    --primary-color: #e11d48;
+    --primary-fg: #ffffff;
+    --secondary-bg: #f4f4f5;
+    --secondary-fg: #18181b;
+    --muted-bg: #f4f4f5;
+    --muted-fg: #71717a;
+    --accent-bg: #ffe4e6;
+    --accent-fg: #be123c;
+    --border-color: #e4e4e7;
+    --input-color: #e4e4e7;
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 5%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 5%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 346.8 77.2% 55%;
-    --primary-foreground: 355.7 100% 97.3%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 346.8 77.2% 15%;
-    --accent-foreground: 346.8 77.2% 80%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 18%;
-    --input: 240 3.7% 18%;
-    --ring: 346.8 77.2% 55%;
+    --bg-color: #09090b;
+    --fg-color: #f4f4f5;
+    --card-bg: rgba(24, 24, 27, 0.92);
+    --card-fg: #f4f4f5;
+    --primary-color: #f43f5e;
+    --primary-fg: #ffffff;
+    --secondary-bg: #27272a;
+    --secondary-fg: #f4f4f5;
+    --muted-bg: #18181b;
+    --muted-fg: #a1a1aa;
+    --accent-bg: rgba(244, 63, 94, 0.2);
+    --accent-fg: #fda4af;
+    --border-color: #3f3f46;
+    --input-color: #3f3f46;
   }
 
-  /* Themes */
+  /* Color Palettes */
   [data-theme="rose"] {
-    --primary: 346.8 77.2% 49.8%;
-    --ring: 346.8 77.2% 49.8%;
-    --accent: 346.8 77.2% 96%;
-    --accent-foreground: 346.8 77.2% 40%;
+    --primary-color: #e11d48;
+    --accent-bg: #ffe4e6;
+    --accent-fg: #be123c;
+  }
+  .dark[data-theme="rose"] {
+    --primary-color: #f43f5e;
+    --accent-bg: rgba(244, 63, 94, 0.25);
+    --accent-fg: #fda4af;
   }
 
   [data-theme="lavender"] {
-    --primary: 262.1 83.3% 57.8%;
-    --ring: 262.1 83.3% 57.8%;
-    --accent: 262.1 83.3% 96%;
-    --accent-foreground: 262.1 83.3% 40%;
+    --primary-color: #8b5cf6;
+    --accent-bg: #f3e8ff;
+    --accent-fg: #6d28d9;
+  }
+  .dark[data-theme="lavender"] {
+    --primary-color: #a78bfa;
+    --accent-bg: rgba(139, 92, 246, 0.25);
+    --accent-fg: #c4b5fd;
   }
 
   [data-theme="terracotta"] {
-    --primary: 16 80% 50%;
-    --ring: 16 80% 50%;
-    --accent: 16 80% 95%;
-    --accent-foreground: 16 80% 40%;
+    --primary-color: #ea580c;
+    --accent-bg: #ffedd5;
+    --accent-fg: #c2410c;
+  }
+  .dark[data-theme="terracotta"] {
+    --primary-color: #fb923c;
+    --accent-bg: rgba(234, 88, 12, 0.25);
+    --accent-fg: #fed7aa;
   }
 
   [data-theme="sage"] {
-    --primary: 152 45% 42%;
-    --ring: 152 45% 42%;
-    --accent: 152 45% 94%;
-    --accent-foreground: 152 45% 35%;
+    --primary-color: #059669;
+    --accent-bg: #d1fae5;
+    --accent-fg: #047857;
+  }
+  .dark[data-theme="sage"] {
+    --primary-color: #34d399;
+    --accent-bg: rgba(5, 150, 105, 0.25);
+    --accent-fg: #a7f3d0;
   }
 
   [data-theme="midnight"] {
-    --primary: 221.2 83.2% 53.3%;
-    --ring: 221.2 83.2% 53.3%;
-    --accent: 221.2 83.2% 95%;
-    --accent-foreground: 221.2 83.2% 40%;
+    --primary-color: #2563eb;
+    --accent-bg: #dbeafe;
+    --accent-fg: #1d4ed8;
+  }
+  .dark[data-theme="midnight"] {
+    --primary-color: #60a5fa;
+    --accent-bg: rgba(37, 99, 235, 0.25);
+    --accent-fg: #bfdbfe;
+  }
+
+  * {
+    border-color: var(--border-color);
+  }
+
+  html, body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--fg-color);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: inherit;
   }
 }
 
@@ -96,25 +145,10 @@
 }
 
 @keyframes gentle-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(1.03); }
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); }
 }
 
 .animate-gentle-pulse {
   animation: gentle-pulse 3s infinite ease-in-out;
-}
-
-/* Glassmorphic utilities */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-}
-
-.dark .glass-panel {
-  background: rgba(20, 20, 25, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
 }

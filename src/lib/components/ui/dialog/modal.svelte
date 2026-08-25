@@ -46,15 +46,15 @@
 
 	<!-- Modal / Sheet Container -->
 	<div
-		class="fixed inset-x-0 bottom-0 z-50 flex max-h-[92vh] flex-col rounded-t-[2.5rem] border border-border/80 bg-background/95 p-6 shadow-2xl backdrop-blur-xl transition-all sm:inset-auto sm:top-1/2 sm:left-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[2rem]"
+		class="fixed inset-x-0 bottom-0 z-50 flex max-h-[92vh] flex-col rounded-t-[2.5rem] border border-border bg-card/95 text-card-foreground p-6 shadow-2xl backdrop-blur-xl transition-all sm:inset-auto sm:top-1/2 sm:left-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[2rem]"
 		role="dialog"
 		aria-modal="true"
 	>
 		<!-- Header -->
-		<div class="flex items-center justify-between pb-4 border-b border-border/40">
+		<div class="flex items-center justify-between pb-4 border-b border-border">
 			<div>
 				{#if title}
-					<h2 class="text-xl font-bold font-serif text-foreground">{title}</h2>
+					<h2 class="text-xl font-extrabold text-foreground tracking-tight">{title}</h2>
 				{/if}
 				{#if description}
 					<p class="text-xs text-muted-foreground mt-0.5">{description}</p>
@@ -62,7 +62,7 @@
 			</div>
 			<button
 				type="button"
-				class="rounded-full p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+				class="rounded-full p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
 				onclick={close}
 				aria-label="Close"
 			>
