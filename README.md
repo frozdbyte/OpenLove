@@ -44,6 +44,19 @@ All SQLite records and auto-generated VAPID keys persist automatically in the `o
 
 ---
 
+## ☁️ Deploy on Coolify
+
+OpenLove ships with a ready-made Coolify compose file that pulls the pre-built image from Docker Hub.
+
+1. In your Coolify dashboard, create a new **Docker Compose** service.
+2. Point it to this repository or paste the contents of `docker-compose.coolify.yml`.
+3. Set your domain in the Coolify UI — the `SERVICE_FQDN_OPENLOVE_3000` variable automatically routes it to the app.
+4. Deploy. That's it — Coolify handles SSL, reverse proxy, and restarts.
+
+> **Tip:** VAPID keys for push notifications are auto-generated on first boot into `/app/data/vapid.json`. To use your own, set `PUBLIC_VAPID_KEY`, `PRIVATE_VAPID_KEY`, and `VAPID_SUBJECT` in Coolify's environment variables tab.
+
+---
+
 ## 🛠️ Local Development Setup
 
 Ensure you have **Node.js 22+** and **pnpm** installed.
