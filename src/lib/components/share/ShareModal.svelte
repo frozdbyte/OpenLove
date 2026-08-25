@@ -1,0 +1,109 @@
+<script lang="ts">
+	import { profileStore } from '$lib/stores/profile.svelte';
+	import Modal from '$lib/components/ui/dialog/modal.svelte';
+	import Button from '$lib/components/ui/button';
+	import { Copy, Check, QrCode, Download, Heart } from '@lucide/svelte';
+	import QRCode from 'qrcode';
+
+	interface Props {
+		open?: boolean;
+		onclose?: () => void;
+	}
+
+	let { open = $bindable(false), onclose }: Props = $props();
+
+	let qrDataUrl = $state<string>('');
+	let copied = $state(false);
+
+	$effect(() => {
+		if (open && typeof window !== 'undefined') {
+			generateQR();
+		}
+	});
+
+	async function generateQR() {
+		try {
+			const json = profileStore.exportJSON();
+			const shareUrl = `${window.location.origin}/#import=${encodeURIComponent(btoa(json))}`;
+			qrDataUrl = await QRCode.toDataURL(shareUrl, {
+				width: 280,
+				margin: 2,
+				color: {
+					dark: '#8B1E2D',
+					light: '#FFFFFF'
+				}
+			});
+		} catch (err) {
+			console.error('Failed to generate QR code:', err);
+		}
+	}
+
+	async function copyShareLink() {
+		if (typeof window === 'undefined') return;
+		try {
+			const json = profileStore.exportJSON();
+			const shareUrl = `${window.location.origin}/#import=${encodeURIComponent(btoa(json))}`;
+			await navigator.clipboard.writeText(shareUrl);
+			copied = true;
+			setTimeout(() => {
+				copied = false;
+			}, 2500);
+		} catch (err) {
+			console.error('Failed to copy share link:', err);
+		}
+	}
+
+	function downloadBackupJSON() {
+		if (typeof window === 'undefined') return;
+		const json = profileStore.exportJSON();
+		const blob = new Blob([json], { type: 'application/json' });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `openlove-backup-${profileStore.profile.names.replace(/\s+/g, '-').toLowerCase()}.json`;
+		a.click();
+		URL.revokeObjectURL(url);
+	}
+</script>
+
+<Modal
+	bind:open
+	title="Share with Partner"
+	description="Sync your dates, names, and settings with your partner's phone"
+	{onclose}
+>
+	<div class="flex flex-col items-center text-center space-y-4 py-2">
+		<!-- QR Code -->
+		<div class="p-3 bg-white rounded-3xl shadow-md border border-border flex items-center justify-center">
+			{#if qrDataUrl}
+				<img src={qrDataUrl} alt="Partner QR Code" class="w-48 h-48 rounded-2xl" />
+			{:else}
+				<div class="w-48 h-48 flex items-center justify-center text-muted-foreground">
+					<QrCode class="h-12 w-12 animate-pulse" />
+				</div>
+			{/if}
+		</div>
+
+		<p class="text-xs text-muted-foreground max-w-xs">
+			Have your partner scan this QR code with their camera to instantly load your relationship counter.
+		</p>
+
+		<!-- Actions -->
+		<div class="w-full space-y-2 pt-2">
+			<Button class="w-full" onclick={copyShareLink}>
+				{#if copied}
+					<Check class="h-4 w-4 text-green-300" />
+					<span>Copied Link to Clipboard!</span>
+				{:else}
+					<Copy class="h-4 w-4" />
+					<span>Copy Share Link</span>
+				{/if}
+			</Button>
+
+			<Button variant="outline" class="w-full" onclick={downloadBackupJSON}>
+				<Download class="h-4 w-4" />
+				<span>Download JSON Backup</span>
+			</Button>
+		</div>
+	</div>
+</Modal>
