@@ -141,6 +141,10 @@ const STANDARD_DAY_MILESTONES = [
 	2500, 3000, 3500, 4000, 5000, 7500, 10000
 ];
 
+const STANDARD_MONTH_MILESTONES = [
+	1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 18, 30, 42, 54, 66, 78, 90, 102, 114
+];
+
 const STANDARD_YEAR_MILESTONES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30, 40, 50, 60, 75];
 
 export function calculateMilestones(
@@ -162,7 +166,7 @@ export function calculateMilestones(
 	// 1. Day milestones
 	for (const days of STANDARD_DAY_MILESTONES) {
 		const target = new Date(startDate.getTime() + days * 24 * 60 * 60 * 1000);
-		const daysRemaining = days - totalDaysPassed;
+		const daysRemaining = Math.ceil((target.getTime() - nowTime) / (1000 * 60 * 60 * 24));
 		milestones.push({
 			id: `days_${days}`,
 			title: `${days.toLocaleString()} Days`,
@@ -175,7 +179,25 @@ export function calculateMilestones(
 		});
 	}
 
-	// 2. Year anniversaries
+	// 2. Month milestones (1 month, 2 months... 6 months, 18 months, etc.)
+	for (const months of STANDARD_MONTH_MILESTONES) {
+		const target = new Date(startDate.getFullYear(), startDate.getMonth() + months, startDate.getDate());
+		const daysReq = Math.floor((target.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+		const daysRemaining = Math.ceil((target.getTime() - nowTime) / (1000 * 60 * 60 * 24));
+
+		milestones.push({
+			id: `months_${months}`,
+			title: `${months} ${months === 1 ? 'Month' : 'Months'}`,
+			daysRequired: daysReq,
+			targetDate: target,
+			isAchieved: daysRemaining <= 0,
+			daysRemaining: Math.max(0, daysRemaining),
+			type: 'months',
+			iconName: 'Sparkles'
+		});
+	}
+
+	// 3. Year anniversaries
 	for (const years of STANDARD_YEAR_MILESTONES) {
 		const target = new Date(startDate.getFullYear() + years, startDate.getMonth(), startDate.getDate());
 		const daysReq = Math.floor((target.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -183,7 +205,7 @@ export function calculateMilestones(
 
 		milestones.push({
 			id: `years_${years}`,
-			title: `${years} Year Anniversary`,
+			title: `${years} ${years === 1 ? 'Year' : 'Years'} Anniversary`,
 			daysRequired: daysReq,
 			targetDate: target,
 			isAchieved: daysRemaining <= 0,
@@ -193,7 +215,7 @@ export function calculateMilestones(
 		});
 	}
 
-	// 3. Custom user milestones
+	// 4. Custom user milestones
 	for (const custom of customMilestones) {
 		const [cYear, cMonth, cDay] = custom.date.split('-').map(Number);
 		const target = new Date(cYear, cMonth - 1, cDay);

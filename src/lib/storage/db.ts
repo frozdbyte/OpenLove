@@ -59,9 +59,10 @@ export async function saveProfileToStorage(profile: CoupleProfile): Promise<void
 	if (typeof window === 'undefined') return;
 
 	try {
-		// Save metadata (excluding transient photoUrl and photoBlob)
+		// Save metadata (cleanly serializing to plain JS object to unwrap Svelte 5 $state Proxy)
 		const { photoBlob, photoUrl, ...metadata } = profile;
-		await set(PROFILE_KEY, metadata);
+		const cleanMetadata = JSON.parse(JSON.stringify(metadata));
+		await set(PROFILE_KEY, cleanMetadata);
 
 		if (photoBlob) {
 			await set(PHOTO_KEY, photoBlob);
