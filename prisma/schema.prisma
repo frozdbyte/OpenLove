@@ -1,0 +1,20 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model PushSubscription {
+  id            String   @id @default(uuid())
+  endpoint      String   @unique
+  p256dh        String
+  auth          String
+  togetherSince String   // YYYY-MM-DD
+  timezone      String   @default("UTC")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastNotified  String?  // e.g. "2026-08-25:100_days" to prevent duplicate notifications
+}
