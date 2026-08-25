@@ -53,7 +53,7 @@
 </script>
 
 <svelte:head>
-	<title>{profileStore.profile.names} - OpenLove</title>
+	<title>Open Love</title>
 </svelte:head>
 
 {#if profileStore.isLoading}

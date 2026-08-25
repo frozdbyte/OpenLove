@@ -12,8 +12,8 @@ export default defineConfig({
 			mode: 'development',
 			strategies: 'generateSW',
 			manifest: {
-				name: 'OpenLove',
-				short_name: 'OpenLove',
+				name: 'Open Love',
+				short_name: 'Open Love',
 				description: 'Self-hosted, privacy-first relationship tracker',
 				start_url: '/',
 				scope: '/',
@@ -54,6 +54,7 @@ export default defineConfig({
 	server: {
 		fs: {
 			allow: ['..']
-		}
+		},
+		allowedHosts: ["localhost", "localhost:5173", "sv-latitude.frozd.dev"]
 	}
 });
