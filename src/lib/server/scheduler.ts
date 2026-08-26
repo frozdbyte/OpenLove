@@ -118,6 +118,15 @@ export function startMilestoneScheduler(intervalMs: number = 1000 * 60 * 60): vo
 			console.error('Recurring scheduler run error:', err)
 		);
 	}, intervalMs);
+
+	// Do not let a background maintenance timer hold the event loop open.
+	//
+	// adapter-node installs its own SIGINT/SIGTERM handler that closes the HTTP
+	// server and then waits for the loop to drain — it never calls process.exit().
+	// An hourly interval that is never unref'd means Ctrl+C appears to do nothing,
+	// and `docker stop` hangs for its full grace period before SIGKILLing the
+	// container (a hard kill on an open SQLite handle).
+	intervalHandle.unref?.();
 }
 
 export function stopMilestoneScheduler(): void {
