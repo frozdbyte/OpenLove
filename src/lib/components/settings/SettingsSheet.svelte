@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { profileStore } from '$lib/stores/profile.svelte';
-	import type { UIThemeId, ColorMode, ColorPalette } from '$lib/types/profile';
+	import type { ColorMode, ColorPalette } from '$lib/types/profile';
 	import type { MilestoneItem } from '$lib/types/time';
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
 	import Button from '$lib/components/ui/button';
@@ -8,7 +8,6 @@
 	import Switch from '$lib/components/ui/switch';
 	import Badge from '$lib/components/ui/badge';
 	import {
-		Palette,
 		Sun,
 		Moon,
 		Monitor,
@@ -25,14 +24,15 @@
 		BellRing,
 		QrCode,
 		Heart,
-
 		Code,
 		CloudOff,
 		ShieldCheck,
 		HardDrive,
-		Download
+		Download,
+		Users
 	} from '@lucide/svelte';
-	import { subscribeToPush, unsubscribeFromPush, sendTestPush, isPushSupported } from '$lib/push/client';
+	import { subscribeToPush, unsubscribeFromPush, sendTestPush, triggerSchedulerNow } from '$lib/push/client';
+
 	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
 	import { APP_VERSION } from '$lib/version';
 	import { networkStore } from '$lib/stores/network.svelte';
@@ -42,10 +42,11 @@
 	interface Props {
 		open?: boolean;
 		milestones: MilestoneItem[];
+		onOpenSwitcher?: () => void;
 		onclose?: () => void;
 	}
 
-	let { open = $bindable(false), milestones, onclose }: Props = $props();
+	let { open = $bindable(false), milestones, onOpenSwitcher, onclose }: Props = $props();
 
 	let isScanModalOpen = $state(false);
 
@@ -65,10 +66,8 @@
 				if (!res.success) {
 					pushStatusMessage = res.error || 'Failed to enable notifications';
 				} else if (res.pending) {
-					// `pushManager.subscribe()` has to reach the push service, so this is
-					// an intent until the network comes back. Every flush retries it.
 					pushStatusMessage =
-						res.error || "Saved - notifications will activate when you're back online.";
+						res.error || "Saved — notifications will activate when you're back online.";
 				} else {
 					pushStatusMessage = 'Push notifications enabled!';
 				}
@@ -100,8 +99,44 @@
 		}
 	}
 
-	// Storage durability panel. IndexedDB holds the only copy of the couple's data,
-	// so showing that it is there (and persisted) is a real reassurance.
+	async function handleTestMilestonePush() {
+		isPushLoading = true;
+		pushStatusMessage = 'Sending test milestone notification...';
+		try {
+			const res = await sendTestPush({
+				bondId: profileStore.activeBond.id,
+				milestoneTitle: profileStore.activeBond.type === 'friendship' ? '1st Year' : '1st Anniversary',
+				milestoneType: 'years'
+			});
+			if (res.success) {
+				pushStatusMessage = `Milestone alert sent for ${profileStore.activeBond.names}!`;
+			} else {
+				pushStatusMessage = res.error || 'Failed to send test milestone push';
+			}
+		} catch (err: any) {
+			pushStatusMessage = err.message || 'Error sending test push';
+		} finally {
+			isPushLoading = false;
+		}
+	}
+
+	async function handleTriggerScheduler() {
+		isPushLoading = true;
+		pushStatusMessage = 'Checking milestones on server...';
+		try {
+			const res = await triggerSchedulerNow();
+			if (res.success) {
+				pushStatusMessage = `Scheduler ran! Sent ${res.sent ?? 0} notification(s).`;
+			} else {
+				pushStatusMessage = res.error || 'Failed to run scheduler';
+			}
+		} catch (err: any) {
+			pushStatusMessage = err.message || 'Error running scheduler';
+		} finally {
+			isPushLoading = false;
+		}
+	}
+
 	let storage = $state<StorageEstimate | null>(null);
 
 	$effect(() => {
@@ -153,7 +188,7 @@
 			const text = await file.text();
 			const ok = await profileStore.importJSON(text);
 			if (ok) {
-				alert('Profile restored successfully!');
+				alert('Data restored successfully!');
 			} else {
 				alert('Failed to restore backup. Invalid file format.');
 			}
@@ -163,7 +198,7 @@
 	async function addCustomMilestone() {
 		if (!newMilestoneTitle.trim() || !newMilestoneDate) return;
 
-		const current = profileStore.profile.customMilestones;
+		const current = profileStore.activeBond.customMilestones;
 		const updated = [
 			...current,
 			{
@@ -172,20 +207,20 @@
 				date: newMilestoneDate
 			}
 		];
-		await profileStore.update({ customMilestones: updated });
+		await profileStore.updateBond(profileStore.activeBond.id, { customMilestones: updated });
 		newMilestoneTitle = '';
 		newMilestoneDate = '';
 		isAddingMilestone = false;
 	}
 
 	async function deleteCustomMilestone(id: string) {
-		const current = profileStore.profile.customMilestones;
+		const current = profileStore.activeBond.customMilestones;
 		const updated = current.filter((m) => m.id !== id);
-		await profileStore.update({ customMilestones: updated });
+		await profileStore.updateBond(profileStore.activeBond.id, { customMilestones: updated });
 	}
 
 	async function handleResetData() {
-		if (confirm('Are you sure you want to reset all data?')) {
+		if (confirm('Are you sure you want to reset all data? This will clear all relationships.')) {
 			await profileStore.reset();
 			open = false;
 			onclose?.();
@@ -203,32 +238,61 @@
 
 <Modal bind:open title="Settings & Customization" description="Customize your relationship tracker" {onclose}>
 	<div class="space-y-6 pb-4">
-		<!-- Names & Anniversary Date -->
+		<!-- Relationships & Bonds Switcher Quick Action -->
+		<section class="p-3.5 rounded-2xl bg-card border border-border space-y-2">
+			<div class="flex items-center justify-between">
+				<div class="space-y-0.5">
+					<div class="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+						<Users class="h-4 w-4 text-primary" />
+						<span>Active Bond</span>
+					</div>
+					<div class="text-xs text-muted-foreground">
+						Currently: <span class="font-medium text-foreground">{profileStore.activeBond.names}</span>
+						({profileStore.activeBond.type === 'friendship' ? '🌿 Friendship' : '💖 Relationship'})
+					</div>
+				</div>
+			</div>
+			{#if onOpenSwitcher}
+				<Button variant="outline" size="sm" class="w-full mt-1.5" onclick={onOpenSwitcher}>
+					<span>Manage & Switch Bonds ({profileStore.state.bonds.length})</span>
+				</Button>
+			{/if}
+		</section>
+
+		<!-- Names & Start Date of Active Bond -->
 		<section class="space-y-3">
-			<label for="settings-names" class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Names</label>
+			<label for="settings-names" class="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+				{profileStore.activeBond.type === 'friendship' ? 'Friend Names' : 'Partner Names'}
+			</label>
 			<Input
 				id="settings-names"
-				value={profileStore.profile.names}
+				value={profileStore.activeBond.names}
 				placeholder="e.g. Emma & Paul"
 				oninput={(e) => profileStore.update({ names: (e.target as HTMLInputElement).value })}
 			/>
 
-			<label for="settings-date" class="text-xs font-bold uppercase tracking-wider text-muted-foreground block pt-1">Together Since Date</label>
+			<label for="settings-date" class="text-xs font-bold uppercase tracking-wider text-muted-foreground block pt-1">
+				{profileStore.activeBond.type === 'friendship' ? 'Friends Since Date' : 'Together Since Date'}
+			</label>
 			<Input
 				id="settings-date"
 				type="date"
-				value={profileStore.profile.togetherSince}
+				value={profileStore.activeBond.togetherSince}
 				onchange={(e) => profileStore.update({ togetherSince: (e.target as HTMLInputElement).value })}
 			/>
 		</section>
 
-		<!-- Couple Photo -->
+		<!-- Photo for Active Bond -->
 		<section class="space-y-3">
-			<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Couple Photo</span>
+			<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+				{profileStore.activeBond.type === 'friendship' ? 'Friend Photo' : 'Couple Photo'}
+			</span>
 			<div class="flex items-center gap-4">
 				<div class="h-16 w-16 rounded-2xl overflow-hidden bg-muted border border-border flex items-center justify-center shrink-0">
-					{#if profileStore.profile.photoUrl}
-						<img src={profileStore.profile.photoUrl} alt="Couple" class="h-full w-full object-cover" />
+					{#if profileStore.activeBond.photoUrl}
+						<img src={profileStore.activeBond.photoUrl} alt="Bond" class="h-full w-full object-cover" />
+					{:else if profileStore.activeBond.type === 'friendship'}
+						<Sparkles class="h-6 w-6 text-muted-foreground" />
 					{:else}
 						<Upload class="h-6 w-6 text-muted-foreground" />
 					{/if}
@@ -244,10 +308,10 @@
 					/>
 					<Button size="sm" variant="outline" onclick={() => fileInputRef?.click()}>
 						<Upload class="h-4 w-4 mr-1.5" />
-						<span>{profileStore.profile.photoUrl ? 'Change Photo' : 'Upload Photo'}</span>
+						<span>{profileStore.activeBond.photoUrl ? 'Change Photo' : 'Upload Photo'}</span>
 					</Button>
 
-					{#if profileStore.profile.photoUrl}
+					{#if profileStore.activeBond.photoUrl}
 						<Button size="sm" variant="ghost" class="text-destructive hover:bg-destructive/10" onclick={removePhoto}>
 							<Trash2 class="h-4 w-4 mr-1.5" />
 							<span>Remove Photo</span>
@@ -263,15 +327,14 @@
 			<div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
 				<button
 					type="button"
-					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {profileStore.profile.uiTheme === 'modern'
+					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {profileStore.state.uiTheme === 'modern'
 						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground'
 						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
 					onclick={() => profileStore.setUITheme('modern')}
 				>
-					
 					<div class="flex items-center justify-between font-bold text-sm">
 						<span>Modern UI</span>
-						{#if profileStore.profile.uiTheme === 'modern'}
+						{#if profileStore.state.uiTheme === 'modern'}
 							<Check class="h-4 w-4 text-primary" />
 						{/if}
 					</div>
@@ -280,14 +343,14 @@
 
 				<button
 					type="button"
-					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {profileStore.profile.uiTheme === 'cover'
+					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {profileStore.state.uiTheme === 'cover'
 						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground'
 						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
 					onclick={() => profileStore.setUITheme('cover')}
 				>
 					<div class="flex items-center justify-between font-bold text-sm">
 						<span>Cover Image</span>
-						{#if profileStore.profile.uiTheme === 'cover'}
+						{#if profileStore.state.uiTheme === 'cover'}
 							<Check class="h-4 w-4 text-primary" />
 						{/if}
 					</div>
@@ -296,14 +359,14 @@
 
 				<button
 					type="button"
-					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {profileStore.profile.uiTheme === 'traditional'
+					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {profileStore.state.uiTheme === 'traditional'
 						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground'
 						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
 					onclick={() => profileStore.setUITheme('traditional')}
 				>
 					<div class="flex items-center justify-between font-bold text-sm">
 						<span>Traditional</span>
-						{#if profileStore.profile.uiTheme === 'traditional'}
+						{#if profileStore.state.uiTheme === 'traditional'}
 							<Check class="h-4 w-4 text-primary" />
 						{/if}
 					</div>
@@ -318,34 +381,34 @@
 			<div class="grid grid-cols-3 gap-2">
 				<button
 					type="button"
-					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {profileStore.profile.colorMode === 'system'
+					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {profileStore.state.colorMode === 'system'
 						? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
 						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
 					onclick={() => profileStore.setColorMode('system')}
 				>
-					<Monitor class="h-4 w-4 {profileStore.profile.colorMode === 'system' ? 'text-primary' : 'text-muted-foreground'}" />
+					<Monitor class="h-4 w-4 {profileStore.state.colorMode === 'system' ? 'text-primary' : 'text-muted-foreground'}" />
 					<span class="text-xs">System</span>
 				</button>
 
 				<button
 					type="button"
-					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {profileStore.profile.colorMode === 'light'
+					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {profileStore.state.colorMode === 'light'
 						? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
 						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
 					onclick={() => profileStore.setColorMode('light')}
 				>
-					<Sun class="h-4 w-4 {profileStore.profile.colorMode === 'light' ? 'text-primary' : 'text-muted-foreground'}" />
+					<Sun class="h-4 w-4 {profileStore.state.colorMode === 'light' ? 'text-primary' : 'text-muted-foreground'}" />
 					<span class="text-xs">Light</span>
 				</button>
 
 				<button
 					type="button"
-					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {profileStore.profile.colorMode === 'dark'
+					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {profileStore.state.colorMode === 'dark'
 						? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
 						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
 					onclick={() => profileStore.setColorMode('dark')}
 				>
-					<Moon class="h-4 w-4 {profileStore.profile.colorMode === 'dark' ? 'text-primary' : 'text-muted-foreground'}" />
+					<Moon class="h-4 w-4 {profileStore.state.colorMode === 'dark' ? 'text-primary' : 'text-muted-foreground'}" />
 					<span class="text-xs">Dark</span>
 				</button>
 			</div>
@@ -357,12 +420,12 @@
 					{#each palettes as p}
 						<button
 							type="button"
-							class="h-8 w-8 rounded-full {p.bg} transition-transform cursor-pointer flex items-center justify-center {profileStore.profile.colorPalette === p.id ? 'ring-5 ring-primary/30 scale-110' : 'opacity-80 hover:opacity-100'}"
+							class="h-8 w-8 rounded-full {p.bg} transition-transform cursor-pointer flex items-center justify-center {profileStore.state.colorPalette === p.id ? 'ring-5 ring-primary/30 scale-110' : 'opacity-80 hover:opacity-100'}"
 							onclick={() => profileStore.setColorPalette(p.id)}
 							title={p.name}
 							aria-label={p.name}
 						>
-							{#if profileStore.profile.colorPalette === p.id}
+							{#if profileStore.state.colorPalette === p.id}
 								<Check class="h-4 w-4 text-white" />
 							{/if}
 						</button>
@@ -375,34 +438,59 @@
 		<section class="p-3 rounded-2xl bg-card border border-border space-y-3">
 			<div class="flex items-center justify-between">
 				<div class="space-y-0.5">
-					<div class="text-sm font-semibold flex items-center gap-1.5">
+					<div class="text-sm font-semibold flex items-center gap-1.5 text-foreground">
 						<BellRing class="h-4 w-4 text-primary" />
 						<span>Milestone Notifications</span>
 					</div>
 					<div class="text-xs text-muted-foreground">Get alerted on anniversaries & special days</div>
 				</div>
 				<Switch
-					checked={profileStore.profile.pushSubscribed}
+					checked={profileStore.state.pushSubscribed}
 					disabled={isPushLoading}
 					onchange={handlePushToggle}
 				/>
 			</div>
 
-			{#if profileStore.profile.pushSubscribed}
-				<div class="pt-2 border-t border-border/50 flex items-center justify-between gap-2">
-					<span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓ Device Connected</span>
-					<!-- A test push is inherently online-only: it round-trips through the server. -->
-					<Button
-						size="sm"
-						variant="outline"
-						class="h-7 text-xs px-2.5"
-						onclick={handleTestPush}
-						disabled={isPushLoading || !networkStore.isOnline}
-					>
-						<span>{networkStore.isOnline ? 'Send Test Push' : 'Offline'}</span>
-					</Button>
+			{#if profileStore.state.pushSubscribed}
+				<div class="pt-2 border-t border-border/50 space-y-2">
+					<div class="flex items-center justify-between gap-2">
+						<span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓ Device Connected</span>
+						<Button
+							size="sm"
+							variant="outline"
+							class="h-7 text-xs px-2.5"
+							onclick={handleTestPush}
+							disabled={isPushLoading || !networkStore.isOnline}
+						>
+							<span>{networkStore.isOnline ? 'Test Alert' : 'Offline'}</span>
+						</Button>
+					</div>
+
+					<div class="flex items-center gap-1.5 pt-1">
+						<Button
+							size="sm"
+							variant="outline"
+							class="flex-1 h-7 text-[11px] px-2"
+							onclick={handleTestMilestonePush}
+							disabled={isPushLoading || !networkStore.isOnline}
+							title="Sends a test milestone alert formatted specifically for your active relationship/friendship"
+						>
+							<span>Test Milestone Alert</span>
+						</Button>
+						<Button
+							size="sm"
+							variant="outline"
+							class="flex-1 h-7 text-[11px] px-2"
+							onclick={handleTriggerScheduler}
+							disabled={isPushLoading || !networkStore.isOnline}
+							title="Triggers the server's milestone evaluation logic on all registered bonds right now"
+						>
+							<span>Run Cron Check</span>
+						</Button>
+					</div>
 				</div>
-			{:else if profileStore.profile.pushIntent}
+
+			{:else if profileStore.state.pushIntent}
 				<div class="pt-2 border-t border-border/50 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
 					<CloudOff class="h-3.5 w-3.5 shrink-0" />
 					<span>Waiting for a connection to activate on this device</span>
@@ -417,11 +505,11 @@
 		<!-- Ticking Seconds Toggle -->
 		<section class="flex items-center justify-between p-3 rounded-2xl bg-card border border-border">
 			<div>
-				<div class="text-sm font-semibold">Live Ticking Seconds</div>
+				<div class="text-sm font-semibold text-foreground">Live Ticking Seconds</div>
 				<div class="text-xs text-muted-foreground">Show live ticking second counters</div>
 			</div>
 			<Switch
-				checked={profileStore.profile.showSeconds}
+				checked={profileStore.state.showSeconds}
 				onchange={(val) => profileStore.update({ showSeconds: val })}
 			/>
 		</section>
@@ -429,7 +517,7 @@
 		<!-- Milestones List & Custom Milestones -->
 		<section class="space-y-3">
 			<div class="flex items-center justify-between">
-				<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Special Milestones (Months, Years, Days)</span>
+				<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Milestones for {profileStore.activeBond.names}</span>
 				<Button size="sm" variant="ghost" onclick={() => (isAddingMilestone = !isAddingMilestone)}>
 					<Plus class="h-4 w-4 mr-1" />
 					<span>Add Custom</span>
@@ -506,12 +594,12 @@
 
 		<!-- On-device storage -->
 		<section class="p-3 rounded-2xl bg-card border border-border space-y-2.5">
-			<div class="text-sm font-semibold flex items-center gap-1.5">
+			<div class="text-sm font-semibold flex items-center gap-1.5 text-foreground">
 				<HardDrive class="h-4 w-4 text-primary" />
 				<span>Data on This Device</span>
 			</div>
 			<p class="text-xs text-muted-foreground">
-				Your names, date and photo never leave this device. That also means this is the
+				Your names, dates and photos never leave this device. That also means this is the
 				only copy — keep a backup.
 			</p>
 
@@ -528,8 +616,6 @@
 					<span>Protected from automatic cleanup</span>
 				</div>
 			{:else}
-				<!-- iOS 17+ exempts installed PWAs from the 7-day eviction window; browser
-				     tabs are not exempt. Installing is the fix, so say so. -->
 				<div class="space-y-2">
 					<div class="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
 						<CloudOff class="h-3.5 w-3.5 shrink-0 mt-0.5" />
@@ -553,7 +639,7 @@
 
 			<Button variant="outline" class="w-full" onclick={downloadBackup}>
 				<Download class="h-4 w-4 mr-1.5" />
-				<span>Download JSON Backup</span>
+				<span>Download JSON Backup (All Bonds)</span>
 			</Button>
 		</section>
 

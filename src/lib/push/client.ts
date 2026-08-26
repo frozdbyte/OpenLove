@@ -225,7 +225,11 @@ export function initPushRetry() {
 /**
  * Send an instant test push to this device. Inherently online-only.
  */
-export async function sendTestPush(): Promise<{ success: boolean; error?: string }> {
+export async function sendTestPush(options?: {
+	bondId?: string;
+	milestoneTitle?: string;
+	milestoneType?: string;
+}): Promise<{ success: boolean; error?: string }> {
 	if (!isPushSupported()) {
 		return { success: false, error: 'Push not supported.' };
 	}
@@ -244,7 +248,10 @@ export async function sendTestPush(): Promise<{ success: boolean; error?: string
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				endpoint: subJson.endpoint,
-				keys: subJson.keys
+				keys: subJson.keys,
+				bondId: options?.bondId,
+				milestoneTitle: options?.milestoneTitle,
+				milestoneType: options?.milestoneType
 			})
 		});
 
@@ -255,3 +262,19 @@ export async function sendTestPush(): Promise<{ success: boolean; error?: string
 		return { success: false, error: error.message };
 	}
 }
+
+/**
+ * Manually trigger the background cron milestone checker (useful for dev testing).
+ */
+export async function triggerSchedulerNow(): Promise<{ success: boolean; sent?: number; error?: string }> {
+	try {
+		const res = await fetch('/api/push/trigger-scheduler', {
+			method: 'POST'
+		});
+		const data = await res.json();
+		return { success: data.success, sent: data.sent, error: data.error };
+	} catch (error: any) {
+		return { success: false, error: error.message };
+	}
+}
+

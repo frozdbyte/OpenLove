@@ -16,6 +16,12 @@ export interface SyncKeys {
 	auth: string;
 }
 
+export interface SyncBondItem {
+	bondId: string;
+	togetherSince: string;
+	categories: string[]; // e.g. ["years", "months", "days_all", "custom"]
+}
+
 interface SyncOpBase {
 	/** Client-generated id. Used for coalescing and log correlation only. */
 	opId: string;
@@ -30,7 +36,9 @@ interface SyncOpBase {
 export interface SyncUpsertOp extends SyncOpBase {
 	kind: 'upsert';
 	keys: SyncKeys;
-	togetherSince: string;
+	bonds: SyncBondItem[];
+	/** Legacy single-date fallback for older servers/clients during rolling upgrades */
+	togetherSince?: string;
 	timezone: string;
 	/**
 	 * Set when the push service rotated our endpoint. The server migrates the
@@ -68,6 +76,7 @@ export interface SyncResponse {
 export interface SyncMeta {
 	vapidPublicKey?: string;
 	endpoint?: string;
+	bonds?: SyncBondItem[];
 	togetherSince?: string;
 	timezone?: string;
 	updatedAt?: string;
@@ -80,3 +89,4 @@ export interface FlushResult {
 	/** True when the flush was a no-op: nothing queued, or still inside backoff. */
 	skipped: boolean;
 }
+

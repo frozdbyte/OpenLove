@@ -1,9 +1,11 @@
 <script lang="ts">
 	import type { ThemeProps } from '$lib/types/profile';
-	import { Settings, Heart, Share2 } from '@lucide/svelte';
+	import { Settings, Heart, Share2, Sparkles, ChevronDown } from '@lucide/svelte';
 	import SyncStatusPill from '$lib/components/offline/SyncStatusPill.svelte';
 
-	let { profile, timeBreakdown, onOpenSettings, onOpenShare }: ThemeProps = $props();
+	let { profile, bond, timeBreakdown, onOpenSettings, onOpenShare, onOpenSwitcher }: ThemeProps = $props();
+
+	let isFriendship = $derived(bond?.type === 'friendship');
 </script>
 
 <div class="min-h-svh w-full flex flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-serif selection:bg-primary selection:text-primary-foreground">
@@ -18,9 +20,17 @@
 			<Settings class="h-6 w-6 stroke-[1.75]" />
 		</button>
 
-		<h1 class="text-xl sm:text-2xl font-serif text-center font-normal tracking-wide flex-1 px-2 truncate">
-			{profile.names}
-		</h1>
+		<button
+			type="button"
+			class="flex items-center justify-center gap-1.5 flex-1 px-2 cursor-pointer hover:opacity-90 transition-opacity"
+			onclick={onOpenSwitcher}
+			aria-label="Switch relationship or friendship"
+		>
+			<h1 class="text-xl sm:text-2xl font-serif text-center font-normal tracking-wide truncate">
+				{profile.names}
+			</h1>
+			<ChevronDown class="h-4 w-4 opacity-75 shrink-0" />
+		</button>
 
 		<button
 			type="button"
@@ -43,6 +53,11 @@
 				alt={profile.names}
 				class="w-full h-full object-cover object-center"
 			/>
+		{:else if isFriendship}
+			<div class="w-full h-full bg-gradient-to-tr from-primary/30 via-accent to-primary/10 dark:from-zinc-900 dark:via-primary/20 dark:to-zinc-800 flex flex-col items-center justify-center text-primary">
+				<Sparkles class="h-20 w-20 opacity-40 animate-pulse" />
+				<span class="text-xs font-sans tracking-wider uppercase mt-2 opacity-60">Add friend photo in settings</span>
+			</div>
 		{:else}
 			<div class="w-full h-full bg-gradient-to-tr from-primary/30 via-accent to-primary/10 dark:from-zinc-900 dark:via-primary/20 dark:to-zinc-800 flex flex-col items-center justify-center text-primary">
 				<Heart class="h-20 w-20 fill-current opacity-30 animate-pulse" />
@@ -63,7 +78,7 @@
 		<!-- Primary Section -->
 		<section class="space-y-1">
 			<h2 class="text-lg tracking-tight uppercase font-sans text-primary font-semibold transition-colors duration-300">
-				YOU HAVE BEEN TOGETHER FOR
+				{isFriendship ? 'YOU HAVE BEEN FRIENDS FOR' : 'YOU HAVE BEEN TOGETHER FOR'}
 			</h2>
 			<p class="text-xl sm:text-2xl font-serif text-zinc-800 dark:text-zinc-100 font-normal leading-relaxed">
 				{timeBreakdown.primaryFormatted}

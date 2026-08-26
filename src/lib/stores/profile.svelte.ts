@@ -1,28 +1,18 @@
 import {
+	DEFAULT_APP_STATE,
+	DEFAULT_PRIMARY_BOND,
 	DEFAULT_PROFILE,
-	loadProfileFromStorage,
-	saveProfileToStorage,
-	savePhotoBlob,
-	clearProfileStorage
+	loadAppStateFromStorage,
+	saveAppStateToStorage,
+	saveBondPhoto,
+	clearAllStorage
 } from '$lib/storage/db';
 import type { CoupleProfile, ColorMode, ColorPalette, UIThemeId } from '$lib/types/profile';
+import type { AppState, Bond } from '$lib/types/bonds';
 
-/**
- * Mutation hooks.
- *
- * `togetherSince` used to be sent to the server exactly once, at subscribe time,
- * while three separate call sites mutated it afterwards (the settings date picker,
- * onboarding, and QR/partner-link import) and never touched the network. Changing
- * the anniversary date after subscribing left the server firing milestone pushes
- * on the old schedule forever.
- *
- * All three funnel through `update()`, so one hook here closes all three. It is a
- * callback registry rather than a direct import because `$lib/sync` imports this
- * module, and importing it back would be circular.
- */
 export type ProfileMutationHook = (
-	next: CoupleProfile,
-	previous: CoupleProfile
+	next: AppState,
+	previous: AppState
 ) => void | Promise<void>;
 
 const mutationHooks = new Set<ProfileMutationHook>();
@@ -41,16 +31,38 @@ const PALETTE_PRIMARY_HEX: Record<ColorPalette, { light: string; dark: string }>
 };
 
 class ProfileStore {
-	profile = $state<CoupleProfile>({ ...DEFAULT_PROFILE });
+	state = $state<AppState>({ ...DEFAULT_APP_STATE });
 	isLoading = $state(true);
 	isInitialized = $state(false);
 
+	/** Active bond currently selected in the UI */
+	activeBond = $derived<Bond>(
+		this.state.bonds.find((b) => b.id === this.state.activeBondId) ||
+			this.state.bonds[0] ||
+			DEFAULT_PRIMARY_BOND
+	);
+
+	/**
+	 * Backward compatibility alias for components reading `profileStore.profile`.
+	 * Reflects the active bond's data and global preferences.
+	 */
+	profile = $derived<CoupleProfile>({
+		names: this.activeBond.names,
+		togetherSince: this.activeBond.togetherSince,
+		photoBlob: this.activeBond.photoBlob,
+		photoUrl: this.activeBond.photoUrl,
+		uiTheme: this.state.uiTheme,
+		colorMode: this.state.colorMode,
+		colorPalette: this.activeBond.colorPalette || this.state.colorPalette,
+		showSeconds: this.state.showSeconds,
+		isConfigured: this.state.isConfigured,
+		pushSubscribed: this.state.pushSubscribed,
+		pushIntent: this.state.pushIntent,
+		customMilestones: this.activeBond.customMilestones
+	});
+
 	/**
 	 * Resolves once IndexedDB has been read.
-	 *
-	 * Anything that syncs profile data to the server must await this first —
-	 * `profile` holds `DEFAULT_PROFILE` (with *today* as `togetherSince`) until the
-	 * load completes, and syncing that would overwrite the real anniversary date.
 	 */
 	readonly ready: Promise<void>;
 	private resolveReady!: () => void;
@@ -61,15 +73,13 @@ class ProfileStore {
 		});
 
 		if (typeof window !== 'undefined') {
-			// Synchronously populate initial visual preferences from localStorage cache
-			// so the reactive profile state matches document state before IndexedDB loads
 			try {
 				const mode = localStorage.getItem('openlove_theme_mode') as ColorMode | null;
 				const palette = localStorage.getItem('openlove_theme_palette') as ColorPalette | null;
 				const ui = localStorage.getItem('openlove_theme_ui') as UIThemeId | null;
-				if (mode) this.profile.colorMode = mode;
-				if (palette) this.profile.colorPalette = palette;
-				if (ui) this.profile.uiTheme = ui;
+				if (mode) this.state.colorMode = mode;
+				if (palette) this.state.colorPalette = palette;
+				if (ui) this.state.uiTheme = ui;
 			} catch {}
 
 			this.init();
@@ -80,8 +90,8 @@ class ProfileStore {
 
 	async init() {
 		try {
-			const loaded = await loadProfileFromStorage();
-			this.profile = loaded;
+			const loaded = await loadAppStateFromStorage();
+			this.state = loaded;
 			this.applyThemeAndDarkMode();
 			this.setupSystemDarkModeListener();
 		} catch (error) {
@@ -97,26 +107,24 @@ class ProfileStore {
 		if (typeof document === 'undefined') return;
 
 		const root = document.documentElement;
-		const { colorMode, colorPalette, uiTheme } = this.profile;
+		const colorMode = this.state.colorMode;
+		const colorPalette = this.activeBond.colorPalette || this.state.colorPalette;
+		const uiTheme = this.state.uiTheme;
 
-		// Persist fast-path visual cache for zero-FOUC startup
 		try {
 			localStorage.setItem('openlove_theme_mode', colorMode);
 			localStorage.setItem('openlove_theme_palette', colorPalette);
 			localStorage.setItem('openlove_theme_ui', uiTheme);
 		} catch {}
 
-		// 1. Color Palette theme
 		root.setAttribute('data-theme', colorPalette);
 
-		// 2. Dark mode resolution
 		let isDark = false;
 		if (colorMode === 'dark') {
 			isDark = true;
 		} else if (colorMode === 'light') {
 			isDark = false;
 		} else {
-			// system
 			isDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
 		}
 
@@ -126,7 +134,6 @@ class ProfileStore {
 			root.classList.remove('dark');
 		}
 
-		// 3. Meta theme-color update
 		const metaTheme = document.querySelector('meta[name="theme-color"]');
 		if (metaTheme) {
 			const paletteHex = PALETTE_PRIMARY_HEX[colorPalette] || PALETTE_PRIMARY_HEX.rose;
@@ -142,30 +149,14 @@ class ProfileStore {
 		if (typeof window === 'undefined') return;
 		const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 		mediaQuery.addEventListener('change', () => {
-			if (this.profile.colorMode === 'system') {
+			if (this.state.colorMode === 'system') {
 				this.applyThemeAndDarkMode();
 			}
 		});
 	}
 
-	/**
-	 * Update profile fields and persist to IndexedDB
-	 */
-	async update(fields: Partial<CoupleProfile>) {
-		const previous = { ...this.profile };
-		this.profile = { ...this.profile, ...fields };
-		this.applyThemeAndDarkMode();
-		await saveProfileToStorage(this.profile);
-		this.notifyMutation(previous);
-	}
-
-	/**
-	 * Local state is already persisted at this point, so a hook that fails (offline,
-	 * for instance) must never surface as a failed profile update. The outbox is
-	 * what makes the server catch up later.
-	 */
-	private notifyMutation(previous: CoupleProfile) {
-		const next = { ...this.profile };
+	private notifyMutation(previous: AppState) {
+		const next = { ...this.state };
 		for (const hook of mutationHooks) {
 			try {
 				void Promise.resolve(hook(next, previous)).catch((err) =>
@@ -178,98 +169,282 @@ class ProfileStore {
 	}
 
 	/**
-	 * Set or replace the couple photo Blob
+	 * Switch active displayed bond.
 	 */
-	async setPhoto(blob: Blob | null) {
-		const { blob: newBlob, url } = await savePhotoBlob(blob, this.profile.photoUrl);
-		this.profile.photoBlob = newBlob;
-		this.profile.photoUrl = url;
-		await saveProfileToStorage(this.profile);
+	async setActiveBond(id: string) {
+		if (this.state.activeBondId === id) return;
+		const previous = { ...this.state };
+		this.state.activeBondId = id;
+		this.applyThemeAndDarkMode();
+		await saveAppStateToStorage(this.state);
+		this.notifyMutation(previous);
 	}
 
 	/**
-	 * Set UI Theme (Modern vs Traditional)
+	 * Add a new bond.
 	 */
+	async addBond(bond: Bond) {
+		const previous = { ...this.state };
+		this.state.bonds = [...this.state.bonds, bond];
+		this.state.activeBondId = bond.id;
+		this.state.isConfigured = true;
+		this.applyThemeAndDarkMode();
+		await saveAppStateToStorage(this.state);
+		this.notifyMutation(previous);
+	}
+
+	/**
+	 * Update an existing bond.
+	 */
+	async updateBond(id: string, patch: Partial<Bond>) {
+		const previous = { ...this.state };
+		this.state.bonds = this.state.bonds.map((b) => (b.id === id ? { ...b, ...patch } : b));
+		this.applyThemeAndDarkMode();
+		await saveAppStateToStorage(this.state);
+		this.notifyMutation(previous);
+	}
+
+	/**
+	 * Delete a bond.
+	 */
+	async deleteBond(id: string) {
+		if (this.state.bonds.length <= 1) {
+			// Don't delete last bond, reset it
+			await this.reset();
+			return;
+		}
+		const previous = { ...this.state };
+		const nextBonds = this.state.bonds.filter((b) => b.id !== id);
+		this.state.bonds = nextBonds;
+		if (this.state.activeBondId === id) {
+			this.state.activeBondId = nextBonds[0].id;
+		}
+		this.applyThemeAndDarkMode();
+		await saveAppStateToStorage(this.state);
+		this.notifyMutation(previous);
+	}
+
+	/**
+	 * Update fields on active bond or global settings (backward compatible).
+	 */
+	async update(fields: Partial<CoupleProfile>) {
+		const previous = { ...this.state };
+
+		// Split global fields vs bond fields
+		const {
+			names,
+			togetherSince,
+			customMilestones,
+			uiTheme,
+			colorMode,
+			colorPalette,
+			showSeconds,
+			isConfigured,
+			pushSubscribed,
+			pushIntent
+		} = fields;
+
+		if (uiTheme !== undefined) this.state.uiTheme = uiTheme;
+		if (colorMode !== undefined) this.state.colorMode = colorMode;
+		if (colorPalette !== undefined) this.state.colorPalette = colorPalette;
+		if (showSeconds !== undefined) this.state.showSeconds = showSeconds;
+		if (isConfigured !== undefined) this.state.isConfigured = isConfigured;
+		if (pushSubscribed !== undefined) this.state.pushSubscribed = pushSubscribed;
+		if (pushIntent !== undefined) this.state.pushIntent = pushIntent;
+
+		// Update active bond
+		if (names !== undefined || togetherSince !== undefined || customMilestones !== undefined) {
+			this.state.bonds = this.state.bonds.map((b) => {
+				if (b.id === this.state.activeBondId) {
+					return {
+						...b,
+						names: names !== undefined ? names : b.names,
+						togetherSince: togetherSince !== undefined ? togetherSince : b.togetherSince,
+						customMilestones: customMilestones !== undefined ? customMilestones : b.customMilestones
+					};
+				}
+				return b;
+			});
+		}
+
+		this.applyThemeAndDarkMode();
+		await saveAppStateToStorage(this.state);
+		this.notifyMutation(previous);
+	}
+
+	/**
+	 * Set or replace photo for a bond (defaults to active bond).
+	 */
+	async setPhoto(blob: Blob | null, targetBondId?: string) {
+		const bondId = targetBondId || this.state.activeBondId;
+		const currentBond = this.state.bonds.find((b) => b.id === bondId);
+		const { blob: newBlob, url } = await saveBondPhoto(bondId, blob, currentBond?.photoUrl);
+
+		this.state.bonds = this.state.bonds.map((b) =>
+			b.id === bondId ? { ...b, photoBlob: newBlob, photoUrl: url } : b
+		);
+		await saveAppStateToStorage(this.state);
+	}
+
 	async setUITheme(uiTheme: UIThemeId) {
 		await this.update({ uiTheme });
 	}
 
-	/**
-	 * Set Dark Mode preference
-	 */
 	async setColorMode(colorMode: ColorMode) {
 		await this.update({ colorMode });
 	}
 
-	/**
-	 * Set Accent Color Palette
-	 */
 	async setColorPalette(colorPalette: ColorPalette) {
 		await this.update({ colorPalette });
 	}
 
-	/**
-	 * Mark onboarding as completed
-	 */
 	async completeOnboarding() {
 		await this.update({ isConfigured: true });
 	}
 
 	/**
-	 * Reset profile back to defaults
+	 * Reset all data to fresh state.
 	 */
 	async reset() {
-		const previous = { ...this.profile };
-		try {
-			localStorage.removeItem('openlove_theme_mode');
-			localStorage.removeItem('openlove_theme_palette');
-			localStorage.removeItem('openlove_theme_ui');
-		} catch {}
-		await clearProfileStorage(this.profile.photoUrl);
-		this.profile = { ...DEFAULT_PROFILE };
+		const previous = { ...this.state };
+		const photoUrls = this.state.bonds.map((b) => b.photoUrl).filter(Boolean) as string[];
+		await clearAllStorage(photoUrls);
+		this.state = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
 		this.applyThemeAndDarkMode();
 		this.notifyMutation(previous);
 	}
 
 	/**
-	 * Export profile data to portable JSON string
+	 * Export full application state or single active bond to JSON.
 	 */
-	exportJSON(): string {
+	exportJSON(activeOnly = false): string {
+		if (activeOnly) {
+			const active = this.activeBond;
+			const exportable = {
+				version: 2,
+				isSingleBond: true,
+				bond: {
+					names: active.names,
+					type: active.type,
+					togetherSince: active.togetherSince,
+					customMilestones: active.customMilestones,
+					milestonePrefs: active.milestonePrefs,
+					colorPalette: active.colorPalette
+				},
+				uiTheme: this.state.uiTheme,
+				colorMode: this.state.colorMode,
+				colorPalette: this.state.colorPalette,
+				showSeconds: this.state.showSeconds,
+				exportedAt: new Date().toISOString()
+			};
+			return JSON.stringify(exportable, null, 2);
+		}
+
 		const exportable = {
-			names: this.profile.names,
-			togetherSince: this.profile.togetherSince,
-			uiTheme: this.profile.uiTheme,
-			colorMode: this.profile.colorMode,
-			colorPalette: this.profile.colorPalette,
-			showSeconds: this.profile.showSeconds,
-			customMilestones: this.profile.customMilestones,
-			version: 1,
+			version: 2,
+			activeBondId: this.state.activeBondId,
+			bonds: this.state.bonds.map(({ photoBlob, photoUrl, ...rest }) => rest),
+			uiTheme: this.state.uiTheme,
+			colorMode: this.state.colorMode,
+			colorPalette: this.state.colorPalette,
+			showSeconds: this.state.showSeconds,
 			exportedAt: new Date().toISOString()
 		};
 		return JSON.stringify(exportable, null, 2);
 	}
 
 	/**
-	 * Import profile data from JSON string
+	 * Import profile / bond data from JSON.
+	 * Handles V1 single profile, V2 single bond invite, and V2 full backup.
 	 */
 	async importJSON(jsonStr: string): Promise<boolean> {
 		try {
 			const data = JSON.parse(jsonStr);
-			if (!data.togetherSince || !data.names) {
-				return false;
+
+			// Case 1: V2 full backup
+			if (data.version === 2 && Array.isArray(data.bonds) && data.bonds.length > 0) {
+				const previous = { ...this.state };
+				this.state = {
+					activeBondId: data.activeBondId || data.bonds[0].id,
+					bonds: data.bonds.map((b: Partial<Bond>) => ({
+						id: b.id || `bond_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+						type: b.type || 'romantic',
+						names: b.names || 'Emma & Paul',
+						togetherSince: b.togetherSince || new Date().toISOString().split('T')[0],
+						photoBlob: null,
+						photoUrl: undefined,
+						customMilestones: Array.isArray(b.customMilestones) ? b.customMilestones : [],
+						notificationsEnabled: b.notificationsEnabled ?? true,
+						milestonePrefs: {
+							years: b.milestonePrefs?.years ?? true,
+							months: b.milestonePrefs?.months ?? (b.type === 'friendship' ? false : true),
+							days: b.milestonePrefs?.days ?? (b.type === 'friendship' ? 'major' : 'all'),
+							custom: b.milestonePrefs?.custom ?? true
+						},
+						colorPalette: b.colorPalette
+					})),
+					uiTheme: data.uiTheme || 'modern',
+					colorMode: data.colorMode || 'system',
+					colorPalette: data.colorPalette || 'rose',
+					showSeconds: data.showSeconds ?? true,
+					isConfigured: true,
+					pushSubscribed: this.state.pushSubscribed,
+					pushIntent: this.state.pushIntent
+				};
+				this.applyThemeAndDarkMode();
+				await saveAppStateToStorage(this.state);
+				this.notifyMutation(previous);
+				return true;
 			}
 
-			await this.update({
-				names: data.names,
-				togetherSince: data.togetherSince,
-				uiTheme: data.uiTheme || 'modern',
-				colorMode: data.colorMode || 'system',
-				colorPalette: data.colorPalette || 'rose',
-				showSeconds: data.showSeconds ?? true,
-				customMilestones: Array.isArray(data.customMilestones) ? data.customMilestones : [],
-				isConfigured: true
-			});
-			return true;
+			// Case 2: V2 Single Bond invite
+			if (data.isSingleBond && data.bond?.names && data.bond?.togetherSince) {
+				const b = data.bond;
+				const newBond: Bond = {
+					id: `bond_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+					type: b.type || 'romantic',
+					names: b.names,
+					togetherSince: b.togetherSince,
+					photoBlob: null,
+					photoUrl: undefined,
+					customMilestones: Array.isArray(b.customMilestones) ? b.customMilestones : [],
+					notificationsEnabled: true,
+					milestonePrefs: {
+						years: b.milestonePrefs?.years ?? true,
+						months: b.milestonePrefs?.months ?? (b.type === 'friendship' ? false : true),
+						days: b.milestonePrefs?.days ?? (b.type === 'friendship' ? 'major' : 'all'),
+						custom: b.milestonePrefs?.custom ?? true
+					},
+					colorPalette: b.colorPalette
+				};
+
+				// If only default unconfigured bond exists, replace it, otherwise append
+				if (this.state.bonds.length === 1 && !this.state.isConfigured) {
+					this.state.bonds = [newBond];
+					this.state.activeBondId = newBond.id;
+				} else {
+					await this.addBond(newBond);
+				}
+				await this.update({ isConfigured: true });
+				return true;
+			}
+
+			// Case 3: V1 legacy single profile
+			if (data.togetherSince && data.names) {
+				await this.update({
+					names: data.names,
+					togetherSince: data.togetherSince,
+					uiTheme: data.uiTheme || 'modern',
+					colorMode: data.colorMode || 'system',
+					colorPalette: data.colorPalette || 'rose',
+					showSeconds: data.showSeconds ?? true,
+					customMilestones: Array.isArray(data.customMilestones) ? data.customMilestones : [],
+					isConfigured: true
+				});
+				return true;
+			}
+
+			return false;
 		} catch (error) {
 			console.error('Failed to import profile JSON:', error);
 			return false;

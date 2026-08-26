@@ -11,11 +11,13 @@ export interface PushPayload {
 	title: string;
 	body: string;
 	type?: string;
+	bondId?: string;
 	milestoneId?: string;
 	milestoneTitle?: string;
 	milestoneType?: string;
 	data?: Record<string, any>;
 }
+
 
 const DATA_DIR = process.env.DATA_DIR || path.resolve(process.cwd(), 'data');
 const VAPID_FILE = path.join(DATA_DIR, 'vapid.json');

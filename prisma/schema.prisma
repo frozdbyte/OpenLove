@@ -8,19 +8,30 @@ generator client {
 }
 
 model PushSubscription {
-  id            String   @id @default(uuid())
-  endpoint      String   @unique
-  p256dh        String
-  auth          String
-  togetherSince String   // YYYY-MM-DD
-  timezone      String   @default("UTC")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  lastNotified  String?  // e.g. "2026-08-25:100_days" to prevent duplicate notifications
-  // ISO-8601 on the *client* clock. Every write is applied only when
-  // op.clientUpdatedAt >= row.clientUpdatedAt, so a mutation queued offline on a phone
-  // three days ago cannot clobber a newer change made on a laptop yesterday.
-  // String comparison is lexicographic for ISO-8601, so no parsing is needed.
-  // Not personal data - a timestamp only. See AGENTS.md Invariant 1.
-  clientUpdatedAt String @default("1970-01-01T00:00:00.000Z")
+  id              String             @id @default(uuid())
+  endpoint        String             @unique
+  p256dh          String
+  auth            String
+  timezone        String             @default("UTC")
+  togetherSince   String?            // Optional legacy field for backward compatibility
+  lastNotified    String?            // Optional legacy field
+  clientUpdatedAt String             @default("1970-01-01T00:00:00.000Z")
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  bonds           SubscriptionBond[]
+}
+
+model SubscriptionBond {
+  id             String           @id @default(uuid())
+  subscriptionId String
+  subscription   PushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  bondId         String           // Client-generated UUID
+  togetherSince  String           // YYYY-MM-DD
+  categories     String           @default("years,months,days_all,custom")
+  lastNotified   String?          // e.g. "2026-08-27:500_days"
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([subscriptionId, bondId])
+  @@index([subscriptionId])
 }

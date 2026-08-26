@@ -6,6 +6,7 @@
 	import SettingsSheet from '$lib/components/settings/SettingsSheet.svelte';
 	import ShareModal from '$lib/components/share/ShareModal.svelte';
 	import PartnerInviteModal from '$lib/components/share/PartnerInviteModal.svelte';
+	import BondSwitcherDrawer from '$lib/components/bonds/BondSwitcherDrawer.svelte';
 	import OnboardingFlow from '$lib/components/onboarding/OnboardingFlow.svelte';
 	import { Heart } from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
@@ -13,6 +14,7 @@
 	let isSettingsOpen = $state(false);
 	let isShareOpen = $state(false);
 	let isInviteModalOpen = $state(false);
+	let isSwitcherOpen = $state(false);
 	let pendingInviteJson = $state('');
 	let pendingInviteRaw = $state('');
 	let pendingPartnerNames = $state('');
@@ -28,6 +30,25 @@
 		return () => clearInterval(interval);
 	});
 
+	// Handle URL query parameter `?bond=id` and Service Worker switch messages
+	$effect(() => {
+		if (typeof window !== 'undefined') {
+			const params = new URLSearchParams(window.location.search);
+			const targetBond = params.get('bond');
+			if (targetBond && profileStore.isInitialized) {
+				void profileStore.setActiveBond(targetBond);
+			}
+
+			const handleMessage = (e: MessageEvent) => {
+				if (e.data?.type === 'OPENLOVE_SWITCH_BOND' && e.data?.bondId) {
+					void profileStore.setActiveBond(e.data.bondId);
+				}
+			};
+			navigator.serviceWorker?.addEventListener('message', handleMessage);
+			return () => navigator.serviceWorker?.removeEventListener('message', handleMessage);
+		}
+	});
+
 	// Handle Partner Share URL import if present in hash (#import=...)
 	$effect(() => {
 		if (typeof window !== 'undefined' && window.location.hash.startsWith('#import=')) {
@@ -39,7 +60,7 @@
 
 				pendingInviteJson = json;
 				pendingInviteRaw = raw;
-				pendingPartnerNames = parsed.names || 'Your Partner';
+				pendingPartnerNames = parsed.bond?.names || parsed.names || 'Your Partner';
 
 				const isStandalone = isRunningAsPWA();
 				if (isStandalone) {
@@ -66,9 +87,9 @@
 
 	$effect(() => {
 		if (typeof window !== 'undefined') {
-			locale = navigator.language
+			locale = navigator.language;
 		}
-	})
+	});
 
 	async function handleAcceptBrowserInvite() {
 		if (pendingInviteJson) {
@@ -85,18 +106,19 @@
 	}
 
 	let timeBreakdown = $derived(
-		calculateTimeBreakdown(profileStore.profile.togetherSince, currentTime, locale)
+		calculateTimeBreakdown(profileStore.activeBond.togetherSince, currentTime, locale)
 	);
 
 	let milestoneData = $derived(
 		calculateMilestones(
-			profileStore.profile.togetherSince,
-			profileStore.profile.customMilestones,
-			currentTime
+			profileStore.activeBond.togetherSince,
+			profileStore.activeBond.customMilestones,
+			currentTime,
+			profileStore.activeBond.milestonePrefs
 		)
 	);
 
-	let CurrentThemeComponent = $derived(getThemeComponent(profileStore.profile.uiTheme));
+	let CurrentThemeComponent = $derived(getThemeComponent(profileStore.state.uiTheme));
 </script>
 
 <svelte:head>
@@ -111,18 +133,20 @@
 		</div>
 		<p class="text-sm font-medium text-muted-foreground animate-pulse">Loading your memories...</p>
 	</div>
-{:else if !profileStore.profile.isConfigured}
+{:else if !profileStore.state.isConfigured}
 	<!-- Onboarding Setup Wizard on first run -->
 	<OnboardingFlow />
 {:else}
 	<!-- Active UI Theme Rendered Dynamically -->
 	<CurrentThemeComponent
 		profile={profileStore.profile}
+		bond={profileStore.activeBond}
 		{timeBreakdown}
 		nextMilestone={milestoneData.nextMilestone}
 		milestones={milestoneData.milestones}
 		onOpenSettings={() => (isSettingsOpen = true)}
 		onOpenShare={() => (isShareOpen = true)}
+		onOpenSwitcher={() => (isSwitcherOpen = true)}
 	/>
 {/if}
 
@@ -130,12 +154,21 @@
 <SettingsSheet
 	bind:open={isSettingsOpen}
 	milestones={milestoneData.milestones}
+	onOpenSwitcher={() => {
+		isSettingsOpen = false;
+		isSwitcherOpen = true;
+	}}
 	onclose={() => (isSettingsOpen = false)}
 />
 
 <ShareModal
 	bind:open={isShareOpen}
 	onclose={() => (isShareOpen = false)}
+/>
+
+<BondSwitcherDrawer
+	bind:open={isSwitcherOpen}
+	onclose={() => (isSwitcherOpen = false)}
 />
 
 <PartnerInviteModal

@@ -100,6 +100,8 @@ self.addEventListener('install', () => {
 
 clientsClaim();
 
+import { getBondSummaryForPush } from '$lib/storage/db';
+
 /* -------------------------------------------------------------------------- */
 /* Push                                                                       */
 /* -------------------------------------------------------------------------- */
@@ -107,40 +109,94 @@ clientsClaim();
 self.addEventListener('push', (event) => {
 	// Push wakes the worker on every platform that supports it, including installed
 	// iOS PWAs - the one place Background Sync will never exist. Free flush.
-	event.waitUntil(flushAndNotify());
+	event.waitUntil(
+		(async () => {
+			await flushAndNotify();
 
-	if (!event.data) return;
+			if (!event.data) return;
 
-	let payload = {
-		title: 'OpenLove Milestone! ❤️',
-		body: 'Today is a special milestone in your relationship!',
-		type: 'milestone',
-		milestoneId: 'milestone'
-	};
+			let payload = {
+				title: 'Milestone! ❤️',
+				body: 'Today is a special milestone!',
+				type: 'milestone',
+				bondId: '',
+				milestoneId: 'milestone',
+				milestoneTitle: 'Milestone',
+				milestoneType: 'years'
+			};
 
-	try {
-		payload = event.data.json();
-	} catch {
-		payload.body = event.data.text();
-	}
+			try {
+				payload = event.data.json();
+			} catch {
+				payload.body = event.data.text();
+			}
 
-	const options: NotificationOptions = {
-		body: payload.body,
-		icon: '/icon-192.png',
-		badge: '/icon-192.png',
-		tag: payload.milestoneId || 'openlove-milestone',
-		renotify: true,
-		data: {
-			url: '/',
-			type: payload.type
-		}
-	};
+			let bondNames = '';
+			let bondType: 'romantic' | 'friendship' = 'romantic';
 
-	event.waitUntil(self.registration.showNotification(payload.title, options));
+			if (payload.bondId) {
+				try {
+					const summary = await getBondSummaryForPush(payload.bondId);
+					if (summary) {
+						bondNames = summary.names;
+						bondType = summary.type;
+					}
+				} catch (err) {
+					console.warn('[sw] failed to lookup bond summary from IDB:', err);
+				}
+			}
+
+			let title = payload.title;
+			let body = payload.body;
+
+			if (payload.type === 'milestone') {
+				const mTitle = payload.milestoneTitle || payload.title;
+				if (bondType === 'friendship') {
+					title =
+						payload.milestoneType === 'years'
+							? `Happy ${mTitle}! 🌿`
+							: `${mTitle} Milestone! 🌿`;
+					body = bondNames
+						? `${bondNames} celebrate ${mTitle} as friends today! 🎉`
+						: `Today is a special friendship milestone: ${mTitle}! 🎉`;
+				} else {
+					title =
+						payload.milestoneType === 'years'
+							? `Happy ${mTitle}! ❤️`
+							: `${mTitle} Milestone! 🏆`;
+					body = bondNames
+						? `${bondNames} celebrate ${mTitle} together today! 🎉`
+						: `Today is a special relationship milestone: ${mTitle}! 🎉`;
+				}
+			} else if (payload.type === 'test') {
+				title = 'Open Love Connected! ❤️';
+				body = 'Milestone notifications are active and ready for your special days.';
+			}
+
+			const options: NotificationOptions = {
+				body,
+				icon: '/icon-192.png',
+				badge: '/icon-192.png',
+				tag: payload.bondId
+					? `${payload.bondId}:${payload.milestoneId}`
+					: payload.milestoneId || 'openlove-milestone',
+				renotify: true,
+				data: {
+					url: payload.bondId ? `/?bond=${payload.bondId}` : '/',
+					bondId: payload.bondId,
+					type: payload.type
+				}
+			};
+
+			await self.registration.showNotification(title, options);
+		})()
+	);
 });
 
 self.addEventListener('notificationclick', (event) => {
 	event.notification.close();
+	const bondId = event.notification.data?.bondId;
+	const targetUrl = bondId ? `/?bond=${bondId}` : '/';
 
 	event.waitUntil(
 		self.clients
@@ -148,11 +204,14 @@ self.addEventListener('notificationclick', (event) => {
 			.then((clientList) => {
 				for (const client of clientList) {
 					if (client.url && 'focus' in client) {
+						if (bondId) {
+							client.postMessage({ type: 'OPENLOVE_SWITCH_BOND', bondId });
+						}
 						return client.focus();
 					}
 				}
 				if (self.clients.openWindow) {
-					return self.clients.openWindow('/');
+					return self.clients.openWindow(targetUrl);
 				}
 			})
 	);
@@ -176,7 +235,7 @@ self.addEventListener('pushsubscriptionchange', (event) => {
 		(async () => {
 			try {
 				const meta = await getSyncMeta();
-				if (!meta.vapidPublicKey || !meta.togetherSince) {
+				if (!meta.vapidPublicKey || (!meta.togetherSince && (!meta.bonds || meta.bonds.length === 0))) {
 					console.warn('[sw] endpoint rotated but no sync-meta is stored; cannot re-subscribe');
 					return;
 				}
@@ -195,6 +254,7 @@ self.addEventListener('pushsubscriptionchange', (event) => {
 					buildUpsert({
 						endpoint: json.endpoint,
 						keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+						bonds: meta.bonds,
 						togetherSince: meta.togetherSince,
 						timezone: meta.timezone || resolveTimezone(),
 						oldEndpoint: rotation.oldSubscription?.endpoint ?? meta.endpoint
@@ -208,6 +268,7 @@ self.addEventListener('pushsubscriptionchange', (event) => {
 		})()
 	);
 });
+
 
 /* -------------------------------------------------------------------------- */
 /* Outbox flush triggers                                                      */

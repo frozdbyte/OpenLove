@@ -29,10 +29,18 @@ export const POST: RequestHandler = async ({ request }) => {
 				clientUpdatedAt: new Date().toISOString(),
 				endpoint,
 				keys: { p256dh: keys.p256dh, auth: keys.auth },
+				bonds: [
+					{
+						bondId: 'primary_bond',
+						togetherSince,
+						categories: ['years', 'months', 'days_all', 'custom']
+					}
+				],
 				togetherSince,
 				timezone: timezone || 'UTC'
 			}
 		]);
+
 
 		if (result?.status === 'error') {
 			return json({ error: 'Failed to save push subscription' }, { status: 500 });

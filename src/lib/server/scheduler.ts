@@ -1,9 +1,23 @@
 import { prisma } from './db';
 import { sendPushNotification } from './push';
 import { calculateMilestones } from '$lib/utils/time';
+import type { MilestoneCategoryPrefs } from '$lib/types/bonds';
 
 let isSchedulerRunning = false;
 let intervalHandle: NodeJS.Timeout | null = null;
+
+function parseBondCategoryPrefs(categoriesStr?: string): MilestoneCategoryPrefs {
+	if (!categoriesStr) {
+		return { years: true, months: true, days: 'all', custom: true };
+	}
+	const list = categoriesStr.split(',');
+	return {
+		years: list.includes('years'),
+		months: list.includes('months'),
+		days: list.includes('days_all') ? 'all' : list.includes('days_major') ? 'major' : 'off',
+		custom: list.includes('custom')
+	};
+}
 
 /**
  * Check all active subscriptions and dispatch milestone notifications.
@@ -13,7 +27,9 @@ export async function checkAndDispatchMilestones(): Promise<{ processed: number;
 	let sent = 0;
 
 	try {
-		const subscriptions = await prisma.pushSubscription.findMany();
+		const subscriptions = await prisma.pushSubscription.findMany({
+			include: { bonds: true }
+		});
 		const nowUTC = new Date();
 
 		for (const sub of subscriptions) {
@@ -36,55 +52,88 @@ export async function checkAndDispatchMilestones(): Promise<{ processed: number;
 				const [sYear, sMonth, sDay] = subscriberDateStr.split('-').map(Number);
 				const localDate = new Date(sYear, sMonth - 1, sDay);
 
-				// 2. Check if today is an exact milestone date
-				const { milestones } = calculateMilestones(sub.togetherSince, [], localDate);
+				// 2. Check each bond under this subscription
+				const bondsToCheck =
+					sub.bonds.length > 0
+						? sub.bonds
+						: sub.togetherSince
+							? [
+									{
+										id: 'legacy',
+										subscriptionId: sub.id,
+										bondId: 'primary_bond',
+										togetherSince: sub.togetherSince,
+										categories: 'years,months,days_all,custom',
+										lastNotified: sub.lastNotified,
+										createdAt: sub.createdAt,
+										updatedAt: sub.updatedAt
+									}
+								]
+							: [];
 
-				// Find milestones occurring on this exact day
-				const todayMilestones = milestones.filter((m) => {
-					const mTargetStr = m.targetDate.toISOString().split('T')[0];
-					return mTargetStr === subscriberDateStr;
-				});
+				for (const bond of bondsToCheck) {
+					const prefs = parseBondCategoryPrefs(bond.categories);
+					const { milestones } = calculateMilestones(bond.togetherSince, [], localDate, prefs);
 
-				if (todayMilestones.length === 0) {
-					continue;
-				}
+					const todayMilestones = milestones.filter((m) => {
+						const mTargetStr = m.targetDate.toISOString().split('T')[0];
+						return mTargetStr === subscriberDateStr;
+					});
 
-				for (const milestone of todayMilestones) {
-					const notificationKey = `${subscriberDateStr}:${milestone.id}`;
+					for (const milestone of todayMilestones) {
+						const notificationKey = `${subscriberDateStr}:${milestone.id}`;
 
-					// Check if already notified for this milestone
-					if (sub.lastNotified === notificationKey) {
-						continue;
-					}
-
-					// Send push notification
-					const result = await sendPushNotification(
-						{
-							endpoint: sub.endpoint,
-							p256dh: sub.p256dh,
-							auth: sub.auth
-						},
-						{
-							title: `Happy ${milestone.title}! ❤️`,
-							body: `Today is a special relationship milestone: ${milestone.title} together! 🎉`,
-							type: 'milestone',
-							milestoneId: milestone.id,
-							milestoneTitle: milestone.title,
-							milestoneType: milestone.type
+						if (bond.lastNotified === notificationKey) {
+							continue;
 						}
-					);
 
-					if (result.success) {
-						sent++;
-						await prisma.pushSubscription.update({
-							where: { id: sub.id },
-							data: { lastNotified: notificationKey }
-						});
-					} else if (result.shouldDelete) {
-						// Clean up dead subscription
-						await prisma.pushSubscription.delete({
-							where: { id: sub.id }
-						});
+						// Universal phrasing that looks natural standalone or with iOS "from Open Love"
+						const pushTitle =
+							milestone.type === 'years'
+								? `Happy ${milestone.title}! ❤️`
+								: milestone.type === 'months'
+									? `Happy ${milestone.title}! ✨`
+									: `${milestone.title} Milestone! 🏆`;
+
+						const pushBody = `Today is a special milestone: ${milestone.title}! 🎉`;
+
+						const result = await sendPushNotification(
+							{
+								endpoint: sub.endpoint,
+								p256dh: sub.p256dh,
+								auth: sub.auth
+							},
+							{
+								title: pushTitle,
+								body: pushBody,
+								type: 'milestone',
+								bondId: bond.bondId,
+								milestoneId: milestone.id,
+								milestoneTitle: milestone.title,
+								milestoneType: milestone.type
+							}
+						);
+
+						if (result.success) {
+							sent++;
+							if (bond.id !== 'legacy') {
+								await prisma.subscriptionBond.update({
+									where: { id: bond.id },
+									data: { lastNotified: notificationKey }
+								});
+							} else {
+								await prisma.pushSubscription.update({
+									where: { id: sub.id },
+									data: { lastNotified: notificationKey }
+								});
+							}
+						} else if (result.shouldDelete) {
+							// Clean up dead subscription (cascades to all bonds)
+							await prisma.pushSubscription.delete({
+								where: { id: sub.id }
+							});
+							break; // subscription is gone
+						}
 					}
 				}
 			} catch (subErr) {
@@ -119,13 +168,6 @@ export function startMilestoneScheduler(intervalMs: number = 1000 * 60 * 60): vo
 		);
 	}, intervalMs);
 
-	// Do not let a background maintenance timer hold the event loop open.
-	//
-	// adapter-node installs its own SIGINT/SIGTERM handler that closes the HTTP
-	// server and then waits for the loop to drain — it never calls process.exit().
-	// An hourly interval that is never unref'd means Ctrl+C appears to do nothing,
-	// and `docker stop` hangs for its full grace period before SIGKILLing the
-	// container (a hard kill on an open SQLite handle).
 	intervalHandle.unref?.();
 }
 

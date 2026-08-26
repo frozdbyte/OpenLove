@@ -1,4 +1,7 @@
 import type { TimeBreakdown, NextMilestoneInfo, MilestoneItem } from './time';
+import type { Bond, BondType, MilestoneCategoryPrefs, DaysMilestoneFilter, AppState } from './bonds';
+
+export type { Bond, BondType, MilestoneCategoryPrefs, DaysMilestoneFilter, AppState };
 
 export type UIThemeId = 'modern' | 'traditional' | 'cover';
 export type ColorMode = 'system' | 'light' | 'dark';
@@ -34,9 +37,12 @@ export interface CoupleProfile {
 
 export interface ThemeProps {
 	profile: CoupleProfile;
+	bond?: Bond;
 	timeBreakdown: TimeBreakdown;
 	nextMilestone: NextMilestoneInfo | null;
 	milestones: MilestoneItem[];
 	onOpenSettings: () => void;
 	onOpenShare: () => void;
+	onOpenSwitcher?: () => void;
 }
+

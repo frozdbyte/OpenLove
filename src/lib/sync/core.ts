@@ -11,11 +11,13 @@ import {
 } from '$lib/storage/outbox';
 import type {
 	FlushResult,
+	SyncBondItem,
 	SyncKeys,
 	SyncOp,
 	SyncResponse,
 	SyncUpsertOp
 } from '$lib/types/sync';
+
 
 /**
  * Outbox delivery. DOM-free on purpose: `src/service-worker.ts` imports this.
@@ -51,18 +53,21 @@ export function buildUpsert(
 	input: {
 		endpoint: string;
 		keys: SyncKeys;
-		togetherSince: string;
+		bonds?: SyncBondItem[];
+		togetherSince?: string;
 		timezone: string;
 		oldEndpoint?: string;
 	}
 ): SyncUpsertOp {
+	const bonds = input.bonds ?? (input.togetherSince ? [{ bondId: 'default', togetherSince: input.togetherSince, categories: ['years', 'months', 'days_all', 'custom'] }] : []);
 	return {
 		opId: newOpId(),
 		kind: 'upsert',
 		clientUpdatedAt: new Date().toISOString(),
 		endpoint: input.endpoint,
 		keys: input.keys,
-		togetherSince: input.togetherSince,
+		bonds,
+		togetherSince: input.togetherSince || (bonds.length > 0 ? bonds[0].togetherSince : undefined),
 		timezone: input.timezone,
 		...(input.oldEndpoint && input.oldEndpoint !== input.endpoint
 			? { oldEndpoint: input.oldEndpoint }
@@ -70,6 +75,7 @@ export function buildUpsert(
 		attempts: 0
 	};
 }
+
 
 export function resolveTimezone(): string {
 	try {

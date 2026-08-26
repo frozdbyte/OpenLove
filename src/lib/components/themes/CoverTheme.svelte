@@ -1,12 +1,14 @@
 <script lang="ts">
 	import type { ThemeProps } from '$lib/types/profile';
-	import { Heart, Settings, Share2, Sparkles, Trophy, Calendar, Clock, Hourglass } from '@lucide/svelte';
+	import { Heart, Settings, Share2, Sparkles, Trophy, Calendar, Clock, Hourglass, ChevronDown } from '@lucide/svelte';
 	import Card from '$lib/components/ui/card';
 	import Badge from '$lib/components/ui/badge';
 	import Progress from '$lib/components/ui/progress';
 	import SyncStatusPill from '$lib/components/offline/SyncStatusPill.svelte';
 
-	let { profile, timeBreakdown, nextMilestone, onOpenSettings, onOpenShare }: ThemeProps = $props();
+	let { profile, bond, timeBreakdown, nextMilestone, onOpenSettings, onOpenShare, onOpenSwitcher }: ThemeProps = $props();
+
+	let isFriendship = $derived(bond?.type === 'friendship');
 </script>
 
 <div class="relative min-h-svh w-full flex flex-col justify-between pb-6 sm:pb-8 overflow-x-hidden bg-background">
@@ -18,6 +20,11 @@
 				alt={profile.names}
 				class="w-full h-full object-cover object-center"
 			/>
+		{:else if isFriendship}
+			<div class="w-full h-full bg-gradient-to-br from-emerald-200/50 via-primary/20 to-teal-300/40 dark:from-emerald-950/50 dark:via-zinc-900 dark:to-zinc-950 flex flex-col items-center justify-center text-emerald-600 dark:text-emerald-400">
+				<Sparkles class="h-16 w-16 animate-gentle-pulse" />
+				<span class="text-xs font-medium text-muted-foreground mt-2">Add friend photo in settings</span>
+			</div>
 		{:else}
 			<div class="w-full h-full bg-gradient-to-br from-rose-200/50 via-primary/20 to-rose-300/40 dark:from-rose-950/50 dark:via-zinc-900 dark:to-zinc-950 flex flex-col items-center justify-center text-primary">
 				<Heart class="h-16 w-16 fill-primary/20 stroke-primary animate-gentle-pulse" />
@@ -44,14 +51,22 @@
 				<Settings class="h-5 w-5" />
 			</button>
 
-			<div class="flex flex-col items-center text-center px-2 flex-1 min-w-0">
-				<h1 class="text-base sm:text-lg font-extrabold text-foreground tracking-tight truncate max-w-full drop-shadow-xs">
-					{profile.names}
-				</h1>
+			<button
+				type="button"
+				class="group flex flex-col items-center text-center px-2 flex-1 min-w-0 cursor-pointer hover:opacity-85 transition-opacity"
+				onclick={onOpenSwitcher}
+				aria-label="Switch relationship or friendship"
+			>
+				<div class="flex items-center gap-1 max-w-full">
+					<h1 class="text-base sm:text-lg font-extrabold text-foreground tracking-tight truncate drop-shadow-xs">
+						{profile.names}
+					</h1>
+					<ChevronDown class="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
+				</div>
 				<p class="text-[11px] text-muted-foreground font-medium drop-shadow-xs">
-					Since {timeBreakdown.startDateFormatted}
+					{isFriendship ? 'Friends since' : 'Since'} {timeBreakdown.startDateFormatted}
 				</p>
-			</div>
+			</button>
 
 			<button
 				type="button"
@@ -73,8 +88,8 @@
 	<main class="relative z-20 w-full max-w-md mx-auto px-4 space-y-3 mt-auto pt-[28vh] sm:pt-[34vh] pb-2">
 		<!-- Sleek Compact Hero Counter Card to showcase more photo -->
 		<Card class="border-primary/20 bg-card/85 backdrop-blur-xl shadow-lg text-center py-3 px-4 sm:py-3.5 sm:px-5 space-y-1">
-			<Badge variant="romantic" class="mx-auto uppercase tracking-widest text-[9px] py-0.5 px-2">
-				Together for
+			<Badge variant={isFriendship ? 'outline' : 'romantic'} class="mx-auto uppercase tracking-widest text-[9px] py-0.5 px-2">
+				{isFriendship ? 'Friends for' : 'Together for'}
 			</Badge>
 			<h2 class="text-2xl sm:text-3xl font-extrabold text-primary tracking-tight py-0.5">
 				{timeBreakdown.primaryFormatted}
@@ -111,7 +126,11 @@
 
 			<Card class="p-3.5 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm backdrop-blur-md">
 				<div class="p-2 rounded-2xl bg-primary/10 text-primary shrink-0">
-					<Heart class="h-4 w-4" />
+					{#if isFriendship}
+						<Sparkles class="h-4 w-4" />
+					{:else}
+						<Heart class="h-4 w-4" />
+					{/if}
 				</div>
 				<div class="text-left min-w-0">
 					<div class="text-lg font-bold leading-none">{timeBreakdown.totalDays.toLocaleString()}</div>

@@ -1,10 +1,10 @@
 import { prisma } from './db';
-import type { SyncOp, SyncOpResult, SyncUpsertOp } from '$lib/types/sync';
+import type { SyncBondItem, SyncOp, SyncOpResult, SyncUpsertOp } from '$lib/types/sync';
 
 /**
  * Server side of the subscription sync protocol.
  *
- * Sync is one-directional: the client owns `togetherSince`, `timezone` and the
+ * Sync is one-directional: the client owns `bonds`, `timezone` and the
  * push keys; the server owns only `lastNotified`. So there is nothing to merge —
  * each op is applied idempotently, guarded by last-write-wins on the client clock.
  *
@@ -35,8 +35,6 @@ export function parseOps(body: unknown): SyncOp[] {
 }
 
 function parseOp(raw: unknown): SyncOp {
-	// `kind` is widened to string: this is unvalidated wire input, so it must be
-	// allowed to hold anything before the checks below narrow it.
 	const op = raw as Partial<Omit<SyncUpsertOp, 'kind'>> & { kind?: string };
 
 	if (typeof op?.opId !== 'string' || !op.opId) {
@@ -64,8 +62,33 @@ function parseOp(raw: unknown): SyncOp {
 	if (typeof op.keys?.p256dh !== 'string' || typeof op.keys?.auth !== 'string') {
 		throw new SyncRequestError(`Op ${op.opId} is missing push keys`);
 	}
-	if (typeof op.togetherSince !== 'string' || !DATE_RE.test(op.togetherSince)) {
-		throw new SyncRequestError(`Op ${op.opId} has an invalid togetherSince`);
+
+	let bonds: SyncBondItem[] = [];
+	if (Array.isArray(op.bonds)) {
+		bonds = op.bonds.map((b, idx) => {
+			if (typeof b?.bondId !== 'string' || !b.bondId) {
+				throw new SyncRequestError(`Op ${op.opId} bond at index ${idx} is missing bondId`);
+			}
+			if (typeof b?.togetherSince !== 'string' || !DATE_RE.test(b.togetherSince)) {
+				throw new SyncRequestError(`Op ${op.opId} bond ${b.bondId} has an invalid togetherSince`);
+			}
+			const categories = Array.isArray(b.categories)
+				? b.categories.filter((c: unknown) => typeof c === 'string')
+				: ['years', 'months', 'days_all', 'custom'];
+			return {
+				bondId: b.bondId,
+				togetherSince: b.togetherSince,
+				categories
+			};
+		});
+	} else if (typeof op.togetherSince === 'string' && DATE_RE.test(op.togetherSince)) {
+		bonds = [
+			{
+				bondId: 'primary_bond',
+				togetherSince: op.togetherSince,
+				categories: ['years', 'months', 'days_all', 'custom']
+			}
+		];
 	}
 
 	return {
@@ -74,7 +97,8 @@ function parseOp(raw: unknown): SyncOp {
 		endpoint: op.endpoint,
 		clientUpdatedAt: op.clientUpdatedAt,
 		keys: { p256dh: op.keys.p256dh, auth: op.keys.auth },
-		togetherSince: op.togetherSince,
+		bonds,
+		togetherSince: bonds[0]?.togetherSince,
 		timezone: typeof op.timezone === 'string' && op.timezone ? op.timezone : 'UTC',
 		...(typeof op.oldEndpoint === 'string' && op.oldEndpoint
 			? { oldEndpoint: op.oldEndpoint }
@@ -105,10 +129,11 @@ async function applyUpsert(op: SyncUpsertOp): Promise<SyncOpResult> {
 	const data = {
 		p256dh: op.keys.p256dh,
 		auth: op.keys.auth,
-		togetherSince: op.togetherSince,
+		togetherSince: op.togetherSince || null,
 		timezone: op.timezone,
 		clientUpdatedAt: op.clientUpdatedAt
 	};
+
 
 	// Endpoint rotation: migrate the existing row rather than delete-then-create, so
 	// `lastNotified` survives. Losing it on a milestone day would send a duplicate.
@@ -123,8 +148,7 @@ async function applyUpsert(op: SyncUpsertOp): Promise<SyncOpResult> {
 				return 'stale' as const;
 			}
 
-			// The new endpoint may already have a row (e.g. the rotation was reported
-			// twice). `endpoint` is unique, so clear it before moving the old row over.
+			// Clear conflicting endpoint if any
 			await tx.pushSubscription.deleteMany({
 				where: { endpoint: op.endpoint, NOT: { id: previous.id } }
 			});
@@ -132,12 +156,13 @@ async function applyUpsert(op: SyncUpsertOp): Promise<SyncOpResult> {
 				where: { id: previous.id },
 				data: { endpoint: op.endpoint, ...data }
 			});
+
+			await syncSubscriptionBonds(tx, previous.id, op.bonds);
 			return true;
 		});
 
 		if (migrated === 'stale') return { opId: op.opId, status: 'stale' };
 		if (migrated) return { opId: op.opId, status: 'applied' };
-		// No row at the old endpoint — fall through and create one at the new endpoint.
 	}
 
 	const existing = await prisma.pushSubscription.findUnique({
@@ -145,18 +170,77 @@ async function applyUpsert(op: SyncUpsertOp): Promise<SyncOpResult> {
 	});
 
 	if (existing) {
-		// Lexicographic comparison is valid for ISO-8601 and needs no parsing.
 		if (op.clientUpdatedAt < existing.clientUpdatedAt) {
 			return { opId: op.opId, status: 'stale' };
 		}
-		await prisma.pushSubscription.update({ where: { id: existing.id }, data });
+		await prisma.$transaction(async (tx) => {
+			await tx.pushSubscription.update({ where: { id: existing.id }, data });
+			await syncSubscriptionBonds(tx, existing.id, op.bonds);
+		});
 		return { opId: op.opId, status: 'applied' };
 	}
 
-	await prisma.pushSubscription.create({
-		data: { endpoint: op.endpoint, ...data }
+	await prisma.$transaction(async (tx) => {
+		const created = await tx.pushSubscription.create({
+			data: { endpoint: op.endpoint, ...data }
+		});
+		await syncSubscriptionBonds(tx, created.id, op.bonds);
 	});
 	return { opId: op.opId, status: 'applied' };
+}
+
+/**
+ * Synchronize SubscriptionBond relational records for a subscription within a transaction.
+ */
+async function syncSubscriptionBonds(
+	tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+	subscriptionId: string,
+	bonds: SyncBondItem[]
+) {
+	const incomingBondIds = bonds.map((b) => b.bondId);
+
+	// 1. Delete removed bonds
+	await tx.subscriptionBond.deleteMany({
+		where: {
+			subscriptionId,
+			bondId: { notIn: incomingBondIds }
+		}
+	});
+
+	// 2. Upsert incoming bonds
+	for (const bond of bonds) {
+		const categoriesStr = Array.isArray(bond.categories)
+			? bond.categories.join(',')
+			: 'years,months,days_all,custom';
+
+		const existing = await tx.subscriptionBond.findUnique({
+			where: {
+				subscriptionId_bondId: {
+					subscriptionId,
+					bondId: bond.bondId
+				}
+			}
+		});
+
+		if (existing) {
+			await tx.subscriptionBond.update({
+				where: { id: existing.id },
+				data: {
+					togetherSince: bond.togetherSince,
+					categories: categoriesStr
+				}
+			});
+		} else {
+			await tx.subscriptionBond.create({
+				data: {
+					subscriptionId,
+					bondId: bond.bondId,
+					togetherSince: bond.togetherSince,
+					categories: categoriesStr
+				}
+			});
+		}
+	}
 }
 
 async function applyDelete(op: SyncOp): Promise<SyncOpResult> {
@@ -172,6 +256,7 @@ async function applyDelete(op: SyncOp): Promise<SyncOpResult> {
 		return { opId: op.opId, status: 'stale' };
 	}
 
+	// Deleting PushSubscription cascades and deletes all SubscriptionBonds
 	await prisma.pushSubscription.delete({ where: { id: existing.id } });
 	return { opId: op.opId, status: 'applied' };
 }

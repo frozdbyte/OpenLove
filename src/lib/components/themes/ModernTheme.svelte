@@ -1,12 +1,14 @@
 <script lang="ts">
 	import type { ThemeProps } from '$lib/types/profile';
-	import { Heart, Settings, Share2, Sparkles, Trophy, Calendar, Clock, Hourglass } from '@lucide/svelte';
-	import Card, { CardContent } from '$lib/components/ui/card';
+	import { Heart, Settings, Share2, Sparkles, Trophy, Calendar, Clock, Hourglass, ChevronDown } from '@lucide/svelte';
+	import Card from '$lib/components/ui/card';
 	import Badge from '$lib/components/ui/badge';
 	import Progress from '$lib/components/ui/progress';
 	import SyncStatusPill from '$lib/components/offline/SyncStatusPill.svelte';
 
-	let { profile, timeBreakdown, nextMilestone, onOpenSettings, onOpenShare }: ThemeProps = $props();
+	let { profile, bond, timeBreakdown, nextMilestone, onOpenSettings, onOpenShare, onOpenSwitcher }: ThemeProps = $props();
+
+	let isFriendship = $derived(bond?.type === 'friendship');
 </script>
 
 <div class="relative min-h-svh w-full max-w-md mx-auto px-4 py-6 flex flex-col justify-between pb-12">
@@ -21,10 +23,21 @@
 			<Settings class="h-5 w-5" />
 		</button>
 
-		<div class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold">
-			<Heart class="h-3.5 w-3.5 fill-primary animate-heartbeat" />
-			<span>Together</span>
-		</div>
+		<button
+			type="button"
+			class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold hover:bg-primary/20 transition-all cursor-pointer"
+			onclick={onOpenSwitcher}
+			aria-label="Switch Relationship or Friendship"
+		>
+			{#if isFriendship}
+				<Sparkles class="h-3.5 w-3.5 fill-primary" />
+				<span>Friends</span>
+			{:else}
+				<Heart class="h-3.5 w-3.5 fill-primary animate-heartbeat" />
+				<span>Together</span>
+			{/if}
+			<ChevronDown class="h-3 w-3 opacity-60 ml-0.5" />
+		</button>
 
 		<button
 			type="button"
@@ -45,7 +58,12 @@
 	<main class="space-y-6 my-auto pt-4 pb-6">
 		<!-- Couple Avatar & Names -->
 		<div class="flex flex-col items-center text-center space-y-3">
-			<div class="relative group">
+			<button
+				type="button"
+				class="relative group cursor-pointer"
+				onclick={onOpenSwitcher}
+				aria-label="Switch bond"
+			>
 				<div class="absolute -inset-1.5 rounded-full bg-gradient-to-tr from-primary to-rose-400 opacity-60 blur-md group-hover:opacity-100 transition duration-500 animate-gentle-pulse"></div>
 				
 				<div class="relative h-28 w-28 rounded-full overflow-hidden border-4 border-background bg-card shadow-xl flex items-center justify-center">
@@ -55,6 +73,10 @@
 							alt={profile.names}
 							class="h-full w-full object-cover"
 						/>
+					{:else if isFriendship}
+						<div class="h-full w-full bg-gradient-to-br from-emerald-100 to-teal-200 dark:from-emerald-950/60 dark:to-zinc-900 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+							<Sparkles class="h-12 w-12" />
+						</div>
 					{:else}
 						<div class="h-full w-full bg-gradient-to-br from-rose-100 to-rose-200 dark:from-rose-950/60 dark:to-zinc-900 flex items-center justify-center text-primary">
 							<Heart class="h-12 w-12 fill-primary/30 stroke-primary animate-heartbeat" />
@@ -63,24 +85,35 @@
 				</div>
 
 				<div class="absolute -bottom-1 -right-1 h-8 w-8 rounded-full bg-primary text-primary-foreground border-2 border-background flex items-center justify-center shadow-lg">
-					<Heart class="h-4 w-4 fill-current" />
+					{#if isFriendship}
+						<Sparkles class="h-4 w-4 fill-current" />
+					{:else}
+						<Heart class="h-4 w-4 fill-current" />
+					{/if}
 				</div>
-			</div>
+			</button>
 
-			<div>
-				<h1 class="text-2xl font-extrabold text-foreground tracking-tight">
-					{profile.names}
-				</h1>
+			<button
+				type="button"
+				class="group flex flex-col items-center cursor-pointer hover:opacity-80 transition-opacity"
+				onclick={onOpenSwitcher}
+			>
+				<div class="flex items-center gap-1.5">
+					<h1 class="text-2xl font-extrabold text-foreground tracking-tight">
+						{profile.names}
+					</h1>
+					<ChevronDown class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+				</div>
 				<p class="text-xs text-muted-foreground mt-0.5 font-medium">
-					Since {timeBreakdown.startDateFormatted}
+					{isFriendship ? 'Friends since' : 'Since'} {timeBreakdown.startDateFormatted}
 				</p>
-			</div>
+			</button>
 		</div>
 
 		<!-- Big Hero Counter Card -->
 		<Card class="border-primary/20 bg-gradient-to-b from-card/90 to-card/60 shadow-lg text-center p-6 space-y-2">
-			<Badge variant="romantic" class="mx-auto uppercase tracking-widest text-[10px]">
-				Together for
+			<Badge variant={isFriendship ? 'outline' : 'romantic'} class="mx-auto uppercase tracking-widest text-[10px]">
+				{isFriendship ? 'Friends for' : 'Together for'}
 			</Badge>
 			<h2 class="text-3xl font-black text-primary tracking-tight py-1">
 				{timeBreakdown.primaryFormatted}
@@ -117,7 +150,11 @@
 
 			<Card class="p-4 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm">
 				<div class="p-2.5 rounded-2xl bg-primary/10 text-primary">
-					<Heart class="h-5 w-5" />
+					{#if isFriendship}
+						<Sparkles class="h-5 w-5" />
+					{:else}
+						<Heart class="h-5 w-5" />
+					{/if}
 				</div>
 				<div class="text-left">
 					<div class="text-xl font-bold leading-none">{timeBreakdown.totalDays.toLocaleString()}</div>

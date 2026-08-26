@@ -25,7 +25,8 @@
 
 	async function generateQR() {
 		try {
-			const json = profileStore.exportJSON();
+			// Export single bond payload for partner invite
+			const json = profileStore.exportJSON(true);
 			const shareUrl = `${window.location.origin}/#import=${encodeURIComponent(btoa(json))}`;
 			qrDataUrl = await QRCode.toDataURL(shareUrl, {
 				width: 280,
@@ -43,7 +44,7 @@
 	async function copyShareLink() {
 		if (typeof window === 'undefined') return;
 		try {
-			const json = profileStore.exportJSON();
+			const json = profileStore.exportJSON(true);
 			const shareUrl = `${window.location.origin}/#import=${encodeURIComponent(btoa(json))}`;
 			const ok = await copyToClipboard(shareUrl);
 			if (ok) {
@@ -60,7 +61,7 @@
 	async function copySyncCode() {
 		if (typeof window === 'undefined') return;
 		try {
-			const json = profileStore.exportJSON();
+			const json = profileStore.exportJSON(true);
 			const code = btoa(json);
 			const ok = await copyToClipboard(code);
 			if (ok) {
@@ -76,12 +77,12 @@
 
 	function downloadBackupJSON() {
 		if (typeof window === 'undefined') return;
-		const json = profileStore.exportJSON();
+		const json = profileStore.exportJSON(true);
 		const blob = new Blob([json], { type: 'application/json' });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url;
-		a.download = `openlove-backup-${profileStore.profile.names.replace(/\s+/g, '-').toLowerCase()}.json`;
+		a.download = `openlove-share-${profileStore.activeBond.names.replace(/\s+/g, '-').toLowerCase()}.json`;
 		a.click();
 		URL.revokeObjectURL(url);
 	}
@@ -89,8 +90,8 @@
 
 <Modal
 	bind:open
-	title="Share with Partner"
-	description="Sync your dates, names, and settings with your partner's phone"
+	title="Share Bond"
+	description="Share '{profileStore.activeBond.names}' with your partner or friend"
 	{onclose}
 >
 	<div class="flex flex-col items-center text-center space-y-4 py-2">
@@ -106,7 +107,7 @@
 		</div>
 
 		<p class="text-xs text-muted-foreground max-w-xs">
-			Have your partner scan this QR code with their camera or from their Open Love app.
+			Have them scan this QR code with their camera or from their Open Love app to add this bond.
 		</p>
 
 		<!-- Actions -->
@@ -133,7 +134,7 @@
 
 			<Button variant="ghost" size="sm" class="w-full text-xs text-muted-foreground hover:text-foreground" onclick={downloadBackupJSON}>
 				<Download class="h-3.5 w-3.5 mr-1" />
-				<span>Download JSON File</span>
+				<span>Download Bond JSON File</span>
 			</Button>
 		</div>
 	</div>
