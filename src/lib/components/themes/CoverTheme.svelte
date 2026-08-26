@@ -9,7 +9,7 @@
 	let { profile, timeBreakdown, nextMilestone, onOpenSettings, onOpenShare }: ThemeProps = $props();
 </script>
 
-<div class="relative min-h-svh w-full flex flex-col justify-between pb-6 sm:pb-8 overflow-x-hidden">
+<div class="relative min-h-svh w-full flex flex-col justify-between pb-6 sm:pb-8 overflow-x-hidden bg-background">
 	<!-- Full-Width Edge-to-Edge Cover Photo starting from top screen edge -->
 	<div class="absolute inset-x-0 top-0 h-[58vh] min-h-[380px] max-h-[620px] overflow-hidden select-none z-0">
 		{#if profile.photoUrl}
@@ -26,10 +26,10 @@
 		{/if}
 
 		<!-- Top Gradient: Seamlessly fades from header background to transparent without muddy dark bands -->
-		<div class="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-rose-50/85 via-rose-50/40 to-rose-50/0 dark:from-zinc-950/90 dark:via-zinc-950/40 dark:to-zinc-950/0 pointer-events-none z-10"></div>
+		<div class="absolute inset-x-0 top-0 h-44 bg-gradient-to-b from-background/85 via-background/40 to-background/0 pointer-events-none z-10"></div>
 
 		<!-- Bottom Gradient: Perfectly matches the middle layout background (rose-50/background in light, zinc-900 in dark) -->
-		<div class="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-background via-background/60 to-background/0 dark:from-zinc-900 dark:via-zinc-900/60 dark:to-zinc-900/0 pointer-events-none z-10"></div>
+		<div class="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-background via-background/60 to-background/0 pointer-events-none z-10"></div>
 	</div>
 
 	<!-- Top Bar Header with Names at the Top -->
