@@ -11,7 +11,7 @@
 
 <div class="relative min-h-svh w-full flex flex-col justify-between pb-6 sm:pb-8 overflow-x-hidden bg-background">
 	<!-- Full-Width Edge-to-Edge Cover Photo starting from top screen edge -->
-	<div class="absolute inset-x-0 top-0 h-[58vh] min-h-[380px] max-h-[620px] overflow-hidden select-none z-0">
+	<div class="absolute inset-x-0 top-0 h-[58vh] min-h-[380px] max-h-[620px] max-w-full lg:max-w-lg  mx-auto overflow-hidden select-none z-0">
 		{#if profile.photoUrl}
 			<img
 				src={profile.photoUrl}
