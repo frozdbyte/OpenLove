@@ -23,7 +23,10 @@
 		QrCode,
 		ShieldCheck,
 		Lock,
-		Download
+		Download,
+
+		Image
+
 	} from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
 	import { subscribeToPush } from '$lib/push/client';
@@ -484,7 +487,7 @@
 						>
 							<div class="flex items-center justify-between w-full">
 								<div class="flex items-center gap-1.5 font-bold text-sm text-foreground">
-									<Heart class="h-4 w-4 text-primary shrink-0" />
+									<Image class="h-4 w-4 text-primary shrink-0" />
 									<span>Cover</span>
 								</div>
 								{#if selectedTheme === 'cover'}
