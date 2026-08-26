@@ -138,13 +138,17 @@ self.addEventListener('push', (event) => {
 				try {
 					const summary = await getBondSummaryForPush(payload.bondId);
 					if (summary) {
-						bondNames = summary.names;
 						bondType = summary.type;
+						// Progressive Disclosure: only include names if the user has multiple bonds
+						if (summary.totalBonds > 1 && summary.names) {
+							bondNames = summary.names;
+						}
 					}
 				} catch (err) {
 					console.warn('[sw] failed to lookup bond summary from IDB:', err);
 				}
 			}
+
 
 			let title = payload.title;
 			let body = payload.body;

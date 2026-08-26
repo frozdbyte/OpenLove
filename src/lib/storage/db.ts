@@ -222,25 +222,28 @@ export async function saveBondPhoto(
  */
 export async function getBondSummaryForPush(
 	bondId: string
-): Promise<{ names: string; type: BondType } | null> {
+): Promise<{ names: string; type: BondType; totalBonds: number } | null> {
 	try {
 		const state = await get<Partial<AppState>>(BONDS_V2_KEY);
 		if (state?.bonds && Array.isArray(state.bonds)) {
-			const found = state.bonds.find((b) => b.id === bondId);
+			const totalBonds = state.bonds.length;
+			const found = state.bonds.find((b) => b.id === bondId) || state.bonds[0];
 			if (found) {
 				return {
-					names: found.names || 'Your Partner',
-					type: found.type || 'romantic'
+					names: found.names || '',
+					type: found.type || 'romantic',
+					totalBonds
 				};
 			}
 		}
 
 		// Check legacy profile fallback
 		const legacy = await get<Partial<CoupleProfile>>(V1_PROFILE_KEY);
-		if (legacy?.names) {
+		if (legacy) {
 			return {
-				names: legacy.names,
-				type: 'romantic'
+				names: legacy.names || '',
+				type: 'romantic',
+				totalBonds: 1
 			};
 		}
 	} catch (err) {
@@ -248,6 +251,7 @@ export async function getBondSummaryForPush(
 	}
 	return null;
 }
+
 
 /**
  * Clear all local data from IndexedDB.

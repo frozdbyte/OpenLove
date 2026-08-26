@@ -31,6 +31,12 @@
 	import confetti from 'canvas-confetti';
 	import { subscribeToPush } from '$lib/push/client';
 	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
+	import {
+		type BondType,
+		DEFAULT_MILESTONE_PREFS_FRIENDSHIP,
+		DEFAULT_MILESTONE_PREFS_ROMANTIC
+	} from '$lib/types/bonds';
+
 
 	type OnboardingStepKey = 'overview' | 'pwa_install' | 'names' | 'date' | 'photo' | 'style';
 
@@ -51,11 +57,13 @@
 	let totalSteps = $derived(steps.length);
 	let stepDisplayNumber = $derived(currentStepIndex + 1);
 
+	let bondType = $state<BondType>('romantic');
 	let namesInput = $state(profileStore.profile.names || 'Emma & Paul');
 	let dateInput = $state(profileStore.profile.togetherSince || new Date().toISOString().split('T')[0]);
 	let selectedTheme = $state<UIThemeId>(profileStore.profile.uiTheme || 'modern');
 	let selectedColorMode = $state<ColorMode>(profileStore.profile.colorMode || 'system');
 	let fileInputRef = $state<HTMLInputElement | null>(null);
+
 
 	// Push notification state during onboarding
 	let pushOptedIn = $state(false);
@@ -128,6 +136,18 @@
 	}
 
 	async function finishOnboarding() {
+		await profileStore.updateBond(profileStore.activeBond.id, {
+			type: bondType,
+			names: namesInput.trim(),
+			togetherSince: dateInput,
+			milestonePrefs:
+				bondType === 'friendship'
+					? DEFAULT_MILESTONE_PREFS_FRIENDSHIP
+					: DEFAULT_MILESTONE_PREFS_ROMANTIC,
+			uiTheme: selectedTheme,
+			colorMode: selectedColorMode
+		});
+
 		await profileStore.update({
 			names: namesInput.trim(),
 			togetherSince: dateInput,
@@ -149,6 +169,7 @@
 			});
 		}
 	}
+
 </script>
 
 <div class="h-full max-h-[100dvh] w-full flex flex-col justify-between max-w-md mx-auto px-4 pt-3 sm:pt-6 overflow-hidden">
@@ -344,20 +365,67 @@
 			<!-- Step: Names -->
 			<div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
 				<div class="h-12 w-12 sm:h-16 sm:w-16 mx-auto rounded-full bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center text-primary shadow-md shadow-rose-500/10 shrink-0">
-					<Heart class="h-6 w-6 sm:h-8 sm:w-8 fill-primary animate-heartbeat" />
+					{#if bondType === 'friendship'}
+						<Sparkles class="h-6 w-6 sm:h-8 sm:w-8 text-emerald-500" />
+					{:else}
+						<Heart class="h-6 w-6 sm:h-8 sm:w-8 fill-primary animate-heartbeat" />
+					{/if}
 				</div>
 
 				<div class="space-y-1">
-					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">Your Names</h1>
-					<p class="text-xs sm:text-sm text-muted-foreground">What are your names or nicknames?</p>
+					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">
+						{bondType === 'friendship' ? 'Friend Names' : 'Your Names'}
+					</h1>
+					<p class="text-xs sm:text-sm text-muted-foreground">
+						{bondType === 'friendship' ? 'Who are the best friends?' : 'What are your names or nicknames?'}
+					</p>
+				</div>
+
+				<!-- Bond Type Selector -->
+				<div class="grid grid-cols-2 gap-2.5 text-left">
+					<button
+						type="button"
+						class="p-2.5 sm:p-3 rounded-2xl border transition-all cursor-pointer {bondType === 'romantic'
+							? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
+							: 'border-border bg-card/60 text-muted-foreground hover:bg-accent'}"
+						onclick={() => {
+							bondType = 'romantic';
+							if (namesInput === 'Alex & Sam') namesInput = 'Emma & Paul';
+						}}
+					>
+						<div class="flex items-center gap-1.5 font-bold text-xs sm:text-sm text-foreground">
+							<Heart class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-rose-500 fill-rose-500/20" />
+							<span>Relationship</span>
+						</div>
+						<p class="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">Couple & anniversaries</p>
+					</button>
+
+					<button
+						type="button"
+						class="p-2.5 sm:p-3 rounded-2xl border transition-all cursor-pointer {bondType === 'friendship'
+							? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
+							: 'border-border bg-card/60 text-muted-foreground hover:bg-accent'}"
+						onclick={() => {
+							bondType = 'friendship';
+							if (namesInput === 'Emma & Paul') namesInput = 'Alex & Sam';
+						}}
+					>
+						<div class="flex items-center gap-1.5 font-bold text-xs sm:text-sm text-foreground">
+							<Sparkles class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500 fill-emerald-500/20" />
+							<span>Friendship</span>
+						</div>
+						<p class="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">Best friends & bonds</p>
+					</button>
 				</div>
 
 				<Card class="p-4 sm:p-5 bg-card border-border shadow-sm rounded-2xl">
 					<div class="space-y-2 text-left">
-						<label for="onboarding-names" class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Couple Names</label>
+						<label for="onboarding-names" class="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+							{bondType === 'friendship' ? 'Friend Names' : 'Couple Names'}
+						</label>
 						<Input
 							id="onboarding-names"
-							placeholder="e.g. Emma & Paul"
+							placeholder={bondType === 'friendship' ? 'e.g. Alex & Sam' : 'e.g. Emma & Paul'}
 							bind:value={namesInput}
 							class="text-base"
 						/>
@@ -384,13 +452,19 @@
 				</div>
 
 				<div class="space-y-1">
-					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">Together Since</h1>
-					<p class="text-xs sm:text-sm text-muted-foreground">When did your special journey begin?</p>
+					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">
+						{bondType === 'friendship' ? 'Friends Since' : 'Together Since'}
+					</h1>
+					<p class="text-xs sm:text-sm text-muted-foreground">
+						{bondType === 'friendship' ? 'When did your friendship begin?' : 'When did your special journey begin?'}
+					</p>
 				</div>
 
 				<Card class="p-4 sm:p-5 bg-card border-border shadow-sm w-full min-w-0 max-w-full overflow-hidden rounded-2xl">
 					<div class="space-y-2 text-left w-full min-w-0 max-w-full overflow-hidden">
-						<label for="onboarding-date" class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Anniversary Date</label>
+						<label for="onboarding-date" class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+							{bondType === 'friendship' ? 'Friendship Start Date' : 'Anniversary Date'}
+						</label>
 						<Input
 							id="onboarding-date"
 							type="date"
@@ -404,9 +478,12 @@
 			<!-- Step: Photo -->
 			<div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
 				<div class="space-y-1">
-					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">Add a Couple Picture</h1>
+					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">
+						{bondType === 'friendship' ? 'Add a Friend Picture' : 'Add a Couple Picture'}
+					</h1>
 					<p class="text-xs sm:text-sm text-muted-foreground">Make your tracker uniquely yours (optional)</p>
 				</div>
+
 
 				<Card class="p-3.5 sm:p-5 bg-card border-border shadow-sm flex flex-col items-center space-y-3 rounded-2xl">
 					<div class="relative h-24 w-24 sm:h-32 sm:w-32 rounded-2xl overflow-hidden bg-muted border-2 border-dashed border-border flex items-center justify-center shadow-inner group shrink-0">

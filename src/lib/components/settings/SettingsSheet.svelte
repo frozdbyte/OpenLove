@@ -433,9 +433,10 @@
 	{onclose}
 >
 	<div class="space-y-6 pb-4">
-		<!-- Active Bond Switcher Quick Action (Header gear mode only) -->
-		{#if showAppWideSettings && !isNewBond}
+		<!-- Active Bond Switcher Quick Action (Header gear mode only when multiple bonds exist) -->
+		{#if showAppWideSettings && !isNewBond && profileStore.state.bonds.length > 1}
 			<section class="p-3.5 rounded-2xl bg-card border border-border space-y-2">
+
 				<div class="flex items-center justify-between">
 					<div class="space-y-0.5">
 						<div class="text-sm font-semibold flex items-center gap-1.5 text-foreground">
