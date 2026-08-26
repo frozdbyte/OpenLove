@@ -2,8 +2,9 @@
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
 	import Button from '$lib/components/ui/button';
 	import Card from '$lib/components/ui/card';
-	import { Heart, Smartphone, Share2, Copy, Check, Sparkles, Monitor } from '@lucide/svelte';
+	import { Heart, Smartphone, Share2, Copy, Check, Sparkles, Monitor, Download } from '@lucide/svelte';
 	import { copyToClipboard } from '$lib/utils/clipboard';
+	import { pwaStore } from '$lib/stores/pwa.svelte';
 
 	interface Props {
 		open?: boolean;
@@ -52,6 +53,10 @@
 		}
 	}
 
+	async function handleInstallPWA() {
+		await pwaStore.promptInstall();
+	}
+
 	function handleUseInBrowser() {
 		open = false;
 		onAcceptBrowser?.();
@@ -81,7 +86,15 @@
 				<Smartphone class="h-4 w-4 text-primary shrink-0" />
 				<span>Option A: Install App (Pre-synced)</span>
 			</div>
-			{#if userOS === 'ios'}
+			{#if pwaStore.canInstall && !pwaStore.isInstalled}
+				<p class="text-xs text-muted-foreground leading-snug">
+					Install Open Love directly to your device with this relationship profile pre-loaded.
+				</p>
+				<Button size="sm" class="w-full text-xs font-bold gap-1.5" onclick={handleInstallPWA}>
+					<Download class="h-3.5 w-3.5" />
+					<span>Install App Now</span>
+				</Button>
+			{:else if userOS === 'ios'}
 				<p class="text-xs text-muted-foreground leading-snug">
 					Tap the Safari <strong class="text-foreground">Share</strong> icon below, then select <strong class="text-foreground">"Add to Home Screen"</strong>. The app will install with this profile pre-loaded!
 				</p>

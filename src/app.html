@@ -17,6 +17,14 @@
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 		<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
+		<!-- Capture beforeinstallprompt early before framework hydration -->
+		<script>
+			window.addEventListener('beforeinstallprompt', function(e) {
+				e.preventDefault();
+				window.__pwaInstallPrompt = e;
+			});
+		</script>
+
 		<title>Open Love</title>
 		%sveltekit.head%
 	</head>

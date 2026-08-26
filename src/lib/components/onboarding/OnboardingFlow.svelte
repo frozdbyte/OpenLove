@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { profileStore } from '$lib/stores/profile.svelte';
+	import { pwaStore } from '$lib/stores/pwa.svelte';
 	import type { UIThemeId, ColorMode } from '$lib/types/profile';
 	import Button from '$lib/components/ui/button';
 	import Card from '$lib/components/ui/card';
@@ -19,26 +20,26 @@
 		Smartphone,
 		BellRing,
 		Share2,
-		QrCode
+		QrCode,
+		ShieldCheck,
+		Lock,
+		Download
 	} from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
 	import { subscribeToPush } from '$lib/push/client';
-	import { isRunningAsPWA } from '$lib/utils/pwa';
 	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
 
-	type OnboardingStepKey = 'pwa_install' | 'names' | 'date' | 'photo' | 'style';
+	type OnboardingStepKey = 'overview' | 'pwa_install' | 'names' | 'date' | 'photo' | 'style';
 
-	let isStandalone = $state(false);
 	let currentStepIndex = $state(0);
 	let isScanModalOpen = $state(false);
 
-	// Detect standalone PWA mode and user OS on mount
+	// Detect user OS for platform-specific instructions
 	let userOS = $state<'ios' | 'android' | 'desktop'>('desktop');
+	let installSuccess = $state(false);
 
 	$effect(() => {
 		if (typeof window !== 'undefined') {
-			isStandalone = isRunningAsPWA();
-
 			const ua = window.navigator.userAgent.toLowerCase();
 			if (/iphone|ipad|ipod/.test(ua)) {
 				userOS = 'ios';
@@ -50,14 +51,14 @@
 		}
 	});
 
-	// If standalone, skip the PWA installation step
+	// If running as standalone PWA, omit the PWA installation step
 	let steps = $derived<OnboardingStepKey[]>(
-		isStandalone
-			? ['names', 'date', 'photo', 'style']
-			: ['pwa_install', 'names', 'date', 'photo', 'style']
+		pwaStore.isStandalone
+			? ['overview', 'names', 'date', 'photo', 'style']
+			: ['overview', 'pwa_install', 'names', 'date', 'photo', 'style']
 	);
 
-	let currentStepKey = $derived<OnboardingStepKey>(steps[currentStepIndex] || 'names');
+	let currentStepKey = $derived<OnboardingStepKey>(steps[currentStepIndex] || 'overview');
 	let totalSteps = $derived(steps.length);
 	let stepDisplayNumber = $derived(currentStepIndex + 1);
 
@@ -89,6 +90,20 @@
 		const target = e.target as HTMLInputElement;
 		if (target.files && target.files[0]) {
 			await profileStore.setPhoto(target.files[0]);
+		}
+	}
+
+	async function handleInstallPWA() {
+		const outcome = await pwaStore.promptInstall();
+		if (outcome === 'accepted') {
+			installSuccess = true;
+			if (typeof window !== 'undefined') {
+				confetti({
+					particleCount: 80,
+					spread: 60,
+					origin: { y: 0.6 }
+				});
+			}
 		}
 	}
 
@@ -171,7 +186,78 @@
 
 	<!-- Wizard Step Content -->
 	<main class="my-auto flex-1 flex flex-col justify-center min-h-0 overflow-y-auto w-full py-1 sm:py-2">
-		{#if currentStepKey === 'pwa_install'}
+		{#if currentStepKey === 'overview'}
+			<!-- Step 1: App Overview & Privacy Focus -->
+			<div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
+				<div class="h-12 w-12 sm:h-16 sm:w-16 mx-auto rounded-full bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center text-primary shadow-md shadow-rose-500/10 shrink-0">
+					<Heart class="h-6 w-6 sm:h-8 sm:w-8 fill-primary text-primary animate-heartbeat" />
+				</div>
+
+				<div class="space-y-1">
+					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">Welcome to Open Love</h1>
+					<p class="text-xs sm:text-sm text-muted-foreground">A private, romantic space to celebrate your journey</p>
+				</div>
+
+				<!-- Feature Highlights with Privacy Emphasis -->
+				<div class="space-y-2 text-left">
+					<!-- Feature 1: Privacy (Highlighted) -->
+					<Card class="p-3 sm:p-3.5 bg-card/90 border-primary/25 shadow-xs flex items-start gap-3 rounded-2xl ring-1 ring-primary/10">
+						<div class="p-2 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
+							<ShieldCheck class="h-4 w-4 sm:h-5 sm:w-5" />
+						</div>
+						<div class="space-y-0.5 min-w-0">
+							<div class="text-xs sm:text-sm font-bold text-foreground flex items-center gap-1.5">
+								<span>100% Private & Zero-Knowledge</span>
+							</div>
+							<p class="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
+								Your names, dates, notes, and photos stay strictly on this device in IndexedDB. No ads, tracking, or cloud data harvesting.
+							</p>
+						</div>
+					</Card>
+
+					<!-- Feature 2: Milestones & Timers -->
+					<Card class="p-3 sm:p-3.5 bg-card border-border shadow-xs flex items-start gap-3 rounded-2xl">
+						<div class="p-2 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5">
+							<Calendar class="h-4 w-4 sm:h-5 sm:w-5" />
+						</div>
+						<div class="space-y-0.5 min-w-0">
+							<div class="text-xs sm:text-sm font-bold text-foreground">
+								Live Timers & Milestones
+							</div>
+							<p class="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
+								Exact years, months, and days together with smart countdowns for anniversaries and custom memories.
+							</p>
+						</div>
+					</Card>
+
+					<!-- Feature 3: Offline PWA & Partner Sync -->
+					<Card class="p-3 sm:p-3.5 bg-card border-border shadow-xs flex items-start gap-3 rounded-2xl">
+						<div class="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+							<Sparkles class="h-4 w-4 sm:h-5 sm:w-5" />
+						</div>
+						<div class="space-y-0.5 min-w-0">
+							<div class="text-xs sm:text-sm font-bold text-foreground">
+								Themes & Private Sync
+							</div>
+							<p class="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
+								Works offline, supports Modern & Classic themes, and syncs seamlessly with your partner via private QR code.
+							</p>
+						</div>
+					</Card>
+				</div>
+
+				<div class="pt-0.5">
+					<button
+						type="button"
+						class="text-xs font-semibold text-primary hover:underline flex items-center justify-center gap-1.5 mx-auto py-1 px-3 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer"
+						onclick={() => (isScanModalOpen = true)}
+					>
+						<QrCode class="h-3.5 w-3.5" />
+						<span>Have an invite? Scan Partner QR</span>
+					</button>
+				</div>
+			</div>
+		{:else if currentStepKey === 'pwa_install'}
 			<!-- Step: Install Open Love as PWA -->
 			<div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
 				<div class="h-12 w-12 sm:h-16 sm:w-16 mx-auto rounded-full bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center text-primary shadow-md shadow-rose-500/10 shrink-0">
@@ -180,55 +266,90 @@
 
 				<div class="space-y-1">
 					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">Install Open Love</h1>
-					<p class="text-xs sm:text-sm text-muted-foreground">Add to your home screen first for a full app experience</p>
+					<p class="text-xs sm:text-sm text-muted-foreground">Add to your home screen for the full app experience</p>
 				</div>
 
-				<!-- OS-Specific Installation Guide -->
-				<Card class="p-3.5 sm:p-4 bg-card border-border shadow-sm text-left space-y-2.5">
-					{#if userOS === 'ios'}
-						<div class="flex items-start gap-2.5">
-							<div class="p-1.5 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
-								<Share2 class="h-4 w-4" />
-							</div>
-							<div class="text-xs space-y-0.5">
-								<div class="font-bold text-foreground">iPhone & iPad (Safari):</div>
-								<p class="text-muted-foreground leading-snug">
-									Tap the <strong class="text-foreground">Share</strong> icon at the bottom of Safari, then tap <strong class="text-foreground">"Add to Home Screen"</strong>.
-								</p>
-							</div>
+				{#if pwaStore.canInstall && !installSuccess && !pwaStore.isInstalled}
+					<!-- 1-Click PWA Installation Callout (Chromium on Android / Desktop) -->
+					<Card class="p-4 sm:p-5 bg-card border-primary/30 shadow-md text-center space-y-3 rounded-2xl ring-1 ring-primary/15">
+						<div class="space-y-1">
+							<div class="text-sm font-bold text-foreground">Fast 1-Click Install</div>
+							<p class="text-xs text-muted-foreground leading-relaxed">
+								Install Open Love directly to your device for instant offline access, standalone view, and anniversary alerts.
+							</p>
 						</div>
-					{:else if userOS === 'android'}
-						<div class="flex items-start gap-2.5">
-							<div class="p-1.5 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
-								<Smartphone class="h-4 w-4" />
-							</div>
-							<div class="text-xs space-y-0.5">
-								<div class="font-bold text-foreground">Android (Chrome):</div>
-								<p class="text-muted-foreground leading-snug">
-									Tap <strong class="text-foreground">three dots (⋮)</strong> in Chrome, then choose <strong class="text-foreground">"Install app"</strong> or <strong class="text-foreground">"Add to Home screen"</strong>.
-								</p>
-							</div>
+
+						<Button
+							type="button"
+							class="w-full h-11 sm:h-12 text-sm sm:text-base font-bold shadow-md gap-2 cursor-pointer"
+							size="lg"
+							onclick={handleInstallPWA}
+						>
+							<Download class="h-5 w-5" />
+							<span>Install App Now</span>
+						</Button>
+					</Card>
+				{:else if installSuccess || pwaStore.isInstalled}
+					<!-- Installation Success Feedback -->
+					<Card class="p-4 sm:p-5 bg-emerald-500/10 border-emerald-500/30 text-center space-y-2 rounded-2xl">
+						<div class="h-10 w-10 mx-auto rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+							<Check class="h-6 w-6 stroke-[3]" />
 						</div>
-					{:else}
-						<div class="flex items-start gap-2.5">
-							<div class="p-1.5 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
-								<Monitor class="h-4 w-4" />
+						<div class="text-sm font-bold text-emerald-600 dark:text-emerald-400">Open Love Installed!</div>
+						<p class="text-xs text-muted-foreground">
+							You can now launch Open Love directly from your home screen or continue setting up right here.
+						</p>
+					</Card>
+				{/if}
+
+				<!-- OS-Specific Manual Installation Guide (Fallback or iOS) -->
+				{#if !pwaStore.canInstall || userOS === 'ios'}
+					<Card class="p-3.5 sm:p-4 bg-card border-border shadow-sm text-left space-y-2.5 rounded-2xl">
+						{#if userOS === 'ios'}
+							<div class="flex items-start gap-2.5">
+								<div class="p-1.5 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
+									<Share2 class="h-4 w-4" />
+								</div>
+								<div class="text-xs space-y-0.5">
+									<div class="font-bold text-foreground">iPhone & iPad (Safari):</div>
+									<p class="text-muted-foreground leading-snug">
+										Tap the <strong class="text-foreground">Share</strong> icon at the bottom of Safari, then tap <strong class="text-foreground">"Add to Home Screen"</strong>.
+									</p>
+								</div>
 							</div>
-							<div class="text-xs space-y-0.5">
-								<div class="font-bold text-foreground">Desktop Browser:</div>
-								<p class="text-muted-foreground leading-snug">
-									Click the <strong class="text-foreground">Install App</strong> icon in your browser address bar to install Open Love as a desktop app.
-								</p>
+						{:else if userOS === 'android'}
+							<div class="flex items-start gap-2.5">
+								<div class="p-1.5 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
+									<Smartphone class="h-4 w-4" />
+								</div>
+								<div class="text-xs space-y-0.5">
+									<div class="font-bold text-foreground">Android (Chrome):</div>
+									<p class="text-muted-foreground leading-snug">
+										Tap <strong class="text-foreground">three dots (⋮)</strong> in Chrome, then choose <strong class="text-foreground">"Install app"</strong> or <strong class="text-foreground">"Add to Home screen"</strong>.
+									</p>
+								</div>
 							</div>
-						</div>
-					{/if}
-				</Card>
+						{:else}
+							<div class="flex items-start gap-2.5">
+								<div class="p-1.5 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
+									<Monitor class="h-4 w-4" />
+								</div>
+								<div class="text-xs space-y-0.5">
+									<div class="font-bold text-foreground">Desktop Browser:</div>
+									<p class="text-muted-foreground leading-snug">
+										Click the <strong class="text-foreground">Install App</strong> icon in your browser address bar to install Open Love as a desktop app.
+									</p>
+								</div>
+							</div>
+						{/if}
+					</Card>
+				{/if}
 
 				<p class="text-[11px] text-muted-foreground">
 					Installed? Open it from your home screen, or continue setup right here in your browser.
 				</p>
 
-				<div class="pt-1">
+				<div class="pt-0.5">
 					<button
 						type="button"
 						class="text-xs font-semibold text-primary hover:underline flex items-center justify-center gap-1.5 mx-auto py-1 px-3 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer"
@@ -247,20 +368,20 @@
 				</div>
 
 				<div class="space-y-1">
-					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">Welcome to Open Love</h1>
+					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">Your Names</h1>
 					<p class="text-xs sm:text-sm text-muted-foreground">What are your names or nicknames?</p>
 				</div>
 
-				<Card class="p-4 sm:p-5 bg-card border-border shadow-sm">
+				<Card class="p-4 sm:p-5 bg-card border-border shadow-sm rounded-2xl">
 					<div class="space-y-2 text-left">
-						<label for="onboarding-names" class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Names</label>
+						<label for="onboarding-names" class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Couple Names</label>
 						<Input
 							id="onboarding-names"
 							placeholder="e.g. Emma & Paul"
 							bind:value={namesInput}
 							class="text-base"
 						/>
-						<p class="text-[11px] text-muted-foreground pt-0.5">Stored 100% locally in your browser for privacy.</p>
+						<p class="text-[11px] text-muted-foreground pt-0.5">Stored 100% locally on your device for privacy.</p>
 					</div>
 				</Card>
 
@@ -287,7 +408,7 @@
 					<p class="text-xs sm:text-sm text-muted-foreground">When did your special journey begin?</p>
 				</div>
 
-				<Card class="p-4 sm:p-5 bg-card border-border shadow-sm w-full min-w-0 max-w-full overflow-hidden">
+				<Card class="p-4 sm:p-5 bg-card border-border shadow-sm w-full min-w-0 max-w-full overflow-hidden rounded-2xl">
 					<div class="space-y-2 text-left w-full min-w-0 max-w-full overflow-hidden">
 						<label for="onboarding-date" class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Anniversary Date</label>
 						<Input
@@ -307,7 +428,7 @@
 					<p class="text-xs sm:text-sm text-muted-foreground">Make your tracker uniquely yours (optional)</p>
 				</div>
 
-				<Card class="p-3.5 sm:p-5 bg-card border-border shadow-sm flex flex-col items-center space-y-3">
+				<Card class="p-3.5 sm:p-5 bg-card border-border shadow-sm flex flex-col items-center space-y-3 rounded-2xl">
 					<div class="relative h-24 w-24 sm:h-32 sm:w-32 rounded-2xl overflow-hidden bg-muted border-2 border-dashed border-border flex items-center justify-center shadow-inner group shrink-0">
 						{#if profileStore.profile.photoUrl}
 							<img src={profileStore.profile.photoUrl} alt="Preview" class="h-full w-full object-cover" />
@@ -477,8 +598,11 @@
 			{#if currentStepIndex === totalSteps - 1}
 				<Sparkles class="h-5 w-5 mr-1.5" />
 				<span>Finish Setup</span>
+			{:else if currentStepKey === 'overview'}
+				<span>Get Started</span>
+				<ArrowRight class="h-5 w-5 ml-1.5" />
 			{:else if currentStepKey === 'pwa_install'}
-				<span>Continue in Browser</span>
+				<span>{installSuccess || pwaStore.isInstalled ? 'Continue' : 'Continue in Browser'}</span>
 				<ArrowRight class="h-5 w-5 ml-1.5" />
 			{:else}
 				<span>Continue</span>
