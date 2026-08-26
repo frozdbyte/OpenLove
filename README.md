@@ -91,7 +91,7 @@ The dev server will run at [http://localhost:5173](http://localhost:5173).
 | `DATABASE_URL` | `file:./data/openlove.db` | SQLite database connection string |
 | `PUBLIC_VAPID_KEY` | *(Auto-generated)* | Public VAPID key for Web Push |
 | `PRIVATE_VAPID_KEY` | *(Auto-generated)* | Private VAPID key for Web Push |
-| `VAPID_SUBJECT` | `mailto:admin@openlove.local` | Contact email in push tokens |
+| `VAPID_SUBJECT` | *(auto)* | Contact address in push tokens. Must be a **public** domain — Apple rejects `.local`, `.lan`, `localhost` and bare IPs with `403 BadJwtToken`, delivering nothing to iOS. Leave unset for a safe fallback. |
 
 ---
 

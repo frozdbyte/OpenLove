@@ -22,20 +22,89 @@ const VAPID_FILE = path.join(DATA_DIR, 'vapid.json');
 
 let vapidKeys: VapidKeys | null = null;
 
+/** Valid public fallback accepted by Apple APNs, Google FCM and Mozilla Autopush. */
+const FALLBACK_VAPID_SUBJECT = 'https://github.com/frozdbyte/OpenLove';
+
+/**
+ * Hostnames the push services reject. Apple's `web.push.apple.com` is the strict one:
+ * it answers `403 {"reason":"BadJwtToken"}` for a subject on a non-public host, which
+ * looks like a signing failure and sends you hunting in entirely the wrong place.
+ */
+const NON_PUBLIC_TLDS = [
+	'.local',
+	'.localhost',
+	'.internal',
+	'.intranet',
+	'.lan',
+	'.home',
+	'.arpa',
+	'.test',
+	'.example',
+	'.invalid'
+];
+
+function isPubliclyRoutableHost(host: string): boolean {
+	const h = host.trim().toLowerCase().replace(/\.$/, '');
+	if (!h) return false;
+	if (h === 'localhost') return false;
+	if (NON_PUBLIC_TLDS.some((tld) => h.endsWith(tld))) return false;
+	// A bare hostname with no dot is not a resolvable public domain.
+	if (!h.includes('.')) return false;
+	// IPv4 literal.
+	if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return false;
+	return true;
+}
+
+/** Pull the host out of `mailto:user@host` or any `http(s)://host/...` URL. */
+function hostOfSubject(subject: string): string | null {
+	if (subject.startsWith('mailto:')) {
+		const at = subject.lastIndexOf('@');
+		return at === -1 ? null : subject.slice(at + 1);
+	}
+	try {
+		return new URL(subject).hostname;
+	} catch {
+		return null;
+	}
+}
+
+let warnedAboutSubject = false;
+
 /**
  * Resolve a valid VAPID subject compliant with RFC 8292 & Apple APNs (web.push.apple.com).
- * Apple strictly rejects .local, localhost, or invalid domains with 403 Forbidden.
+ *
+ * Both the scheme *and* the host are validated. Checking only the scheme is how
+ * `mailto:admin@openlove.local` — the kind of value a self-hoster naturally writes —
+ * reaches Apple and gets every notification rejected with a misleading error.
  */
 export function getVapidSubject(): string {
 	if (process.env.VAPID_SUBJECT && process.env.VAPID_SUBJECT.trim()) {
-		const sub = process.env.VAPID_SUBJECT.trim();
-		if (sub.startsWith('mailto:') || sub.startsWith('https://') || sub.startsWith('http://')) {
+		const raw = process.env.VAPID_SUBJECT.trim();
+		const sub =
+			raw.startsWith('mailto:') || raw.startsWith('https://') || raw.startsWith('http://')
+				? raw
+				: raw.includes('@')
+					? `mailto:${raw}`
+					: `https://${raw}`;
+
+		const host = hostOfSubject(sub);
+		if (host && isPubliclyRoutableHost(host)) {
 			return sub;
 		}
-		if (sub.includes('@')) {
-			return `mailto:${sub}`;
+
+		if (!warnedAboutSubject) {
+			warnedAboutSubject = true;
+			console.warn(
+				[
+					`⚠️  VAPID_SUBJECT "${raw}" uses a non-public host (${host ?? 'unparseable'}).`,
+					"   Apple's push service rejects these with 403 BadJwtToken and delivers nothing.",
+					`   Falling back to ${FALLBACK_VAPID_SUBJECT}.`,
+					'   Set VAPID_SUBJECT to a real contact you control, e.g. mailto:you@yourdomain.com',
+					'   or https://your-public-domain.com. It is a contact address, not your app URL.'
+				].join('\n')
+			);
 		}
-		return `https://${sub}`;
+		// Deliberately fall through to the auto-detected/fallback subject below.
 	}
 
 	// Check Coolify / SvelteKit / generic FQDN environment variables
@@ -48,14 +117,16 @@ export function getVapidSubject(): string {
 
 	if (fqdn && fqdn.trim()) {
 		const clean = fqdn.trim();
-		if (clean.startsWith('http://') || clean.startsWith('https://')) {
-			return clean;
+		const candidate =
+			clean.startsWith('http://') || clean.startsWith('https://') ? clean : `https://${clean}`;
+		const host = hostOfSubject(candidate);
+		// Same guard: ORIGIN is very often http://localhost:3000 in a self-hosted setup.
+		if (host && isPubliclyRoutableHost(host)) {
+			return candidate;
 		}
-		return `https://${clean}`;
 	}
 
-	// Valid public fallback acceptable by Apple APNs, Google FCM, and Mozilla Autopush
-	return 'https://github.com/frozdbyte/OpenLove';
+	return FALLBACK_VAPID_SUBJECT;
 }
 
 /**

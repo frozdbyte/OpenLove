@@ -64,7 +64,15 @@ Welcome! This document is the **single source of truth** for human contributors 
   - **Stage 2 (Runner)** must contain **zero `RUN` commands** (only `COPY`, `ENV`, `VOLUME`, `EXPOSE`, and `ENTRYPOINT ["sh", "./entrypoint.sh"]`) to guarantee 100% reliable cross-architecture assembly (`linux/amd64` and `linux/arm64`) without QEMU crashes.
 
 ### 6. Apple APNs & RFC 8292 VAPID Subject Rule
-- WebPush providers (especially Apple `web.push.apple.com` for iOS PWAs) reject `.local`, `localhost`, or invalid domains with `403 Forbidden`.
+- WebPush providers (especially Apple `web.push.apple.com` for iOS PWAs) reject `.local`, `localhost`, or invalid domains with `403 {"reason":"BadJwtToken"}`.
+- **Validate the host, not just the scheme.** `getVapidSubject()` checks both: a value like
+  `mailto:admin@openlove.local` passes any scheme-only check and then fails at Apple with an
+  error that reads like a signing problem, sending you hunting in the wrong place. Non-public
+  hosts (`.local`, `.lan`, `.internal`, `localhost`, bare hostnames, IP literals) fall back to
+  a public URL with a console warning. The same guard applies to the `ORIGIN` fallback chain,
+  because `ORIGIN` is very often `http://localhost:3000` in a self-hosted setup.
+- `VAPID_SUBJECT` is a **contact address, not the app URL**. Never ship a non-public default in
+  `.env.example` — it silently breaks push for every self-hoster who copies it.
 - [`src/lib/server/push.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/server/push.ts) includes `getVapidSubject()` to resolve valid `mailto:` or `https://` URLs from Coolify (`SERVICE_FQDN_OPENLOVE_3000`), `ORIGIN`, or public fallback.
 
 ### 7. Single Service Worker Rule (CRITICAL)
