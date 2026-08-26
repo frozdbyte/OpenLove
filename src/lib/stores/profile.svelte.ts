@@ -412,13 +412,13 @@ class ProfileStore {
 
 	/**
 	 * Import profile / bond data from JSON.
-	 * Handles V1 single profile, V2 single bond invite, and V2 full backup.
+	 * Supports mode: 'auto' | 'replace' | 'add'.
 	 */
-	async importJSON(jsonStr: string): Promise<boolean> {
+	async importJSON(jsonStr: string, mode: 'auto' | 'replace' | 'add' = 'auto'): Promise<boolean> {
 		try {
 			const data = JSON.parse(jsonStr);
 
-			// Case 1: V2 full backup
+			// Case 1: V2 full backup (always replaces full state)
 			if (data.version === 2 && Array.isArray(data.bonds) && data.bonds.length > 0) {
 				const previous = { ...this.state };
 				this.state = {
@@ -481,30 +481,61 @@ class ProfileStore {
 					showSeconds: b.showSeconds ?? data.showSeconds ?? true
 				};
 
-
-				// If only default unconfigured bond exists, replace it, otherwise append
-				if (this.state.bonds.length === 1 && !this.state.isConfigured) {
-					this.state.bonds = [newBond];
-					this.state.activeBondId = newBond.id;
-				} else {
+				if (mode === 'replace') {
+					// Overwrite current active bond
+					await this.updateBond(this.state.activeBondId, {
+						type: newBond.type,
+						names: newBond.names,
+						togetherSince: newBond.togetherSince,
+						customMilestones: newBond.customMilestones,
+						milestonePrefs: newBond.milestonePrefs,
+						uiTheme: newBond.uiTheme,
+						colorPalette: newBond.colorPalette,
+						colorMode: newBond.colorMode,
+						showSeconds: newBond.showSeconds
+					});
+					await this.update({ isConfigured: true });
+				} else if (mode === 'add') {
 					await this.addBond(newBond);
+				} else {
+					// Auto mode: replace if unconfigured initial bond, else add
+					if (this.state.bonds.length <= 1 && !this.state.isConfigured) {
+						this.state.bonds = [newBond];
+						this.state.activeBondId = newBond.id;
+						this.state.isConfigured = true;
+						this.applyThemeAndDarkMode();
+						await saveAppStateToStorage(this.state);
+					} else {
+						await this.addBond(newBond);
+					}
 				}
-				await this.update({ isConfigured: true });
 				return true;
 			}
 
 			// Case 3: V1 legacy single profile
 			if (data.togetherSince && data.names) {
-				await this.update({
+				const migratedBond: Bond = {
+					id: `bond_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+					type: 'romantic',
 					names: data.names,
 					togetherSince: data.togetherSince,
-					uiTheme: data.uiTheme || 'modern',
-					colorMode: data.colorMode || 'system',
-					colorPalette: data.colorPalette || 'rose',
-					showSeconds: data.showSeconds ?? true,
+					photoBlob: null,
+					photoUrl: undefined,
 					customMilestones: Array.isArray(data.customMilestones) ? data.customMilestones : [],
-					isConfigured: true
-				});
+					notificationsEnabled: true,
+					milestonePrefs: { ...DEFAULT_MILESTONE_PREFS_ROMANTIC },
+					uiTheme: data.uiTheme || 'modern',
+					colorPalette: data.colorPalette || 'rose',
+					colorMode: data.colorMode || 'system',
+					showSeconds: data.showSeconds ?? true
+				};
+
+				if (mode === 'replace' || (mode === 'auto' && (!this.state.isConfigured || this.state.bonds.length <= 1))) {
+					await this.updateBond(this.state.activeBondId, migratedBond);
+					await this.update({ isConfigured: true });
+				} else {
+					await this.addBond(migratedBond);
+				}
 				return true;
 			}
 
@@ -516,4 +547,56 @@ class ProfileStore {
 	}
 }
 
+/**
+ * Helper to safely extract incoming bond data for previews.
+ */
+export function parseSharePayload(rawOrJson: string): Partial<Bond> | null {
+	try {
+		let jsonString = '';
+		if (rawOrJson.includes('#import=')) {
+			const encoded = rawOrJson.split('#import=')[1];
+			jsonString = atob(decodeURIComponent(encoded));
+		} else if (rawOrJson.startsWith('{')) {
+			jsonString = rawOrJson;
+		} else {
+			try {
+				jsonString = atob(rawOrJson);
+			} catch {
+				jsonString = rawOrJson;
+			}
+		}
+
+		const data = JSON.parse(jsonString);
+		if (data.isSingleBond && data.bond?.names && data.bond?.togetherSince) {
+			const b = data.bond;
+			return {
+				names: b.names,
+				type: b.type || 'romantic',
+				togetherSince: b.togetherSince,
+				customMilestones: Array.isArray(b.customMilestones) ? b.customMilestones : [],
+				milestonePrefs: b.milestonePrefs,
+				uiTheme: b.uiTheme || data.uiTheme || 'modern',
+				colorPalette: b.colorPalette || data.colorPalette || 'rose',
+				colorMode: b.colorMode || data.colorMode || 'system',
+				showSeconds: b.showSeconds ?? data.showSeconds ?? true
+			};
+		} else if (data.togetherSince && data.names) {
+			return {
+				names: data.names,
+				type: 'romantic',
+				togetherSince: data.togetherSince,
+				customMilestones: Array.isArray(data.customMilestones) ? data.customMilestones : [],
+				uiTheme: data.uiTheme || 'modern',
+				colorPalette: data.colorPalette || 'rose',
+				colorMode: data.colorMode || 'system',
+				showSeconds: data.showSeconds ?? true
+			};
+		}
+	} catch (err) {
+		console.error('Failed to parse share payload:', err);
+	}
+	return null;
+}
+
 export const profileStore = new ProfileStore();
+

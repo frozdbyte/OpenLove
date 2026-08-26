@@ -457,6 +457,27 @@
 			</section>
 		{/if}
 
+		{#if isNewBond}
+			<!-- Import Shared Profile Action -->
+			<section class="p-3.5 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-between gap-3">
+				<div class="space-y-0.5 min-w-0">
+					<div class="text-xs font-bold text-foreground flex items-center gap-1.5">
+						<QrCode class="h-4 w-4 text-primary shrink-0" />
+						<span>Have a partner invite or QR code?</span>
+					</div>
+					<p class="text-[11px] text-muted-foreground truncate">Import partner or friend profile directly</p>
+				</div>
+				<Button
+					size="sm"
+					variant="outline"
+					class="shrink-0 text-xs h-8 px-2.5 font-semibold bg-background"
+					onclick={() => (isScanModalOpen = true)}
+				>
+					<span>Scan / Paste</span>
+				</Button>
+			</section>
+		{/if}
+
 		<!-- Bond Type Selector -->
 		<section class="space-y-1.5">
 			<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Bond Type</span>
@@ -468,6 +489,7 @@
 						: 'border-border bg-card/60 text-muted-foreground hover:bg-accent'}"
 					onclick={() => handleTypeChange('romantic')}
 				>
+
 					<div class="flex items-center gap-2 font-bold text-sm text-foreground">
 						<Heart class="h-4 w-4 text-rose-500 fill-rose-500/20" />
 						<span>Relationship</span>
@@ -1178,4 +1200,13 @@
 	</div>
 </Modal>
 
-<ScanImportModal bind:open={isScanModalOpen} />
+<ScanImportModal
+	bind:open={isScanModalOpen}
+	onSuccess={() => {
+		if (isNewBond) {
+			open = false;
+			onclose?.();
+		}
+	}}
+/>
+

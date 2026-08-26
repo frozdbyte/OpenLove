@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { profileStore } from '$lib/stores/profile.svelte';
+	import { profileStore, parseSharePayload } from '$lib/stores/profile.svelte';
 	import { calculateTimeBreakdown, calculateMilestones } from '$lib/utils/time';
 	import { getThemeComponent } from '$lib/components/themes/registry';
 	import { isRunningAsPWA } from '$lib/utils/pwa';
@@ -8,6 +8,7 @@
 	import PartnerInviteModal from '$lib/components/share/PartnerInviteModal.svelte';
 	import BondSwitcherDrawer from '$lib/components/bonds/BondSwitcherDrawer.svelte';
 	import OnboardingFlow from '$lib/components/onboarding/OnboardingFlow.svelte';
+	import type { Bond } from '$lib/types/bonds';
 	import { Heart } from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
 
@@ -15,6 +16,7 @@
 	let isShareOpen = $state(false);
 	let isInviteModalOpen = $state(false);
 	let isSwitcherOpen = $state(false);
+	let pendingIncomingBond = $state<Partial<Bond> | null>(null);
 	let pendingInviteJson = $state('');
 	let pendingInviteRaw = $state('');
 	let pendingPartnerNames = $state('');
@@ -55,17 +57,24 @@
 			try {
 				const encoded = window.location.hash.replace('#import=', '');
 				const raw = decodeURIComponent(encoded);
-				const json = atob(raw);
-				const parsed = JSON.parse(json);
+				const parsed = parseSharePayload(raw);
+
+				let json = '';
+				try {
+					json = atob(raw);
+				} catch {
+					json = raw;
+				}
 
 				pendingInviteJson = json;
 				pendingInviteRaw = raw;
-				pendingPartnerNames = parsed.bond?.names || parsed.names || 'Your Partner';
+				pendingIncomingBond = parsed;
+				pendingPartnerNames = parsed?.names || 'Your Partner';
 
 				const isStandalone = isRunningAsPWA();
-				if (isStandalone) {
-					// In standalone PWA mode, auto-import directly into PWA storage!
-					profileStore.importJSON(json).then((success) => {
+				if (isStandalone && !profileStore.state.isConfigured) {
+					// Only auto-import silently if user hasn't configured any bond yet
+					profileStore.importJSON(json, 'replace').then((success) => {
 						if (success) {
 							window.history.replaceState(null, '', window.location.pathname);
 							confetti({
@@ -76,7 +85,7 @@
 						}
 					});
 				} else {
-					// In standard browser, show smart landing modal explaining PWA install vs code copy vs browser use
+					// Show smart preview & resolution modal (Case A: unconfigured, Case B: 1 bond replace/add, Case C: multi bond add)
 					isInviteModalOpen = true;
 				}
 			} catch (err) {
@@ -91,10 +100,11 @@
 		}
 	});
 
-	async function handleAcceptBrowserInvite() {
+	async function handleAcceptInvite(mode: 'replace' | 'add') {
 		if (pendingInviteJson) {
-			await profileStore.importJSON(pendingInviteJson);
+			await profileStore.importJSON(pendingInviteJson, mode);
 			window.history.replaceState(null, '', window.location.pathname);
+			isInviteModalOpen = false;
 			if (typeof window !== 'undefined') {
 				confetti({
 					particleCount: 120,
@@ -104,6 +114,7 @@
 			}
 		}
 	}
+
 
 	let timeBreakdown = $derived(
 		calculateTimeBreakdown(profileStore.activeBond.togetherSince, currentTime, locale)
@@ -176,10 +187,12 @@
 
 <PartnerInviteModal
 	bind:open={isInviteModalOpen}
+	incomingBond={pendingIncomingBond}
 	partnerNames={pendingPartnerNames}
 	importRaw={pendingInviteRaw}
-	onAcceptBrowser={handleAcceptBrowserInvite}
+	onAccept={handleAcceptInvite}
 	onclose={() => {
 		isInviteModalOpen = false;
 	}}
 />
+

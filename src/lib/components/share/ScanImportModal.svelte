@@ -1,11 +1,13 @@
 <script lang="ts">
-	import { profileStore } from '$lib/stores/profile.svelte';
+	import { profileStore, parseSharePayload } from '$lib/stores/profile.svelte';
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
 	import Button from '$lib/components/ui/button';
 	import Input from '$lib/components/ui/input';
 	import { Camera, QrCode, Upload, FileText, Check, AlertCircle, Sparkles } from '@lucide/svelte';
 	import jsQR from 'jsqr';
 	import confetti from 'canvas-confetti';
+	import PartnerInviteModal from './PartnerInviteModal.svelte';
+	import type { Bond } from '$lib/types/bonds';
 
 	interface Props {
 		open?: boolean;
@@ -26,6 +28,12 @@
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
 	let fileInputRef = $state<HTMLInputElement | null>(null);
 
+	// Confirmation modal state for configured users
+	let isInviteModalOpen = $state(false);
+	let pendingIncomingBond = $state<Partial<Bond> | null>(null);
+	let pendingRaw = $state('');
+	let pendingJson = $state('');
+
 	// Start camera when modal opens on 'camera' tab
 	$effect(() => {
 		if (open && activeTab === 'camera') {
@@ -38,6 +46,7 @@
 			stopCamera();
 		};
 	});
+
 
 	async function startCamera() {
 		stopCamera();
@@ -178,13 +187,48 @@
 				}
 			}
 
-			const success = await profileStore.importJSON(jsonString);
+			const parsed = parseSharePayload(raw);
+			if (!parsed) {
+				errorMessage = 'Invalid relationship profile format. Please check the code and try again.';
+				return;
+			}
 
-			if (success) {
+			if (!profileStore.state.isConfigured) {
+				// Unconfigured user: import and activate immediately
+				const success = await profileStore.importJSON(jsonString, 'replace');
+				if (success) {
+					stopCamera();
+					open = false;
+					onSuccess?.();
+					if (typeof window !== 'undefined') {
+						confetti({
+							particleCount: 120,
+							spread: 70,
+							origin: { y: 0.6 }
+						});
+					}
+				}
+			} else {
+				// Configured user (1 or multiple bonds): show preview and ask to Replace or Add As New
 				stopCamera();
-				open = false;
-				onSuccess?.();
+				pendingIncomingBond = parsed;
+				pendingRaw = raw;
+				pendingJson = jsonString;
+				isInviteModalOpen = true;
+			}
+		} catch (err: any) {
+			console.error('Failed to import profile data:', err);
+			errorMessage = 'Could not parse relationship data. Please verify the code.';
+		}
+	}
 
+	async function handleAcceptInvite(mode: 'replace' | 'add') {
+		if (pendingJson) {
+			const success = await profileStore.importJSON(pendingJson, mode);
+			if (success) {
+				open = false;
+				isInviteModalOpen = false;
+				onSuccess?.();
 				if (typeof window !== 'undefined') {
 					confetti({
 						particleCount: 120,
@@ -192,12 +236,7 @@
 						origin: { y: 0.6 }
 					});
 				}
-			} else {
-				errorMessage = 'Invalid relationship profile format. Please check the code and try again.';
 			}
-		} catch (err: any) {
-			console.error('Failed to import profile data:', err);
-			errorMessage = 'Could not parse relationship data. Please verify the code.';
 		}
 	}
 
@@ -208,6 +247,7 @@
 		onclose?.();
 	}
 </script>
+
 
 <Modal bind:open title="Sync with Partner" description="Scan partner QR code or paste share link" onclose={handleClose}>
 	<div class="space-y-4">
@@ -311,3 +351,12 @@
 		{/if}
 	</div>
 </Modal>
+
+<PartnerInviteModal
+	bind:open={isInviteModalOpen}
+	incomingBond={pendingIncomingBond}
+	importRaw={pendingRaw}
+	onAccept={handleAcceptInvite}
+	onclose={() => (isInviteModalOpen = false)}
+/>
+
