@@ -15,8 +15,19 @@ export default defineConfig({
 		sveltekit(),
 		SvelteKitPWA({
 			srcDir: './src',
-			mode: 'development',
-			strategies: 'generateSW',
+			strategies: 'injectManifest',
+			// Source is `src/service-worker.ts` (compiled by SvelteKit); the `.ts` extension
+			// here is what makes vite-plugin-pwa resolve the TS source in dev. The emitted
+			// file and the registration URL both stay `/service-worker.js`, which is the
+			// script existing installs are already controlled by — so they migrate in place.
+			filename: 'service-worker.ts',
+			// We register explicitly from `+layout.svelte` via `virtual:pwa-register`.
+			injectRegister: false,
+			// Migration release: every existing install is stuck on a service worker that
+			// never precached anything. `autoUpdate` + skipWaiting/clientsClaim in the SW
+			// guarantees they land on the fixed one without waiting for a prompt.
+			// Switch to 'prompt' in the release after this one.
+			registerType: 'autoUpdate',
 			manifest: {
 				name: 'Open Love',
 				short_name: 'Open Love',
@@ -46,14 +57,31 @@ export default defineConfig({
 				]
 			},
 			injectManifest: {
-				globPatterns: ['client/**/*.{js,css,ico,png,svg,webp,woff,woff2}']
-			},
-			workbox: {
-				globPatterns: ['client/**/*.{js,css,ico,png,svg,webp,woff,woff2}']
+				// Workbox globs `.svelte-kit/output`, not `build/`. The prerendered SPA shell
+				// lands in `prerendered/pages/index.html` there and the plugin's manifest
+				// transform rewrites it to `/` — that is the entry `createHandlerBoundToURL('/')`
+				// needs, and its revision is a content hash so it can never go stale.
+				globPatterns: [
+					'client/**/*.{js,css,ico,png,svg,webp,avif,woff,woff2,webmanifest}',
+					'prerendered/**/*.html'
+				],
+				globIgnores: ['client/**/*.map', 'server/**'],
+				maximumFileSizeToCacheInBytes: 4 * 1024 * 1024
 			},
 			devOptions: {
-				enabled: true,
-				type: 'module'
+				// Deliberately OFF. `vite dev` cannot precache anything useful — its manifest
+				// is a single degenerate `[{ url: '/' }]` entry with no revision, because the
+				// dev server compiles modules on demand. Worse, that revision-less entry is
+				// treated by Workbox as immutable, so the cached dev shell (which references
+				// /@fs/... and /dev-sw.js) keeps being served after you switch to a real
+				// build on the same host/port, producing a wall of 404s.
+				//
+				// Offline behaviour must be verified against `pnpm build && pnpm start`.
+				// Turn this back on only to debug service worker logic itself, and unregister
+				// the dev worker before going back to a production build.
+				enabled: false,
+				type: 'module',
+				navigateFallback: '/'
 			}
 		})
 	],

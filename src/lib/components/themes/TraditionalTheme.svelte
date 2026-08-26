@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ThemeProps } from '$lib/types/profile';
 	import { Settings, Heart, Share2 } from '@lucide/svelte';
+	import SyncStatusPill from '$lib/components/offline/SyncStatusPill.svelte';
 
 	let { profile, timeBreakdown, onOpenSettings, onOpenShare }: ThemeProps = $props();
 </script>
@@ -30,6 +31,9 @@
 			<Share2 class="h-5 w-5 stroke-[1.75]" />
 		</button>
 	</header>
+
+	<!-- Offline / pending-sync banner, styled to the crimson top bar -->
+	<SyncStatusPill variant="traditional" class="sticky top-[3.75rem] z-20 shadow-sm" />
 
 	<!-- Edge-to-Edge Hero Image Container -->
 	<div class="relative w-full aspect-[4/3] sm:aspect-[16/10] max-h-[50vh] bg-zinc-200 dark:bg-zinc-800 overflow-hidden select-none">

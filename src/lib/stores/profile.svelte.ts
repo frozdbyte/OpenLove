@@ -7,14 +7,55 @@ import {
 } from '$lib/storage/db';
 import type { CoupleProfile, ColorMode, ColorPalette, UIThemeId } from '$lib/types/profile';
 
+/**
+ * Mutation hooks.
+ *
+ * `togetherSince` used to be sent to the server exactly once, at subscribe time,
+ * while three separate call sites mutated it afterwards (the settings date picker,
+ * onboarding, and QR/partner-link import) and never touched the network. Changing
+ * the anniversary date after subscribing left the server firing milestone pushes
+ * on the old schedule forever.
+ *
+ * All three funnel through `update()`, so one hook here closes all three. It is a
+ * callback registry rather than a direct import because `$lib/sync` imports this
+ * module, and importing it back would be circular.
+ */
+export type ProfileMutationHook = (
+	next: CoupleProfile,
+	previous: CoupleProfile
+) => void | Promise<void>;
+
+const mutationHooks = new Set<ProfileMutationHook>();
+
+export function onProfileMutation(hook: ProfileMutationHook): () => void {
+	mutationHooks.add(hook);
+	return () => mutationHooks.delete(hook);
+}
+
 class ProfileStore {
 	profile = $state<CoupleProfile>({ ...DEFAULT_PROFILE });
 	isLoading = $state(true);
 	isInitialized = $state(false);
 
+	/**
+	 * Resolves once IndexedDB has been read.
+	 *
+	 * Anything that syncs profile data to the server must await this first —
+	 * `profile` holds `DEFAULT_PROFILE` (with *today* as `togetherSince`) until the
+	 * load completes, and syncing that would overwrite the real anniversary date.
+	 */
+	readonly ready: Promise<void>;
+	private resolveReady!: () => void;
+
 	constructor() {
+		this.ready = new Promise<void>((resolve) => {
+			this.resolveReady = resolve;
+		});
+
 		if (typeof window !== 'undefined') {
 			this.init();
+		} else {
+			this.resolveReady();
 		}
 	}
 
@@ -29,6 +70,7 @@ class ProfileStore {
 		} finally {
 			this.isLoading = false;
 			this.isInitialized = true;
+			this.resolveReady();
 		}
 	}
 
@@ -83,9 +125,29 @@ class ProfileStore {
 	 * Update profile fields and persist to IndexedDB
 	 */
 	async update(fields: Partial<CoupleProfile>) {
+		const previous = { ...this.profile };
 		this.profile = { ...this.profile, ...fields };
 		this.applyThemeAndDarkMode();
 		await saveProfileToStorage(this.profile);
+		this.notifyMutation(previous);
+	}
+
+	/**
+	 * Local state is already persisted at this point, so a hook that fails (offline,
+	 * for instance) must never surface as a failed profile update. The outbox is
+	 * what makes the server catch up later.
+	 */
+	private notifyMutation(previous: CoupleProfile) {
+		const next = { ...this.profile };
+		for (const hook of mutationHooks) {
+			try {
+				void Promise.resolve(hook(next, previous)).catch((err) =>
+					console.error('Profile mutation hook failed:', err)
+				);
+			} catch (err) {
+				console.error('Profile mutation hook threw:', err);
+			}
+		}
 	}
 
 	/**
@@ -130,9 +192,11 @@ class ProfileStore {
 	 * Reset profile back to defaults
 	 */
 	async reset() {
+		const previous = { ...this.profile };
 		await clearProfileStorage(this.profile.photoUrl);
 		this.profile = { ...DEFAULT_PROFILE };
 		this.applyThemeAndDarkMode();
+		this.notifyMutation(previous);
 	}
 
 	/**

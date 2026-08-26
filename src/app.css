@@ -1,4 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+/* Self-hosted variable fonts. Their .woff2 files land in the client build output and are
+   picked up by the service worker's `woff2` glob, so both themes render correctly offline. */
+@import '@fontsource-variable/plus-jakarta-sans/wght.css';
+@import '@fontsource-variable/plus-jakarta-sans/wght-italic.css';
+@import '@fontsource-variable/playfair-display/wght.css';
+@import '@fontsource-variable/playfair-display/wght-italic.css';
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -24,8 +29,8 @@
   --color-input: var(--input-color);
   --color-ring: var(--primary-color);
 
-  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-serif: 'Playfair Display', Georgia, Cambria, 'Times New Roman', serif;
+  --font-sans: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-serif: 'Playfair Display Variable', 'Playfair Display', Georgia, Cambria, 'Times New Roman', serif;
 }
 
 @layer base {
@@ -124,7 +129,10 @@
   }
 
   html, body {
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    /* One source of truth: the @theme token above, which names the self-hosted
+       'Plus Jakarta Sans Variable' face. Duplicating the stack here is how the
+       body ended up on a font that is never actually loaded. */
+    font-family: var(--font-sans);
     background-color: var(--bg-color);
     color: var(--fg-color);
   }

@@ -133,6 +133,11 @@
 			isConfigured: true
 		});
 
+		// IndexedDB now holds the only copy of this couple's data. Ask for an eviction
+		// exemption here, immediately after a real user gesture — Chrome weighs
+		// engagement signals, so this is the moment most likely to be granted silently.
+		void pwaStore.ensurePersistentStorage();
+
 		if (typeof window !== 'undefined') {
 			confetti({
 				particleCount: 120,

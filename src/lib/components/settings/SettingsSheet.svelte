@@ -26,12 +26,18 @@
 		QrCode,
 		Heart,
 
-		Code
-
+		Code,
+		CloudOff,
+		ShieldCheck,
+		HardDrive,
+		Download
 	} from '@lucide/svelte';
 	import { subscribeToPush, unsubscribeFromPush, sendTestPush, isPushSupported } from '$lib/push/client';
 	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
 	import { APP_VERSION } from '$lib/version';
+	import { networkStore } from '$lib/stores/network.svelte';
+	import { pwaStore } from '$lib/stores/pwa.svelte';
+	import { getStorageEstimate, type StorageEstimate } from '$lib/utils/storage';
 
 	interface Props {
 		open?: boolean;
@@ -58,6 +64,11 @@
 				const res = await subscribeToPush();
 				if (!res.success) {
 					pushStatusMessage = res.error || 'Failed to enable notifications';
+				} else if (res.pending) {
+					// `pushManager.subscribe()` has to reach the push service, so this is
+					// an intent until the network comes back. Every flush retries it.
+					pushStatusMessage =
+						res.error || "Saved - notifications will activate when you're back online.";
 				} else {
 					pushStatusMessage = 'Push notifications enabled!';
 				}
@@ -87,6 +98,25 @@
 		} finally {
 			isPushLoading = false;
 		}
+	}
+
+	// Storage durability panel. IndexedDB holds the only copy of the couple's data,
+	// so showing that it is there (and persisted) is a real reassurance.
+	let storage = $state<StorageEstimate | null>(null);
+
+	$effect(() => {
+		if (!open) return;
+		void getStorageEstimate().then((estimate) => (storage = estimate));
+	});
+
+	function downloadBackup() {
+		const blob = new Blob([profileStore.exportJSON()], { type: 'application/json' });
+		const url = URL.createObjectURL(blob);
+		const anchor = document.createElement('a');
+		anchor.href = url;
+		anchor.download = `openlove-backup-${new Date().toISOString().split('T')[0]}.json`;
+		anchor.click();
+		URL.revokeObjectURL(url);
 	}
 
 	// Milestone filter tab
@@ -346,9 +376,21 @@
 			{#if profileStore.profile.pushSubscribed}
 				<div class="pt-2 border-t border-border/50 flex items-center justify-between gap-2">
 					<span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓ Device Connected</span>
-					<Button size="sm" variant="outline" class="h-7 text-xs px-2.5" onclick={handleTestPush} disabled={isPushLoading}>
-						<span>Send Test Push</span>
+					<!-- A test push is inherently online-only: it round-trips through the server. -->
+					<Button
+						size="sm"
+						variant="outline"
+						class="h-7 text-xs px-2.5"
+						onclick={handleTestPush}
+						disabled={isPushLoading || !networkStore.isOnline}
+					>
+						<span>{networkStore.isOnline ? 'Send Test Push' : 'Offline'}</span>
 					</Button>
+				</div>
+			{:else if profileStore.profile.pushIntent}
+				<div class="pt-2 border-t border-border/50 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
+					<CloudOff class="h-3.5 w-3.5 shrink-0" />
+					<span>Waiting for a connection to activate on this device</span>
 				</div>
 			{/if}
 
@@ -445,6 +487,59 @@
 					</div>
 				{/each}
 			</div>
+		</section>
+
+		<!-- On-device storage -->
+		<section class="p-3 rounded-2xl bg-card border border-border space-y-2.5">
+			<div class="text-sm font-semibold flex items-center gap-1.5">
+				<HardDrive class="h-4 w-4 text-primary" />
+				<span>Data on This Device</span>
+			</div>
+			<p class="text-xs text-muted-foreground">
+				Your names, date and photo never leave this device. That also means this is the
+				only copy — keep a backup.
+			</p>
+
+			{#if storage}
+				<div class="flex items-center justify-between text-[11px] text-muted-foreground font-medium">
+					<span>{storage.usageLabel} used</span>
+					<span>{storage.quotaLabel} available</span>
+				</div>
+			{/if}
+
+			{#if pwaStore.isStoragePersisted}
+				<div class="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+					<ShieldCheck class="h-3.5 w-3.5 shrink-0" />
+					<span>Protected from automatic cleanup</span>
+				</div>
+			{:else}
+				<!-- iOS 17+ exempts installed PWAs from the 7-day eviction window; browser
+				     tabs are not exempt. Installing is the fix, so say so. -->
+				<div class="space-y-2">
+					<div class="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
+						<CloudOff class="h-3.5 w-3.5 shrink-0 mt-0.5" />
+						<span>
+							{pwaStore.isStandalone
+								? 'Storage is not marked as persistent yet.'
+								: 'In a browser tab, iOS can clear this data after ~7 days unused. Install Open Love to your Home Screen to keep it safe.'}
+						</span>
+					</div>
+					<Button
+						size="sm"
+						variant="outline"
+						class="w-full h-8 text-xs"
+						onclick={() => pwaStore.ensurePersistentStorage()}
+					>
+						<ShieldCheck class="h-3.5 w-3.5 mr-1.5" />
+						<span>Request Persistent Storage</span>
+					</Button>
+				</div>
+			{/if}
+
+			<Button variant="outline" class="w-full" onclick={downloadBackup}>
+				<Download class="h-4 w-4 mr-1.5" />
+				<span>Download JSON Backup</span>
+			</Button>
 		</section>
 
 		<!-- Backup & Reset -->

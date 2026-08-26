@@ -20,7 +20,15 @@ export interface CoupleProfile {
 	colorPalette: ColorPalette;// 'rose' | 'lavender' | ...
 	showSeconds: boolean;      // Live ticking seconds toggle
 	isConfigured: boolean;     // Has completed onboarding
-	pushSubscribed: boolean;   // Has active push subscription
+	pushSubscribed: boolean;   // Server round-trip confirmed: this device is subscribed
+	/**
+	 * Local-only intent flag. `pushManager.subscribe()` has to reach the push service,
+	 * so enabling notifications genuinely cannot complete offline. Toggling push on
+	 * records the intent here and every outbox flush retries the real subscribe;
+	 * `pushSubscribed` only flips true once the server round-trip succeeds.
+	 * Never sent to the server and never exported.
+	 */
+	pushIntent: boolean;
 	customMilestones: CustomMilestone[];
 }
 

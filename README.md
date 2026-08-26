@@ -18,7 +18,14 @@ OpenLove allows couples to track how long they have been together with live coun
   - **Years**: 1st anniversary, 5-year, 10-year, 25-year silver, 50-year golden, etc.
   - **Days**: 50, 100, 500, 1,000, 2,000, 5,000, 10,000 days.
   - **Custom**: Add custom relationship memories (*First Date, Moved In, Proposal*).
-- 📲 **PWA & Offline Ready**: Installable to Home Screen on iOS Safari, Android Chrome, and Desktop with offline caching.
+- 📲 **Genuinely Offline-First PWA**: Installable to the Home Screen on iOS Safari, Android Chrome and Desktop.
+  The app shell, all JavaScript and CSS, and the self-hosted fonts are precached, so it cold-starts
+  with **no network at all** — airplane mode, force-quit, reopen, and the counter is still ticking.
+- 🔄 **Offline Edits That Actually Sync**: Change your anniversary date with no connection and it is
+  queued on-device, then delivered exactly once when you are back online — coalesced into a single
+  request, retried with backoff, and safe across multiple devices (newest change wins).
+- 🔒 **No Third-Party Requests**: Fonts are self-hosted, so a cold load talks to your server and
+  nothing else — no IP leak to Google Fonts.
 - 🔔 **Anonymous Web Push Notifications**: Scheduled background cron alerts you on your exact milestone day in your local timezone.
 - 💾 **Portable JSON Backup & QR Share**: 1-tap backup/restore and quick couple sharing via QR codes.
 

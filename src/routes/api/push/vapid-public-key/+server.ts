@@ -1,5 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+
+// The root layout sets `prerender = true`; server endpoints must opt out.
+export const prerender = false;
 import { getVapidPublicKey } from '$lib/server/push';
 
 export const GET: RequestHandler = async () => {

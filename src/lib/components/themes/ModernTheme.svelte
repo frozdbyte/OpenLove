@@ -4,6 +4,7 @@
 	import Card, { CardContent } from '$lib/components/ui/card';
 	import Badge from '$lib/components/ui/badge';
 	import Progress from '$lib/components/ui/progress';
+	import SyncStatusPill from '$lib/components/offline/SyncStatusPill.svelte';
 
 	let { profile, timeBreakdown, nextMilestone, onOpenSettings, onOpenShare }: ThemeProps = $props();
 </script>
@@ -34,6 +35,11 @@
 			<Share2 class="h-5 w-5" />
 		</button>
 	</header>
+
+	<!-- Offline / pending-sync indicator -->
+	<div class="flex justify-center">
+		<SyncStatusPill variant="modern" />
+	</div>
 
 	<!-- Main Content Section -->
 	<main class="space-y-6 my-auto pt-4 pb-6">

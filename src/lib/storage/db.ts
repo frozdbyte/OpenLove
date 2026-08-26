@@ -16,6 +16,7 @@ export const DEFAULT_PROFILE: CoupleProfile = {
 	showSeconds: true,
 	isConfigured: false,
 	pushSubscribed: false,
+	pushIntent: false,
 	customMilestones: []
 };
 
