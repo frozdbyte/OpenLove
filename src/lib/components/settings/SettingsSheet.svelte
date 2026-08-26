@@ -24,7 +24,10 @@
 		Check,
 		BellRing,
 		QrCode,
-		Heart
+		Heart,
+
+		Code
+
 	} from '@lucide/svelte';
 	import { subscribeToPush, unsubscribeFromPush, sendTestPush, isPushSupported } from '$lib/push/client';
 	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
@@ -475,7 +478,12 @@
 				<Heart class="h-3 w-3 text-primary fill-primary/30" />
 				<span>Open Love v{APP_VERSION}</span>
 			</div>
-			<p class="text-[10px] text-muted-foreground/60">Privacy-first & self-hosted</p>
+			<p class="text-[10px] text-muted-foreground/60">Privacy-first & self-hosted
+			<br>Made with 🩵 by Frozd</p>
+			<a class="text-[10px] text-muted-foreground/40" href="https://github.com/frozdbyte/openlove">
+				<Code class="inline size-2.5 mr-0.5" />
+				View Source on GitHub
+			</a>
 		</div>
 	</div>
 </Modal>
