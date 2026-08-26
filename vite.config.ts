@@ -54,7 +54,10 @@ export default defineConfig({
 						type: 'image/png',
 						purpose: 'any maskable'
 					}
-				]
+				],
+				launch_handler: {
+					client_mode: 'focus-existing'
+				}
 			},
 			injectManifest: {
 				// Workbox globs `.svelte-kit/output`, not `build/`. The prerendered SPA shell
