@@ -34,22 +34,8 @@
 	let currentStepIndex = $state(0);
 	let isScanModalOpen = $state(false);
 
-	// Detect user OS for platform-specific instructions
-	let userOS = $state<'ios' | 'android' | 'desktop'>('desktop');
+	let userOS = $derived(pwaStore.userOS);
 	let installSuccess = $state(false);
-
-	$effect(() => {
-		if (typeof window !== 'undefined') {
-			const ua = window.navigator.userAgent.toLowerCase();
-			if (/iphone|ipad|ipod/.test(ua)) {
-				userOS = 'ios';
-			} else if (/android/.test(ua)) {
-				userOS = 'android';
-			} else {
-				userOS = 'desktop';
-			}
-		}
-	});
 
 	// If running as standalone PWA, omit the PWA installation step
 	let steps = $derived<OnboardingStepKey[]>(

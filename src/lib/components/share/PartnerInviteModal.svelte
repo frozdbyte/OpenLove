@@ -23,20 +23,7 @@
 	}: Props = $props();
 
 	let copied = $state(false);
-	let userOS = $state<'ios' | 'android' | 'desktop'>('desktop');
-
-	$effect(() => {
-		if (typeof window !== 'undefined') {
-			const ua = window.navigator.userAgent.toLowerCase();
-			if (/iphone|ipad|ipod/.test(ua)) {
-				userOS = 'ios';
-			} else if (/android/.test(ua)) {
-				userOS = 'android';
-			} else {
-				userOS = 'desktop';
-			}
-		}
-	});
+	let userOS = $derived(pwaStore.userOS);
 
 	async function copyCode() {
 		if (typeof window === 'undefined' || !importRaw) return;

@@ -1,4 +1,4 @@
-import { isRunningAsPWA } from '$lib/utils/pwa';
+import { isRunningAsPWA, getDeviceOS, type DeviceOS } from '$lib/utils/pwa';
 
 export interface BeforeInstallPromptEvent extends Event {
 	readonly platforms: string[];
@@ -19,6 +19,7 @@ class PWAStore {
 	isStandalone = $state(false);
 	canInstall = $state(false);
 	isInstalled = $state(false);
+	userOS = $state<DeviceOS>('desktop');
 	installOutcome = $state<'accepted' | 'dismissed' | null>(null);
 	private deferredPrompt: BeforeInstallPromptEvent | null = null;
 	private initialized = false;
@@ -28,6 +29,7 @@ class PWAStore {
 		this.initialized = true;
 
 		this.isStandalone = isRunningAsPWA();
+		this.userOS = getDeviceOS();
 
 		// Check if prompt was intercepted before hydration
 		if (window.__pwaInstallPrompt) {
