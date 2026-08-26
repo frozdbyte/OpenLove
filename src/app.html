@@ -40,10 +40,18 @@
 
 					var metaTheme = document.querySelector('meta[name="theme-color"]');
 					if (metaTheme) {
+						var paletteHexMap = {
+							rose: { light: '#e11d48', dark: '#f43f5e' },
+							lavender: { light: '#8b5cf6', dark: '#a78bfa' },
+							terracotta: { light: '#ea580c', dark: '#fb923c' },
+							sage: { light: '#059669', dark: '#34d399' },
+							midnight: { light: '#2563eb', dark: '#60a5fa' }
+						};
+						var hex = paletteHexMap[palette] || paletteHexMap.rose;
 						if (uiTheme === 'traditional') {
-							metaTheme.setAttribute('content', isDark ? '#4a0e17' : '#8B1E2D');
+							metaTheme.setAttribute('content', isDark ? hex.dark : hex.light);
 						} else {
-							metaTheme.setAttribute('content', isDark ? '#18181b' : '#e11d48');
+							metaTheme.setAttribute('content', isDark ? '#18181b' : hex.light);
 						}
 					}
 				} catch (e) {}

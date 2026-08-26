@@ -96,7 +96,7 @@
 		<!-- Stacked Breakdown Cards -->
 		<div class="grid grid-cols-2 gap-3">
 			<Card class="p-4 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm">
-				<div class="p-2.5 rounded-2xl bg-rose-500/10 text-primary">
+				<div class="p-2.5 rounded-2xl bg-primary/10 text-primary">
 					<Calendar class="h-5 w-5" />
 				</div>
 				<div class="text-left">
@@ -106,7 +106,7 @@
 			</Card>
 
 			<Card class="p-4 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm">
-				<div class="p-2.5 rounded-2xl bg-rose-500/10 text-primary">
+				<div class="p-2.5 rounded-2xl bg-primary/10 text-primary">
 					<Sparkles class="h-5 w-5" />
 				</div>
 				<div class="text-left">
@@ -116,7 +116,7 @@
 			</Card>
 
 			<Card class="p-4 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm">
-				<div class="p-2.5 rounded-2xl bg-rose-500/10 text-primary">
+				<div class="p-2.5 rounded-2xl bg-primary/10 text-primary">
 					<Heart class="h-5 w-5" />
 				</div>
 				<div class="text-left">
@@ -126,7 +126,7 @@
 			</Card>
 
 			<Card class="p-4 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm">
-				<div class="p-2.5 rounded-2xl bg-rose-500/10 text-primary">
+				<div class="p-2.5 rounded-2xl bg-primary/10 text-primary">
 					<Hourglass class="h-5 w-5" />
 				</div>
 				<div class="text-left">

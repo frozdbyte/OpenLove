@@ -32,6 +32,14 @@ export function onProfileMutation(hook: ProfileMutationHook): () => void {
 	return () => mutationHooks.delete(hook);
 }
 
+const PALETTE_PRIMARY_HEX: Record<ColorPalette, { light: string; dark: string }> = {
+	rose: { light: '#e11d48', dark: '#f43f5e' },
+	lavender: { light: '#8b5cf6', dark: '#a78bfa' },
+	terracotta: { light: '#ea580c', dark: '#fb923c' },
+	sage: { light: '#059669', dark: '#34d399' },
+	midnight: { light: '#2563eb', dark: '#60a5fa' }
+};
+
 class ProfileStore {
 	profile = $state<CoupleProfile>({ ...DEFAULT_PROFILE });
 	isLoading = $state(true);
@@ -121,10 +129,11 @@ class ProfileStore {
 		// 3. Meta theme-color update
 		const metaTheme = document.querySelector('meta[name="theme-color"]');
 		if (metaTheme) {
+			const paletteHex = PALETTE_PRIMARY_HEX[colorPalette] || PALETTE_PRIMARY_HEX.rose;
 			if (uiTheme === 'traditional') {
-				metaTheme.setAttribute('content', isDark ? '#4a0e17' : '#8B1E2D');
+				metaTheme.setAttribute('content', isDark ? paletteHex.dark : paletteHex.light);
 			} else {
-				metaTheme.setAttribute('content', isDark ? '#18181b' : '#e11d48');
+				metaTheme.setAttribute('content', isDark ? '#18181b' : paletteHex.light);
 			}
 		}
 	}

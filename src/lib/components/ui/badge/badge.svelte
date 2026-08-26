@@ -18,7 +18,7 @@
 		secondary: "border-transparent bg-secondary text-secondary-foreground",
 		destructive: "border-transparent bg-destructive text-destructive-foreground",
 		outline: "text-foreground border-border",
-		romantic: "border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/50"
+		romantic: "bg-primary/10 border border-primary/20 text-primary"
 	};
 </script>
 

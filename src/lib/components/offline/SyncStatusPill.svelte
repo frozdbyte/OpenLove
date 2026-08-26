@@ -36,7 +36,7 @@
 {#if state !== 'idle'}
 	{#if variant === 'traditional'}
 		<div
-			class="w-full bg-[#6d1622] dark:bg-[#410d15] text-white/95 px-4 py-1.5 flex items-center justify-center gap-2 font-serif text-xs sm:text-sm tracking-wide {className}"
+			class="w-full bg-primary/90 text-primary-foreground px-4 py-1.5 flex items-center justify-center gap-2 font-serif text-xs sm:text-sm tracking-wide {className}"
 			role="status"
 			aria-live="polite"
 		>

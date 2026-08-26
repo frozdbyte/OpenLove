@@ -90,7 +90,7 @@
 		<!-- Stacked Breakdown Cards -->
 		<div class="grid grid-cols-2 gap-2.5">
 			<Card class="p-3.5 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm backdrop-blur-md">
-				<div class="p-2 rounded-2xl bg-rose-500/10 text-primary shrink-0">
+				<div class="p-2 rounded-2xl bg-primary/10 text-primary shrink-0">
 					<Calendar class="h-4 w-4" />
 				</div>
 				<div class="text-left min-w-0">
@@ -100,7 +100,7 @@
 			</Card>
 
 			<Card class="p-3.5 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm backdrop-blur-md">
-				<div class="p-2 rounded-2xl bg-rose-500/10 text-primary shrink-0">
+				<div class="p-2 rounded-2xl bg-primary/10 text-primary shrink-0">
 					<Sparkles class="h-4 w-4" />
 				</div>
 				<div class="text-left min-w-0">
@@ -110,7 +110,7 @@
 			</Card>
 
 			<Card class="p-3.5 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm backdrop-blur-md">
-				<div class="p-2 rounded-2xl bg-rose-500/10 text-primary shrink-0">
+				<div class="p-2 rounded-2xl bg-primary/10 text-primary shrink-0">
 					<Heart class="h-4 w-4" />
 				</div>
 				<div class="text-left min-w-0">
@@ -120,7 +120,7 @@
 			</Card>
 
 			<Card class="p-3.5 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm backdrop-blur-md">
-				<div class="p-2 rounded-2xl bg-rose-500/10 text-primary shrink-0">
+				<div class="p-2 rounded-2xl bg-primary/10 text-primary shrink-0">
 					<Hourglass class="h-4 w-4" />
 				</div>
 				<div class="text-left min-w-0">

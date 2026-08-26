@@ -6,12 +6,12 @@
 	let { profile, timeBreakdown, onOpenSettings, onOpenShare }: ThemeProps = $props();
 </script>
 
-<div class="min-h-svh w-full flex flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-serif selection:bg-rose-800 selection:text-white">
-	<!-- Traditional Crimson Top Bar -->
-	<header class="w-full bg-[#8B1E2D] dark:bg-[#5A121E] text-white px-4 py-3.5 flex items-center justify-between shadow-md select-none sticky top-0 z-30">
+<div class="min-h-svh w-full flex flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-serif selection:bg-primary selection:text-primary-foreground">
+	<!-- Traditional Top Bar styled with active accent color -->
+	<header class="w-full bg-primary text-primary-foreground px-4 py-3.5 flex items-center justify-between shadow-md select-none sticky top-0 z-30 transition-colors duration-300">
 		<button
 			type="button"
-			class="p-1.5 -ml-1 text-white/90 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+			class="p-1.5 -ml-1 text-primary-foreground/90 hover:text-primary-foreground hover:bg-black/15 dark:hover:bg-white/15 rounded-full transition-colors cursor-pointer"
 			onclick={onOpenSettings}
 			aria-label="Settings"
 		>
@@ -24,7 +24,7 @@
 
 		<button
 			type="button"
-			class="p-1.5 -mr-1 text-white/90 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+			class="p-1.5 -mr-1 text-primary-foreground/90 hover:text-primary-foreground hover:bg-black/15 dark:hover:bg-white/15 rounded-full transition-colors cursor-pointer"
 			onclick={onOpenShare}
 			aria-label="Share"
 		>
@@ -32,7 +32,7 @@
 		</button>
 	</header>
 
-	<!-- Offline / pending-sync banner, styled to the crimson top bar -->
+	<!-- Offline / pending-sync banner, styled to the top bar -->
 	<SyncStatusPill variant="traditional" class="sticky top-[3.75rem] z-20 shadow-sm" />
 
 	<!-- Edge-to-Edge Hero Image Container -->
@@ -44,7 +44,7 @@
 				class="w-full h-full object-cover object-center"
 			/>
 		{:else}
-			<div class="w-full h-full bg-gradient-to-tr from-[#8B1E2D]/40 via-rose-200 to-amber-100 dark:from-zinc-900 dark:via-rose-950 dark:to-zinc-800 flex flex-col items-center justify-center text-[#8B1E2D] dark:text-rose-300">
+			<div class="w-full h-full bg-gradient-to-tr from-primary/30 via-accent to-primary/10 dark:from-zinc-900 dark:via-primary/20 dark:to-zinc-800 flex flex-col items-center justify-center text-primary">
 				<Heart class="h-20 w-20 fill-current opacity-30 animate-pulse" />
 				<span class="text-xs font-sans tracking-wider uppercase mt-2 opacity-60">Add couple photo in settings</span>
 			</div>
@@ -62,7 +62,7 @@
 	<main class="flex-1 flex flex-col justify-around py-8 px-6 text-center max-w-md mx-auto w-full space-y-4">
 		<!-- Primary Section -->
 		<section class="space-y-1">
-			<h2 class="text-lg tracking-tight uppercase font-sans text-[#8B1E2D] dark:text-rose-400 font-semibold">
+			<h2 class="text-lg tracking-tight uppercase font-sans text-primary font-semibold transition-colors duration-300">
 				YOU HAVE BEEN TOGETHER FOR
 			</h2>
 			<p class="text-xl sm:text-2xl font-serif text-zinc-800 dark:text-zinc-100 font-normal leading-relaxed">
@@ -75,7 +75,7 @@
 
 		<!-- Secondary Section ("IN OTHER WORDS") -->
 		<section class="space-y-4">
-			<h2 class="text-lg tracking-tight uppercase font-sans text-[#8B1E2D] dark:text-rose-400 font-semibold">
+			<h2 class="text-lg tracking-tight uppercase font-sans text-primary font-semibold transition-colors duration-300">
 				IN OTHER WORDS
 			</h2>
 
