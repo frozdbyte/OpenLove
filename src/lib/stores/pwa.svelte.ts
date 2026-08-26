@@ -51,6 +51,13 @@ class PWAStore {
 			window.__pwaInstallPrompt = undefined;
 		});
 
+		// Register service worker if available to ensure installability
+		if ('serviceWorker' in navigator) {
+			navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {
+				navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch(() => {});
+			});
+		}
+
 		// Listen to display-mode change (e.g. window opened in standalone)
 		if (typeof window.matchMedia === 'function') {
 			try {
@@ -68,6 +75,10 @@ class PWAStore {
 	}
 
 	async promptInstall(): Promise<'accepted' | 'dismissed' | 'unavailable'> {
+		if (!this.deferredPrompt && window.__pwaInstallPrompt) {
+			this.deferredPrompt = window.__pwaInstallPrompt;
+		}
+
 		if (!this.deferredPrompt) {
 			return 'unavailable';
 		}

@@ -79,6 +79,8 @@
 		}
 	}
 
+	let showAddressBarTip = $state(false);
+
 	async function handleInstallPWA() {
 		const outcome = await pwaStore.promptInstall();
 		if (outcome === 'accepted') {
@@ -90,6 +92,8 @@
 					origin: { y: 0.6 }
 				});
 			}
+		} else if (outcome === 'unavailable') {
+			showAddressBarTip = true;
 		}
 	}
 
@@ -255,7 +259,18 @@
 					<p class="text-xs sm:text-sm text-muted-foreground">Add to your home screen for the full app experience</p>
 				</div>
 
-				{#if pwaStore.canInstall && !installSuccess && !pwaStore.isInstalled}
+				{#if installSuccess || pwaStore.isInstalled}
+					<!-- Installation Success Feedback -->
+					<Card class="p-4 sm:p-5 bg-emerald-500/10 border-emerald-500/30 text-center space-y-2 rounded-2xl animate-in fade-in zoom-in-95 duration-300">
+						<div class="h-10 w-10 mx-auto rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+							<Check class="h-6 w-6 stroke-[3]" />
+						</div>
+						<div class="text-sm font-bold text-emerald-600 dark:text-emerald-400">Open Love Installed!</div>
+						<p class="text-xs text-muted-foreground">
+							You can now launch Open Love directly from your home screen or continue setting up right here.
+						</p>
+					</Card>
+				{:else if userOS !== 'ios'}
 					<!-- 1-Click PWA Installation Callout (Chromium on Android / Desktop) -->
 					<Card class="p-4 sm:p-5 bg-card border-primary/30 shadow-md text-center space-y-3 rounded-2xl ring-1 ring-primary/15">
 						<div class="space-y-1">
@@ -274,60 +289,31 @@
 							<Download class="h-5 w-5" />
 							<span>Install App Now</span>
 						</Button>
-					</Card>
-				{:else if installSuccess || pwaStore.isInstalled}
-					<!-- Installation Success Feedback -->
-					<Card class="p-4 sm:p-5 bg-emerald-500/10 border-emerald-500/30 text-center space-y-2 rounded-2xl">
-						<div class="h-10 w-10 mx-auto rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-							<Check class="h-6 w-6 stroke-[3]" />
-						</div>
-						<div class="text-sm font-bold text-emerald-600 dark:text-emerald-400">Open Love Installed!</div>
-						<p class="text-xs text-muted-foreground">
-							You can now launch Open Love directly from your home screen or continue setting up right here.
-						</p>
-					</Card>
-				{/if}
 
-				<!-- OS-Specific Manual Installation Guide (Fallback or iOS) -->
-				{#if !pwaStore.canInstall || userOS === 'ios'}
-					<Card class="p-3.5 sm:p-4 bg-card border-border shadow-sm text-left space-y-2.5 rounded-2xl">
-						{#if userOS === 'ios'}
-							<div class="flex items-start gap-2.5">
-								<div class="p-1.5 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
-									<Share2 class="h-4 w-4" />
-								</div>
-								<div class="text-xs space-y-0.5">
-									<div class="font-bold text-foreground">iPhone & iPad (Safari):</div>
-									<p class="text-muted-foreground leading-snug">
-										Tap the <strong class="text-foreground">Share</strong> icon at the bottom of Safari, then tap <strong class="text-foreground">"Add to Home Screen"</strong>.
-									</p>
-								</div>
-							</div>
-						{:else if userOS === 'android'}
-							<div class="flex items-start gap-2.5">
-								<div class="p-1.5 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
-									<Smartphone class="h-4 w-4" />
-								</div>
-								<div class="text-xs space-y-0.5">
-									<div class="font-bold text-foreground">Android (Chrome):</div>
-									<p class="text-muted-foreground leading-snug">
-										Tap <strong class="text-foreground">three dots (⋮)</strong> in Chrome, then choose <strong class="text-foreground">"Install app"</strong> or <strong class="text-foreground">"Add to Home screen"</strong>.
-									</p>
-								</div>
-							</div>
-						{:else}
-							<div class="flex items-start gap-2.5">
-								<div class="p-1.5 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
-									<Monitor class="h-4 w-4" />
-								</div>
-								<div class="text-xs space-y-0.5">
-									<div class="font-bold text-foreground">Desktop Browser:</div>
-									<p class="text-muted-foreground leading-snug">
-										Click the <strong class="text-foreground">Install App</strong> icon in your browser address bar to install Open Love as a desktop app.
-									</p>
-								</div>
-							</div>
+						{#if showAddressBarTip}
+							<p class="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 p-2.5 rounded-xl text-left leading-snug">
+								{#if userOS === 'android'}
+									Tap the <strong class="text-foreground">three dots (⋮)</strong> in Chrome and choose <strong class="text-foreground">"Install app"</strong>.
+								{:else}
+									Click the <strong class="text-foreground">Install App icon (⊕)</strong> in your browser address bar to install.
+								{/if}
+							</p>
 						{/if}
+					</Card>
+				{:else}
+					<!-- iOS Safari Manual Installation Guide -->
+					<Card class="p-3.5 sm:p-4 bg-card border-border shadow-sm text-left space-y-2.5 rounded-2xl">
+						<div class="flex items-start gap-2.5">
+							<div class="p-1.5 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
+								<Share2 class="h-4 w-4" />
+							</div>
+							<div class="text-xs space-y-0.5">
+								<div class="font-bold text-foreground">iPhone & iPad (Safari):</div>
+								<p class="text-muted-foreground leading-snug">
+									Tap the <strong class="text-foreground">Share</strong> icon at the bottom of Safari, then tap <strong class="text-foreground">"Add to Home Screen"</strong>.
+								</p>
+							</div>
+						</div>
 					</Card>
 				{/if}
 
