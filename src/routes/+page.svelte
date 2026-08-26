@@ -118,7 +118,8 @@
 		)
 	);
 
-	let CurrentThemeComponent = $derived(getThemeComponent(profileStore.state.uiTheme));
+	let CurrentThemeComponent = $derived(getThemeComponent(profileStore.profile.uiTheme));
+
 </script>
 
 <svelte:head>

@@ -25,8 +25,12 @@ export const DEFAULT_PRIMARY_BOND: Bond = {
 		days: 'all',
 		custom: true
 	},
-	colorPalette: 'rose'
+	uiTheme: 'modern',
+	colorPalette: 'rose',
+	colorMode: 'system',
+	showSeconds: true
 };
+
 
 export const DEFAULT_APP_STATE: AppState = {
 	activeBondId: DEFAULT_PRIMARY_BOND_ID,
@@ -92,7 +96,10 @@ export async function loadAppStateFromStorage(): Promise<AppState> {
 						days: rawBond.milestonePrefs?.days ?? (rawBond.type === 'friendship' ? 'major' : 'all'),
 						custom: rawBond.milestonePrefs?.custom ?? true
 					},
-					colorPalette: rawBond.colorPalette
+					uiTheme: rawBond.uiTheme || rawState.uiTheme || 'modern',
+					colorPalette: rawBond.colorPalette || rawState.colorPalette || 'rose',
+					colorMode: rawBond.colorMode || rawState.colorMode || 'system',
+					showSeconds: rawBond.showSeconds ?? rawState.showSeconds ?? true
 				});
 			}
 
@@ -131,8 +138,12 @@ export async function loadAppStateFromStorage(): Promise<AppState> {
 				customMilestones: Array.isArray(legacyProfile.customMilestones) ? legacyProfile.customMilestones : [],
 				notificationsEnabled: true,
 				milestonePrefs: { ...DEFAULT_PRIMARY_BOND.milestonePrefs },
-				colorPalette: legacyProfile.colorPalette || 'rose'
+				uiTheme: legacyProfile.uiTheme || 'modern',
+				colorPalette: legacyProfile.colorPalette || 'rose',
+				colorMode: legacyProfile.colorMode || 'system',
+				showSeconds: legacyProfile.showSeconds ?? true
 			};
+
 
 			const migratedState: AppState = {
 				activeBondId: primaryBondId,

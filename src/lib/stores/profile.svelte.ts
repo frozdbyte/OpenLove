@@ -187,10 +187,18 @@ class ProfileStore {
 		if (this.state.activeBondId === id) return;
 		const previous = { ...this.state };
 		this.state.activeBondId = id;
+		const nextActive = this.state.bonds.find((b) => b.id === id);
+		if (nextActive) {
+			if (nextActive.uiTheme) this.state.uiTheme = nextActive.uiTheme;
+			if (nextActive.colorPalette) this.state.colorPalette = nextActive.colorPalette;
+			if (nextActive.colorMode) this.state.colorMode = nextActive.colorMode;
+			if (nextActive.showSeconds !== undefined) this.state.showSeconds = nextActive.showSeconds;
+		}
 		this.applyThemeAndDarkMode();
 		await saveAppStateToStorage(this.state);
 		this.notifyMutation(previous);
 	}
+
 
 	/**
 	 * Add a new bond. Inherits UI theme and color palette from the currently active bond.
@@ -321,17 +329,27 @@ class ProfileStore {
 	async setUITheme(uiTheme: UIThemeId, targetBondId?: string) {
 		const bondId = targetBondId || this.state.activeBondId;
 		await this.updateBond(bondId, { uiTheme });
+		if (bondId === this.state.activeBondId) {
+			this.state.uiTheme = uiTheme;
+		}
 	}
 
 	async setColorMode(colorMode: ColorMode, targetBondId?: string) {
 		const bondId = targetBondId || this.state.activeBondId;
 		await this.updateBond(bondId, { colorMode });
+		if (bondId === this.state.activeBondId) {
+			this.state.colorMode = colorMode;
+		}
 	}
 
 	async setColorPalette(colorPalette: ColorPalette, targetBondId?: string) {
 		const bondId = targetBondId || this.state.activeBondId;
 		await this.updateBond(bondId, { colorPalette });
+		if (bondId === this.state.activeBondId) {
+			this.state.colorPalette = colorPalette;
+		}
 	}
+
 
 	async completeOnboarding() {
 		await this.update({ isConfigured: true });
@@ -364,14 +382,18 @@ class ProfileStore {
 					togetherSince: active.togetherSince,
 					customMilestones: active.customMilestones,
 					milestonePrefs: active.milestonePrefs,
-					colorPalette: active.colorPalette
+					uiTheme: active.uiTheme ?? this.state.uiTheme,
+					colorPalette: active.colorPalette ?? this.state.colorPalette,
+					colorMode: active.colorMode ?? this.state.colorMode,
+					showSeconds: active.showSeconds ?? this.state.showSeconds
 				},
-				uiTheme: this.state.uiTheme,
-				colorMode: this.state.colorMode,
-				colorPalette: this.state.colorPalette,
-				showSeconds: this.state.showSeconds,
+				uiTheme: active.uiTheme ?? this.state.uiTheme,
+				colorMode: active.colorMode ?? this.state.colorMode,
+				colorPalette: active.colorPalette ?? this.state.colorPalette,
+				showSeconds: active.showSeconds ?? this.state.showSeconds,
 				exportedAt: new Date().toISOString()
 			};
+
 			return JSON.stringify(exportable, null, 2);
 		}
 
@@ -416,7 +438,10 @@ class ProfileStore {
 							days: b.milestonePrefs?.days ?? (b.type === 'friendship' ? 'major' : 'all'),
 							custom: b.milestonePrefs?.custom ?? true
 						},
-						colorPalette: b.colorPalette
+						uiTheme: b.uiTheme || data.uiTheme || 'modern',
+						colorPalette: b.colorPalette || data.colorPalette || 'rose',
+						colorMode: b.colorMode || data.colorMode || 'system',
+						showSeconds: b.showSeconds ?? data.showSeconds ?? true
 					})),
 					uiTheme: data.uiTheme || 'modern',
 					colorMode: data.colorMode || 'system',
@@ -450,8 +475,12 @@ class ProfileStore {
 						days: b.milestonePrefs?.days ?? (b.type === 'friendship' ? 'major' : 'all'),
 						custom: b.milestonePrefs?.custom ?? true
 					},
-					colorPalette: b.colorPalette
+					uiTheme: b.uiTheme || data.uiTheme || 'modern',
+					colorPalette: b.colorPalette || data.colorPalette || 'rose',
+					colorMode: b.colorMode || data.colorMode || 'system',
+					showSeconds: b.showSeconds ?? data.showSeconds ?? true
 				};
+
 
 				// If only default unconfigured bond exists, replace it, otherwise append
 				if (this.state.bonds.length === 1 && !this.state.isConfigured) {
