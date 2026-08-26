@@ -17,6 +17,7 @@
 	let pendingInviteRaw = $state('');
 	let pendingPartnerNames = $state('');
 	let currentTime = $state(new Date());
+	let locale: string | undefined = $state();
 
 	// Update live clock every second
 	$effect(() => {
@@ -63,6 +64,12 @@
 		}
 	});
 
+	$effect(() => {
+		if (typeof window !== 'undefined') {
+			locale = navigator.language
+		}
+	})
+
 	async function handleAcceptBrowserInvite() {
 		if (pendingInviteJson) {
 			await profileStore.importJSON(pendingInviteJson);
@@ -78,7 +85,7 @@
 	}
 
 	let timeBreakdown = $derived(
-		calculateTimeBreakdown(profileStore.profile.togetherSince, currentTime)
+		calculateTimeBreakdown(profileStore.profile.togetherSince, currentTime, locale)
 	);
 
 	let milestoneData = $derived(

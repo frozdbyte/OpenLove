@@ -38,13 +38,13 @@ export function getCalendarDifference(startDate: Date, endDate: Date): { years: 
 /**
  * Format date nicely, e.g. "January 10, 2016"
  */
-export function formatLongDate(dateStr: string): string {
+export function formatLongDate(dateStr: string, locale: string = 'en-US'): string {
 	if (!dateStr) return '';
 	const [year, month, day] = dateStr.split('-').map(Number);
 	if (!year || !month || !day) return dateStr;
 
 	const date = new Date(year, month - 1, day);
-	return date.toLocaleDateString('en-US', {
+	return date.toLocaleDateString(locale, {
 		month: 'long',
 		day: 'numeric',
 		year: 'numeric'
@@ -54,7 +54,7 @@ export function formatLongDate(dateStr: string): string {
 /**
  * Calculate comprehensive time breakdown.
  */
-export function calculateTimeBreakdown(startDateStr: string, now: Date = new Date()): TimeBreakdown {
+export function calculateTimeBreakdown(startDateStr: string, now: Date = new Date(), locale?: string): TimeBreakdown {
 	if (!startDateStr) {
 		return {
 			years: 0,
@@ -129,7 +129,7 @@ export function calculateTimeBreakdown(startDateStr: string, now: Date = new Dat
 		totalMinutes,
 		totalSeconds,
 		primaryFormatted,
-		startDateFormatted: formatLongDate(startDateStr)
+		startDateFormatted: formatLongDate(startDateStr, locale)
 	};
 }
 

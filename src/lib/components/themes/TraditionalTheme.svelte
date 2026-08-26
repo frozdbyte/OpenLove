@@ -6,7 +6,7 @@
 	let { profile, timeBreakdown, onOpenSettings, onOpenShare }: ThemeProps = $props();
 </script>
 
-<div class="min-h-screen w-full flex flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-serif selection:bg-rose-800 selection:text-white">
+<div class="min-h-svh w-full flex flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-serif selection:bg-rose-800 selection:text-white">
 	<!-- Traditional Crimson Top Bar -->
 	<header class="w-full bg-[#8B1E2D] dark:bg-[#5A121E] text-white px-4 py-3.5 flex items-center justify-between shadow-md select-none sticky top-0 z-30">
 		<button
@@ -36,7 +36,7 @@
 	<SyncStatusPill variant="traditional" class="sticky top-[3.75rem] z-20 shadow-sm" />
 
 	<!-- Edge-to-Edge Hero Image Container -->
-	<div class="relative w-full aspect-[4/3] sm:aspect-[16/10] max-h-[50vh] bg-zinc-200 dark:bg-zinc-800 overflow-hidden select-none">
+	<div class="relative w-full aspect-square! max-h-[50vh] min-h-48 bg-zinc-200 dark:bg-zinc-800 overflow-hidden select-none">
 		{#if profile.photoUrl}
 			<img
 				src={profile.photoUrl}
@@ -51,18 +51,18 @@
 		{/if}
 
 		<!-- Translucent Date Banner Overlay -->
-		<div class="absolute inset-x-0 bottom-0 py-2.5 px-4 bg-black/45 backdrop-blur-[2px] text-center">
-			<p class="text-white text-lg sm:text-xl italic font-serif tracking-wide drop-shadow">
+		<div class="absolute inset-x-0 bottom-0 py-0.5 px-4 bg-black/45 backdrop-blur-[2px] text-center">
+			<p class="text-white text-lg sm:text-xl font-serif tracking-wide drop-shadow">
 				{timeBreakdown.startDateFormatted}
 			</p>
 		</div>
 	</div>
 
 	<!-- Content Area -->
-	<main class="flex-1 flex flex-col justify-around py-8 px-6 text-center max-w-md mx-auto w-full space-y-8">
+	<main class="flex-1 flex flex-col justify-around py-8 px-6 text-center max-w-md mx-auto w-full space-y-4">
 		<!-- Primary Section -->
-		<section class="space-y-3">
-			<h2 class="text-base sm:text-lg tracking-[0.18em] uppercase font-serif text-[#8B1E2D] dark:text-rose-400 font-semibold">
+		<section class="space-y-1">
+			<h2 class="text-lg tracking-tight uppercase font-sans text-[#8B1E2D] dark:text-rose-400 font-semibold">
 				YOU HAVE BEEN TOGETHER FOR
 			</h2>
 			<p class="text-xl sm:text-2xl font-serif text-zinc-800 dark:text-zinc-100 font-normal leading-relaxed">
@@ -71,15 +71,15 @@
 		</section>
 
 		<!-- Divider -->
-		<div class="w-full border-t border-zinc-200 dark:border-zinc-800 my-2"></div>
+		<div class="w-full border-t border-zinc-200 dark:border-zinc-800"></div>
 
 		<!-- Secondary Section ("IN OTHER WORDS") -->
 		<section class="space-y-4">
-			<h2 class="text-base sm:text-lg tracking-[0.18em] uppercase font-serif text-[#8B1E2D] dark:text-rose-400 font-semibold">
+			<h2 class="text-lg tracking-tight uppercase font-sans text-[#8B1E2D] dark:text-rose-400 font-semibold">
 				IN OTHER WORDS
 			</h2>
 
-			<div class="space-y-2 text-lg sm:text-xl font-serif text-zinc-800 dark:text-zinc-200 leading-snug">
+			<div class="space-y-2 text-xl font-serif text-zinc-800 dark:text-zinc-200 leading-snug">
 				<p>{timeBreakdown.totalMonths.toLocaleString()} months</p>
 				<p class="flex items-center justify-center gap-3">
 					<span class="text-zinc-500 dark:text-zinc-400 text-base italic">or</span>
