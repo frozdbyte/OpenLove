@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { profileStore } from '$lib/stores/profile.svelte';
-	import type { ColorMode, ColorPalette } from '$lib/types/profile';
-	import type { MilestoneItem } from '$lib/types/time';
+	import type { UIThemeId, ColorMode, ColorPalette } from '$lib/types/profile';
+	import type { Bond, BondType, DaysMilestoneFilter } from '$lib/types/bonds';
+	import { calculateMilestones } from '$lib/utils/time';
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
 	import Button from '$lib/components/ui/button';
 	import Input from '$lib/components/ui/input';
@@ -29,10 +30,11 @@
 		ShieldCheck,
 		HardDrive,
 		Download,
-		Users
+		Users,
+		Image,
+		Clock
 	} from '@lucide/svelte';
 	import { subscribeToPush, unsubscribeFromPush, sendTestPush, triggerSchedulerNow } from '$lib/push/client';
-
 	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
 	import { APP_VERSION } from '$lib/version';
 	import { networkStore } from '$lib/stores/network.svelte';
@@ -41,21 +43,259 @@
 
 	interface Props {
 		open?: boolean;
-		milestones: MilestoneItem[];
+		targetBondId?: string | null;
+		isNewBond?: boolean;
+		showAppWideSettings?: boolean;
 		onOpenSwitcher?: () => void;
 		onclose?: () => void;
 	}
 
-	let { open = $bindable(false), milestones, onOpenSwitcher, onclose }: Props = $props();
+	let {
+		open = $bindable(false),
+		targetBondId = null,
+		isNewBond = false,
+		showAppWideSettings = true,
+		onOpenSwitcher,
+		onclose
+	}: Props = $props();
 
 	let isScanModalOpen = $state(false);
-
 	let fileInputRef = $state<HTMLInputElement | null>(null);
 	let backupInputRef = $state<HTMLInputElement | null>(null);
+
+	// Target bond resolution
+	let currentBond = $derived<Bond>(
+		targetBondId
+			? profileStore.state.bonds.find((b) => b.id === targetBondId) || profileStore.activeBond
+			: profileStore.activeBond
+	);
+
+	// Form draft state (used for new bonds or live editing)
+	let bondType = $state<BondType>('romantic');
+	let bondNames = $state('');
+	let bondTogetherSince = $state('');
+	let bondPhotoBlob = $state<Blob | null>(null);
+	let bondPhotoUrl = $state<string | undefined>(undefined);
+	let bondNotificationsEnabled = $state(true);
+	let bondYearsPref = $state(true);
+	let bondMonthsPref = $state(true);
+	let bondDaysPref = $state<DaysMilestoneFilter>('all');
+	let bondCustomPref = $state(true);
+	let bondUiTheme = $state<UIThemeId>('modern');
+	let bondColorPalette = $state<ColorPalette>('rose');
+	let bondColorMode = $state<ColorMode>('system');
+	let bondShowSeconds = $state(false);
+
+	let activeTheme = $derived<UIThemeId>(
+		isNewBond ? bondUiTheme : (currentBond.uiTheme ?? profileStore.state.uiTheme)
+	);
+	let activeMode = $derived<ColorMode>(
+		isNewBond ? bondColorMode : (currentBond.colorMode ?? profileStore.state.colorMode)
+	);
+	let activePalette = $derived<ColorPalette>(
+		isNewBond ? bondColorPalette : (currentBond.colorPalette ?? profileStore.state.colorPalette)
+	);
+	let currentDays = $derived<DaysMilestoneFilter>(
+		isNewBond
+			? bondDaysPref
+			: (currentBond.milestonePrefs?.days ?? (currentBond.type === 'friendship' ? 'major' : 'all'))
+	);
 
 	// Push state
 	let isPushLoading = $state(false);
 	let pushStatusMessage = $state('');
+
+
+	// Sync local form state when opening or switching target bond
+	$effect(() => {
+		if (open) {
+			if (isNewBond) {
+				const active = profileStore.activeBond;
+				bondType = 'romantic';
+				bondNames = '';
+				bondTogetherSince = new Date().toISOString().split('T')[0];
+				bondPhotoBlob = null;
+				bondPhotoUrl = undefined;
+				bondNotificationsEnabled = true;
+				bondYearsPref = true;
+				bondMonthsPref = true;
+				bondDaysPref = 'all';
+				bondCustomPref = true;
+				// Inherit UI settings from currently active bond
+				bondUiTheme = active.uiTheme ?? profileStore.state.uiTheme;
+				bondColorPalette = active.colorPalette ?? profileStore.state.colorPalette;
+				bondColorMode = active.colorMode ?? profileStore.state.colorMode;
+				bondShowSeconds = active.showSeconds ?? profileStore.state.showSeconds;
+			} else {
+				const b = currentBond;
+				bondType = b.type || 'romantic';
+				bondNames = b.names || '';
+				bondTogetherSince = b.togetherSince || '';
+				bondPhotoBlob = b.photoBlob ?? null;
+				bondPhotoUrl = b.photoUrl;
+				bondNotificationsEnabled = b.notificationsEnabled ?? true;
+				bondYearsPref = b.milestonePrefs?.years ?? true;
+				bondMonthsPref = b.milestonePrefs?.months ?? (b.type === 'friendship' ? false : true);
+				bondDaysPref = b.milestonePrefs?.days ?? (b.type === 'friendship' ? 'major' : 'all');
+				bondCustomPref = b.milestonePrefs?.custom ?? true;
+				bondUiTheme = b.uiTheme ?? profileStore.state.uiTheme;
+				bondColorPalette = b.colorPalette ?? profileStore.state.colorPalette;
+				bondColorMode = b.colorMode ?? profileStore.state.colorMode;
+				bondShowSeconds = b.showSeconds ?? profileStore.state.showSeconds;
+			}
+		}
+	});
+
+	// Storage durability
+	let storage = $state<StorageEstimate | null>(null);
+
+	$effect(() => {
+		if (open && showAppWideSettings) {
+			void getStorageEstimate().then((estimate) => (storage = estimate));
+		}
+	});
+
+	// Milestone calculation for the current bond
+	let bondMilestoneData = $derived(
+		calculateMilestones(
+			isNewBond ? bondTogetherSince : currentBond.togetherSince,
+			isNewBond ? [] : currentBond.customMilestones,
+			new Date(),
+			isNewBond
+				? { years: bondYearsPref, months: bondMonthsPref, days: bondDaysPref, custom: bondCustomPref }
+				: currentBond.milestonePrefs
+		)
+	);
+
+	// Milestone filter tab
+	let selectedMilestoneTab = $state<'all' | 'months' | 'years' | 'days' | 'custom'>('all');
+
+	let filteredMilestones = $derived(
+		bondMilestoneData.milestones.filter((m) => {
+			if (selectedMilestoneTab === 'all') return true;
+			return m.type === selectedMilestoneTab;
+		})
+	);
+
+	// Custom milestone form
+	let newMilestoneTitle = $state('');
+	let newMilestoneDate = $state('');
+	let isAddingMilestone = $state(false);
+
+	function handleTypeChange(newType: BondType) {
+		bondType = newType;
+		if (isNewBond) {
+			if (newType === 'friendship') {
+				bondMonthsPref = false;
+				bondDaysPref = 'major';
+			} else {
+				bondMonthsPref = true;
+				bondDaysPref = 'all';
+			}
+		} else {
+			void profileStore.updateBond(currentBond.id, { type: newType });
+		}
+	}
+
+	async function handlePhotoUpload(e: Event) {
+		const target = e.target as HTMLInputElement;
+		if (target.files && target.files[0]) {
+			const file = target.files[0];
+			bondPhotoBlob = file;
+			if (bondPhotoUrl && bondPhotoUrl.startsWith('blob:')) {
+				URL.revokeObjectURL(bondPhotoUrl);
+			}
+			bondPhotoUrl = URL.createObjectURL(file);
+
+			if (!isNewBond) {
+				await profileStore.setPhoto(file, currentBond.id);
+			}
+		}
+	}
+
+	async function removePhoto() {
+		if (bondPhotoUrl && bondPhotoUrl.startsWith('blob:')) {
+			URL.revokeObjectURL(bondPhotoUrl);
+		}
+		bondPhotoBlob = null;
+		bondPhotoUrl = undefined;
+
+		if (!isNewBond) {
+			await profileStore.setPhoto(null, currentBond.id);
+		}
+	}
+
+	async function handleLiveUpdate(patch: Partial<Bond>) {
+		if (!isNewBond) {
+			await profileStore.updateBond(currentBond.id, patch);
+		}
+	}
+
+	async function handleCreateNewBond() {
+		if (!bondNames.trim() || !bondTogetherSince) return;
+
+		const newBond: Bond = {
+			id: `bond_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+			type: bondType,
+			names: bondNames.trim(),
+			togetherSince: bondTogetherSince,
+			photoBlob: null,
+			photoUrl: undefined,
+			customMilestones: [],
+			notificationsEnabled: bondNotificationsEnabled,
+			milestonePrefs: {
+				years: bondYearsPref,
+				months: bondMonthsPref,
+				days: bondDaysPref,
+				custom: bondCustomPref
+			},
+			uiTheme: bondUiTheme,
+			colorPalette: bondColorPalette,
+			colorMode: bondColorMode,
+			showSeconds: bondShowSeconds
+		};
+
+		await profileStore.addBond(newBond);
+		if (bondPhotoBlob) {
+			await profileStore.setPhoto(bondPhotoBlob, newBond.id);
+		}
+
+		open = false;
+		onclose?.();
+	}
+
+	async function handleDeleteCurrentBond() {
+		if (confirm(`Are you sure you want to delete "${currentBond.names}"?`)) {
+			await profileStore.deleteBond(currentBond.id);
+			open = false;
+			onclose?.();
+		}
+	}
+
+	async function addCustomMilestone() {
+		if (!newMilestoneTitle.trim() || !newMilestoneDate || isNewBond) return;
+
+		const current = currentBond.customMilestones;
+		const updated = [
+			...current,
+			{
+				id: `custom_${Date.now()}`,
+				title: newMilestoneTitle.trim(),
+				date: newMilestoneDate
+			}
+		];
+		await profileStore.updateBond(currentBond.id, { customMilestones: updated });
+		newMilestoneTitle = '';
+		newMilestoneDate = '';
+		isAddingMilestone = false;
+	}
+
+	async function deleteCustomMilestone(id: string) {
+		if (isNewBond) return;
+		const current = currentBond.customMilestones;
+		const updated = current.filter((m) => m.id !== id);
+		await profileStore.updateBond(currentBond.id, { customMilestones: updated });
+	}
 
 	async function handlePushToggle(enable: boolean) {
 		isPushLoading = true;
@@ -104,12 +344,12 @@
 		pushStatusMessage = 'Sending test milestone notification...';
 		try {
 			const res = await sendTestPush({
-				bondId: profileStore.activeBond.id,
-				milestoneTitle: profileStore.activeBond.type === 'friendship' ? '1st Year' : '1st Anniversary',
+				bondId: currentBond.id,
+				milestoneTitle: currentBond.type === 'friendship' ? '1st Year' : '1st Anniversary',
 				milestoneType: 'years'
 			});
 			if (res.success) {
-				pushStatusMessage = `Milestone alert sent for ${profileStore.activeBond.names}!`;
+				pushStatusMessage = `Milestone alert sent for ${currentBond.names}!`;
 			} else {
 				pushStatusMessage = res.error || 'Failed to send test milestone push';
 			}
@@ -137,13 +377,6 @@
 		}
 	}
 
-	let storage = $state<StorageEstimate | null>(null);
-
-	$effect(() => {
-		if (!open) return;
-		void getStorageEstimate().then((estimate) => (storage = estimate));
-	});
-
 	function downloadBackup() {
 		const blob = new Blob([profileStore.exportJSON()], { type: 'application/json' });
 		const url = URL.createObjectURL(blob);
@@ -152,33 +385,6 @@
 		anchor.download = `openlove-backup-${new Date().toISOString().split('T')[0]}.json`;
 		anchor.click();
 		URL.revokeObjectURL(url);
-	}
-
-	// Milestone filter tab
-	let selectedMilestoneTab = $state<'all' | 'months' | 'years' | 'days' | 'custom'>('all');
-
-	let filteredMilestones = $derived(
-		milestones.filter((m) => {
-			if (selectedMilestoneTab === 'all') return true;
-			return m.type === selectedMilestoneTab;
-		})
-	);
-
-	// Custom milestone form
-	let newMilestoneTitle = $state('');
-	let newMilestoneDate = $state('');
-	let isAddingMilestone = $state(false);
-
-	async function handlePhotoUpload(e: Event) {
-		const target = e.target as HTMLInputElement;
-		if (target.files && target.files[0]) {
-			const file = target.files[0];
-			await profileStore.setPhoto(file);
-		}
-	}
-
-	async function removePhoto() {
-		await profileStore.setPhoto(null);
 	}
 
 	async function handleBackupImport(e: Event) {
@@ -193,30 +399,6 @@
 				alert('Failed to restore backup. Invalid file format.');
 			}
 		}
-	}
-
-	async function addCustomMilestone() {
-		if (!newMilestoneTitle.trim() || !newMilestoneDate) return;
-
-		const current = profileStore.activeBond.customMilestones;
-		const updated = [
-			...current,
-			{
-				id: `custom_${Date.now()}`,
-				title: newMilestoneTitle.trim(),
-				date: newMilestoneDate
-			}
-		];
-		await profileStore.updateBond(profileStore.activeBond.id, { customMilestones: updated });
-		newMilestoneTitle = '';
-		newMilestoneDate = '';
-		isAddingMilestone = false;
-	}
-
-	async function deleteCustomMilestone(id: string) {
-		const current = profileStore.activeBond.customMilestones;
-		const updated = current.filter((m) => m.id !== id);
-		await profileStore.updateBond(profileStore.activeBond.id, { customMilestones: updated });
 	}
 
 	async function handleResetData() {
@@ -236,62 +418,123 @@
 	];
 </script>
 
-<Modal bind:open title="Settings & Customization" description="Customize your relationship tracker" {onclose}>
+<Modal
+	bind:open
+	title={isNewBond
+		? 'Add Relationship or Friendship'
+		: showAppWideSettings
+			? 'Settings & Customization'
+			: `Edit ${currentBond.type === 'friendship' ? 'Friendship' : 'Relationship'}`}
+	description={isNewBond
+		? 'Track another romantic relationship or friendship'
+		: showAppWideSettings
+			? 'Customize your relationship tracker'
+			: `Configure names, dates, themes, and notifications`}
+	{onclose}
+>
 	<div class="space-y-6 pb-4">
-		<!-- Relationships & Bonds Switcher Quick Action -->
-		<section class="p-3.5 rounded-2xl bg-card border border-border space-y-2">
-			<div class="flex items-center justify-between">
-				<div class="space-y-0.5">
-					<div class="text-sm font-semibold flex items-center gap-1.5 text-foreground">
-						<Users class="h-4 w-4 text-primary" />
-						<span>Active Bond</span>
-					</div>
-					<div class="text-xs text-muted-foreground">
-						Currently: <span class="font-medium text-foreground">{profileStore.activeBond.names}</span>
-						({profileStore.activeBond.type === 'friendship' ? '🌿 Friendship' : '💖 Relationship'})
+		<!-- Active Bond Switcher Quick Action (Header gear mode only) -->
+		{#if showAppWideSettings && !isNewBond}
+			<section class="p-3.5 rounded-2xl bg-card border border-border space-y-2">
+				<div class="flex items-center justify-between">
+					<div class="space-y-0.5">
+						<div class="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+							<Users class="h-4 w-4 text-primary" />
+							<span>Active Bond</span>
+						</div>
+						<div class="text-xs text-muted-foreground">
+							Currently: <span class="font-medium text-foreground">{currentBond.names}</span>
+							({currentBond.type === 'friendship' ? '🌿 Friendship' : '💖 Relationship'})
+						</div>
 					</div>
 				</div>
+				{#if onOpenSwitcher}
+					<Button variant="outline" size="sm" class="w-full mt-1.5" onclick={onOpenSwitcher}>
+						<span>Manage & Switch Bonds ({profileStore.state.bonds.length})</span>
+					</Button>
+				{/if}
+			</section>
+		{/if}
+
+		<!-- Bond Type Selector -->
+		<section class="space-y-1.5">
+			<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Bond Type</span>
+			<div class="grid grid-cols-2 gap-2.5">
+				<button
+					type="button"
+					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {bondType === 'romantic'
+						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
+						: 'border-border bg-card/60 text-muted-foreground hover:bg-accent'}"
+					onclick={() => handleTypeChange('romantic')}
+				>
+					<div class="flex items-center gap-2 font-bold text-sm text-foreground">
+						<Heart class="h-4 w-4 text-rose-500 fill-rose-500/20" />
+						<span>Relationship</span>
+					</div>
+					<p class="text-[11px] text-muted-foreground mt-0.5">Romantic couple & anniversaries</p>
+				</button>
+
+				<button
+					type="button"
+					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {bondType === 'friendship'
+						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
+						: 'border-border bg-card/60 text-muted-foreground hover:bg-accent'}"
+					onclick={() => handleTypeChange('friendship')}
+				>
+					<div class="flex items-center gap-2 font-bold text-sm text-foreground">
+						<Sparkles class="h-4 w-4 text-emerald-500 fill-emerald-500/20" />
+						<span>Friendship</span>
+					</div>
+					<p class="text-[11px] text-muted-foreground mt-0.5">Platonic best friends & bonds</p>
+				</button>
 			</div>
-			{#if onOpenSwitcher}
-				<Button variant="outline" size="sm" class="w-full mt-1.5" onclick={onOpenSwitcher}>
-					<span>Manage & Switch Bonds ({profileStore.state.bonds.length})</span>
-				</Button>
-			{/if}
 		</section>
 
-		<!-- Names & Start Date of Active Bond -->
+		<!-- Names & Start Date of this Bond -->
 		<section class="space-y-3">
-			<label for="settings-names" class="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-				{profileStore.activeBond.type === 'friendship' ? 'Friend Names' : 'Partner Names'}
-			</label>
-			<Input
-				id="settings-names"
-				value={profileStore.activeBond.names}
-				placeholder="e.g. Emma & Paul"
-				oninput={(e) => profileStore.update({ names: (e.target as HTMLInputElement).value })}
-			/>
+			<div>
+				<label for="settings-names" class="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+					{bondType === 'friendship' ? 'Friend Names' : 'Partner Names'}
+				</label>
+				<Input
+					id="settings-names"
+					value={isNewBond ? bondNames : currentBond.names}
+					placeholder={bondType === 'friendship' ? 'e.g. Alex & Sam' : 'e.g. Emma & Paul'}
+					oninput={(e) => {
+						const val = (e.target as HTMLInputElement).value;
+						bondNames = val;
+						if (!isNewBond) handleLiveUpdate({ names: val });
+					}}
+				/>
+			</div>
 
-			<label for="settings-date" class="text-xs font-bold uppercase tracking-wider text-muted-foreground block pt-1">
-				{profileStore.activeBond.type === 'friendship' ? 'Friends Since Date' : 'Together Since Date'}
-			</label>
-			<Input
-				id="settings-date"
-				type="date"
-				value={profileStore.activeBond.togetherSince}
-				onchange={(e) => profileStore.update({ togetherSince: (e.target as HTMLInputElement).value })}
-			/>
+			<div>
+				<label for="settings-date" class="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+					{bondType === 'friendship' ? 'Friends Since Date' : 'Together Since Date'}
+				</label>
+				<Input
+					id="settings-date"
+					type="date"
+					value={isNewBond ? bondTogetherSince : currentBond.togetherSince}
+					onchange={(e) => {
+						const val = (e.target as HTMLInputElement).value;
+						bondTogetherSince = val;
+						if (!isNewBond) handleLiveUpdate({ togetherSince: val });
+					}}
+				/>
+			</div>
 		</section>
 
-		<!-- Photo for Active Bond -->
+		<!-- Photo for this Bond -->
 		<section class="space-y-3">
 			<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-				{profileStore.activeBond.type === 'friendship' ? 'Friend Photo' : 'Couple Photo'}
+				{bondType === 'friendship' ? 'Friend Photo' : 'Couple Photo'}
 			</span>
 			<div class="flex items-center gap-4">
 				<div class="h-16 w-16 rounded-2xl overflow-hidden bg-muted border border-border flex items-center justify-center shrink-0">
-					{#if profileStore.activeBond.photoUrl}
-						<img src={profileStore.activeBond.photoUrl} alt="Bond" class="h-full w-full object-cover" />
-					{:else if profileStore.activeBond.type === 'friendship'}
+					{#if (isNewBond ? bondPhotoUrl : currentBond.photoUrl)}
+						<img src={isNewBond ? bondPhotoUrl : currentBond.photoUrl} alt="Bond" class="h-full w-full object-cover" />
+					{:else if bondType === 'friendship'}
 						<Sparkles class="h-6 w-6 text-muted-foreground" />
 					{:else}
 						<Upload class="h-6 w-6 text-muted-foreground" />
@@ -308,10 +551,10 @@
 					/>
 					<Button size="sm" variant="outline" onclick={() => fileInputRef?.click()}>
 						<Upload class="h-4 w-4 mr-1.5" />
-						<span>{profileStore.activeBond.photoUrl ? 'Change Photo' : 'Upload Photo'}</span>
+						<span>{(isNewBond ? bondPhotoUrl : currentBond.photoUrl) ? 'Change Photo' : 'Upload Photo'}</span>
 					</Button>
 
-					{#if profileStore.activeBond.photoUrl}
+					{#if (isNewBond ? bondPhotoUrl : currentBond.photoUrl)}
 						<Button size="sm" variant="ghost" class="text-destructive hover:bg-destructive/10" onclick={removePhoto}>
 							<Trash2 class="h-4 w-4 mr-1.5" />
 							<span>Remove Photo</span>
@@ -321,20 +564,23 @@
 			</div>
 		</section>
 
-		<!-- UI Style (Modern vs Modern Cover vs Traditional) -->
+		<!-- UI Style Theme (Configured Per-Bond) -->
 		<section class="space-y-3">
 			<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">UI Style Theme</span>
 			<div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
 				<button
 					type="button"
-					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {profileStore.state.uiTheme === 'modern'
-						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground'
+					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {activeTheme === 'modern'
+						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
 						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
-					onclick={() => profileStore.setUITheme('modern')}
+					onclick={() => {
+						bondUiTheme = 'modern';
+						if (!isNewBond) void profileStore.setUITheme('modern', currentBond.id);
+					}}
 				>
 					<div class="flex items-center justify-between font-bold text-sm">
 						<span>Modern UI</span>
-						{#if profileStore.state.uiTheme === 'modern'}
+						{#if activeTheme === 'modern'}
 							<Check class="h-4 w-4 text-primary" />
 						{/if}
 					</div>
@@ -343,14 +589,17 @@
 
 				<button
 					type="button"
-					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {profileStore.state.uiTheme === 'cover'
-						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground'
+					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {activeTheme === 'cover'
+						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
 						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
-					onclick={() => profileStore.setUITheme('cover')}
+					onclick={() => {
+						bondUiTheme = 'cover';
+						if (!isNewBond) void profileStore.setUITheme('cover', currentBond.id);
+					}}
 				>
 					<div class="flex items-center justify-between font-bold text-sm">
 						<span>Cover Image</span>
-						{#if profileStore.state.uiTheme === 'cover'}
+						{#if activeTheme === 'cover'}
 							<Check class="h-4 w-4 text-primary" />
 						{/if}
 					</div>
@@ -359,14 +608,17 @@
 
 				<button
 					type="button"
-					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {profileStore.state.uiTheme === 'traditional'
-						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground'
+					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {activeTheme === 'traditional'
+						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
 						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
-					onclick={() => profileStore.setUITheme('traditional')}
+					onclick={() => {
+						bondUiTheme = 'traditional';
+						if (!isNewBond) void profileStore.setUITheme('traditional', currentBond.id);
+					}}
 				>
 					<div class="flex items-center justify-between font-bold text-sm">
 						<span>Traditional</span>
-						{#if profileStore.state.uiTheme === 'traditional'}
+						{#if activeTheme === 'traditional'}
 							<Check class="h-4 w-4 text-primary" />
 						{/if}
 					</div>
@@ -375,57 +627,69 @@
 			</div>
 		</section>
 
-		<!-- Dark Mode & Palette -->
+		<!-- Color Appearance & Accent Palette (Configured Per-Bond) -->
 		<section class="space-y-3">
 			<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Color Appearance</span>
 			<div class="grid grid-cols-3 gap-2">
 				<button
 					type="button"
-					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {profileStore.state.colorMode === 'system'
+					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {activeMode === 'system'
 						? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
 						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
-					onclick={() => profileStore.setColorMode('system')}
+					onclick={() => {
+						bondColorMode = 'system';
+						if (!isNewBond) void profileStore.setColorMode('system', currentBond.id);
+					}}
 				>
-					<Monitor class="h-4 w-4 {profileStore.state.colorMode === 'system' ? 'text-primary' : 'text-muted-foreground'}" />
+					<Monitor class="h-4 w-4 {activeMode === 'system' ? 'text-primary' : 'text-muted-foreground'}" />
 					<span class="text-xs">System</span>
 				</button>
 
 				<button
 					type="button"
-					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {profileStore.state.colorMode === 'light'
+					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {activeMode === 'light'
 						? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
 						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
-					onclick={() => profileStore.setColorMode('light')}
+					onclick={() => {
+						bondColorMode = 'light';
+						if (!isNewBond) void profileStore.setColorMode('light', currentBond.id);
+					}}
 				>
-					<Sun class="h-4 w-4 {profileStore.state.colorMode === 'light' ? 'text-primary' : 'text-muted-foreground'}" />
+					<Sun class="h-4 w-4 {activeMode === 'light' ? 'text-primary' : 'text-muted-foreground'}" />
 					<span class="text-xs">Light</span>
 				</button>
 
 				<button
 					type="button"
-					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {profileStore.state.colorMode === 'dark'
+					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {activeMode === 'dark'
 						? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
 						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
-					onclick={() => profileStore.setColorMode('dark')}
+					onclick={() => {
+						bondColorMode = 'dark';
+						if (!isNewBond) void profileStore.setColorMode('dark', currentBond.id);
+					}}
 				>
-					<Moon class="h-4 w-4 {profileStore.state.colorMode === 'dark' ? 'text-primary' : 'text-muted-foreground'}" />
+					<Moon class="h-4 w-4 {activeMode === 'dark' ? 'text-primary' : 'text-muted-foreground'}" />
 					<span class="text-xs">Dark</span>
 				</button>
 			</div>
 
 			<!-- Accent Palette -->
 			<div class="pt-2">
-				<span class="text-[11px] text-muted-foreground font-medium block mb-2">Accent Color</span>
+				<span class="text-[11px] text-muted-foreground font-medium block mb-2">Accent Color Palette</span>
 				<div class="flex items-center gap-3 px-2">
 					{#each palettes as p}
 						<button
 							type="button"
-							class="h-8 w-8 rounded-full {p.bg} transition-transform cursor-pointer flex items-center justify-center {profileStore.state.colorPalette === p.id ? 'ring-5 ring-primary/30 scale-110' : 'opacity-80 hover:opacity-100'}"
-							onclick={() => profileStore.setColorPalette(p.id)}
+							class="h-8 w-8 rounded-full {p.bg} transition-transform cursor-pointer flex items-center justify-center {activePalette === p.id ? 'ring-5 ring-primary/30 scale-110' : 'opacity-80 hover:opacity-100'}"
+							onclick={() => {
+								bondColorPalette = p.id;
+								if (!isNewBond) void profileStore.setColorPalette(p.id, currentBond.id);
+							}}
 							title={p.name}
 							aria-label={p.name}
 						>
-							{#if profileStore.state.colorPalette === p.id}
+							{#if activePalette === p.id}
 								<Check class="h-4 w-4 text-white" />
 							{/if}
 						</button>
@@ -434,253 +698,467 @@
 			</div>
 		</section>
 
-		<!-- Push Notifications Toggle -->
-		<section class="p-3 rounded-2xl bg-card border border-border space-y-3">
+
+		<!-- Ticking Seconds Toggle (Per-Bond) -->
+		<section class="flex items-center justify-between p-3 rounded-2xl bg-card border border-border">
+			<div>
+				<div class="text-sm font-semibold text-foreground flex items-center gap-1.5">
+					<Clock class="h-4 w-4 text-primary" />
+					<span>Live Ticking Seconds</span>
+				</div>
+				<div class="text-xs text-muted-foreground">Show live seconds counter for this bond</div>
+			</div>
+			<Switch
+				checked={isNewBond ? bondShowSeconds : (currentBond.showSeconds ?? profileStore.state.showSeconds)}
+				onchange={(val) => {
+					bondShowSeconds = val;
+					if (!isNewBond) handleLiveUpdate({ showSeconds: val });
+				}}
+			/>
+		</section>
+
+		<!-- Push Notifications & Milestone Categories (Configured Per-Bond) -->
+		<section class="p-3.5 rounded-2xl bg-card border border-border space-y-3">
 			<div class="flex items-center justify-between">
 				<div class="space-y-0.5">
 					<div class="text-sm font-semibold flex items-center gap-1.5 text-foreground">
 						<BellRing class="h-4 w-4 text-primary" />
-						<span>Milestone Notifications</span>
+						<span>Bond Notifications</span>
 					</div>
-					<div class="text-xs text-muted-foreground">Get alerted on anniversaries & special days</div>
+					<div class="text-xs text-muted-foreground">Alert on milestones for this relationship</div>
 				</div>
 				<Switch
-					checked={profileStore.state.pushSubscribed}
-					disabled={isPushLoading}
-					onchange={handlePushToggle}
+					checked={isNewBond ? bondNotificationsEnabled : (currentBond.notificationsEnabled ?? true)}
+					onchange={(v) => {
+						bondNotificationsEnabled = v;
+						if (!isNewBond) handleLiveUpdate({ notificationsEnabled: v });
+					}}
 				/>
 			</div>
 
-			{#if profileStore.state.pushSubscribed}
-				<div class="pt-2 border-t border-border/50 space-y-2">
-					<div class="flex items-center justify-between gap-2">
-						<span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓ Device Connected</span>
-						<Button
-							size="sm"
-							variant="outline"
-							class="h-7 text-xs px-2.5"
-							onclick={handleTestPush}
-							disabled={isPushLoading || !networkStore.isOnline}
-						>
-							<span>{networkStore.isOnline ? 'Test Alert' : 'Offline'}</span>
-						</Button>
-					</div>
+			{#if (isNewBond ? bondNotificationsEnabled : (currentBond.notificationsEnabled ?? true))}
+				<div class="pt-2 border-t border-border/50 space-y-2.5">
+					<span class="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+						Milestone Categories
+					</span>
 
-					<div class="flex items-center gap-1.5 pt-1">
-						<Button
-							size="sm"
-							variant="outline"
-							class="flex-1 h-7 text-[11px] px-2"
-							onclick={handleTestMilestonePush}
-							disabled={isPushLoading || !networkStore.isOnline}
-							title="Sends a test milestone alert formatted specifically for your active relationship/friendship"
-						>
-							<span>Test Milestone Alert</span>
-						</Button>
-						<Button
-							size="sm"
-							variant="outline"
-							class="flex-1 h-7 text-[11px] px-2"
-							onclick={handleTriggerScheduler}
-							disabled={isPushLoading || !networkStore.isOnline}
-							title="Triggers the server's milestone evaluation logic on all registered bonds right now"
-						>
-							<span>Run Cron Check</span>
-						</Button>
-					</div>
-				</div>
-
-			{:else if profileStore.state.pushIntent}
-				<div class="pt-2 border-t border-border/50 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
-					<CloudOff class="h-3.5 w-3.5 shrink-0" />
-					<span>Waiting for a connection to activate on this device</span>
-				</div>
-			{/if}
-
-			{#if pushStatusMessage}
-				<p class="text-xs text-muted-foreground italic">{pushStatusMessage}</p>
-			{/if}
-		</section>
-
-		<!-- Ticking Seconds Toggle -->
-		<section class="flex items-center justify-between p-3 rounded-2xl bg-card border border-border">
-			<div>
-				<div class="text-sm font-semibold text-foreground">Live Ticking Seconds</div>
-				<div class="text-xs text-muted-foreground">Show live ticking second counters</div>
-			</div>
-			<Switch
-				checked={profileStore.state.showSeconds}
-				onchange={(val) => profileStore.update({ showSeconds: val })}
-			/>
-		</section>
-
-		<!-- Milestones List & Custom Milestones -->
-		<section class="space-y-3">
-			<div class="flex items-center justify-between">
-				<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Milestones for {profileStore.activeBond.names}</span>
-				<Button size="sm" variant="ghost" onclick={() => (isAddingMilestone = !isAddingMilestone)}>
-					<Plus class="h-4 w-4 mr-1" />
-					<span>Add Custom</span>
-				</Button>
-			</div>
-
-			{#if isAddingMilestone}
-				<div class="p-3 rounded-2xl bg-card border border-border space-y-2">
-					<Input placeholder="Milestone Name (e.g. First Date, Moved In)" bind:value={newMilestoneTitle} />
-					<Input type="date" bind:value={newMilestoneDate} />
-					<div class="flex gap-2">
-						<Button size="sm" class="flex-1" onclick={addCustomMilestone}>Save</Button>
-						<Button size="sm" variant="outline" onclick={() => (isAddingMilestone = false)}>Cancel</Button>
-					</div>
-				</div>
-			{/if}
-
-			<!-- Filter tabs -->
-			<div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-				{#each [
-					{ id: 'all' as const, label: 'All' },
-					{ id: 'months' as const, label: 'Months' },
-					{ id: 'years' as const, label: 'Years' },
-					{ id: 'days' as const, label: 'Days' },
-					{ id: 'custom' as const, label: 'Custom' }
-				] as tab}
-					<button
-						type="button"
-						class="px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer {selectedMilestoneTab === tab.id
-							? 'bg-primary text-white shadow-sm'
-							: 'bg-card text-muted-foreground hover:text-foreground border border-border'}"
-						onclick={() => (selectedMilestoneTab = tab.id)}
-					>
-						{tab.label}
-					</button>
-				{/each}
-			</div>
-
-			<div class="space-y-2 max-h-52 overflow-y-auto pr-1">
-				{#each filteredMilestones as m}
-					<div class="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border/60 text-xs text-foreground">
+					<!-- Year Anniversaries -->
+					<div class="flex items-center justify-between text-xs text-foreground">
 						<div class="flex items-center gap-2">
-							{#if m.type === 'years'}
-								<PartyPopper class="h-4 w-4 text-amber-500 shrink-0" />
-							{:else if m.type === 'months'}
-								<Sparkles class="h-4 w-4 text-rose-500 shrink-0" />
-							{:else if m.type === 'custom'}
-								<HeartHandshake class="h-4 w-4 text-primary shrink-0" />
-							{:else}
-								<Trophy class="h-4 w-4 text-amber-600 shrink-0" />
-							{/if}
-							<span class="font-medium {m.isAchieved ? 'line-through text-muted-foreground' : 'text-foreground'}">{m.title}</span>
+							<PartyPopper class="h-3.5 w-3.5 text-amber-500" />
+							<span>Yearly Anniversaries (1st, 2nd, 5th...)</span>
 						</div>
-						<div class="flex items-center gap-1.5">
-							<Badge variant={m.isAchieved ? 'secondary' : 'romantic'} class="text-[10px]">
-								{m.isAchieved ? 'Achieved' : `in ${m.daysRemaining} days`}
-							</Badge>
-							{#if m.type === 'custom'}
+						<Switch
+							checked={isNewBond ? bondYearsPref : (currentBond.milestonePrefs?.years ?? true)}
+							onchange={(v) => {
+								bondYearsPref = v;
+								if (!isNewBond) {
+									handleLiveUpdate({
+										milestonePrefs: {
+											...(currentBond.milestonePrefs || {}),
+											years: v,
+											months: currentBond.milestonePrefs?.months ?? true,
+											days: currentBond.milestonePrefs?.days ?? 'all',
+											custom: currentBond.milestonePrefs?.custom ?? true
+										}
+									});
+								}
+							}}
+						/>
+					</div>
+
+					<!-- Month Milestones -->
+					<div class="flex items-center justify-between text-xs text-foreground">
+						<div class="flex items-center gap-2">
+							<Sparkles class="h-3.5 w-3.5 text-rose-500" />
+							<span>Monthly Milestones (1st–11th mo, 18mo...)</span>
+						</div>
+						<Switch
+							checked={isNewBond ? bondMonthsPref : (currentBond.milestonePrefs?.months ?? (currentBond.type === 'friendship' ? false : true))}
+							onchange={(v) => {
+								bondMonthsPref = v;
+								if (!isNewBond) {
+									handleLiveUpdate({
+										milestonePrefs: {
+											...(currentBond.milestonePrefs || {}),
+											years: currentBond.milestonePrefs?.years ?? true,
+											months: v,
+											days: currentBond.milestonePrefs?.days ?? 'all',
+											custom: currentBond.milestonePrefs?.custom ?? true
+										}
+									});
+								}
+							}}
+						/>
+					</div>
+
+					<!-- Day Milestones -->
+					<div class="space-y-1.5 pt-1">
+						<div class="flex items-center justify-between text-xs text-foreground">
+							<div class="flex items-center gap-2">
+
+								<Trophy class="h-3.5 w-3.5 text-amber-600" />
+								<span>Day Milestones</span>
+							</div>
+							<div class="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border/40 text-[11px]">
 								<button
 									type="button"
-									class="text-muted-foreground hover:text-destructive p-1 rounded transition-colors cursor-pointer"
-									onclick={() => deleteCustomMilestone(m.id.replace('custom_', ''))}
-									title="Delete"
-									aria-label="Delete milestone"
+									class="px-2 py-0.5 rounded-md transition-colors cursor-pointer {currentDays === 'all'
+										? 'bg-primary text-white font-semibold shadow-xs'
+										: 'text-muted-foreground hover:text-foreground'}"
+									onclick={() => {
+										bondDaysPref = 'all';
+										if (!isNewBond) {
+											handleLiveUpdate({
+												milestonePrefs: {
+													...(currentBond.milestonePrefs || {}),
+													years: currentBond.milestonePrefs?.years ?? true,
+													months: currentBond.milestonePrefs?.months ?? true,
+													days: 'all',
+													custom: currentBond.milestonePrefs?.custom ?? true
+												}
+											});
+										}
+									}}
 								>
-									<Trash2 class="h-3.5 w-3.5" />
+									All
 								</button>
-							{/if}
+								<button
+									type="button"
+									class="px-2 py-0.5 rounded-md transition-colors cursor-pointer {currentDays === 'major'
+										? 'bg-primary text-white font-semibold shadow-xs'
+										: 'text-muted-foreground hover:text-foreground'}"
+									onclick={() => {
+										bondDaysPref = 'major';
+										if (!isNewBond) {
+											handleLiveUpdate({
+												milestonePrefs: {
+													...(currentBond.milestonePrefs || {}),
+													years: currentBond.milestonePrefs?.years ?? true,
+													months: currentBond.milestonePrefs?.months ?? true,
+													days: 'major',
+													custom: currentBond.milestonePrefs?.custom ?? true
+												}
+											});
+										}
+									}}
+									title="Only 1,000+ days (1000, 2500, 5000...)"
+								>
+									Major (1000+)
+								</button>
+								<button
+									type="button"
+									class="px-2 py-0.5 rounded-md transition-colors cursor-pointer {currentDays === 'off'
+										? 'bg-primary text-white font-semibold shadow-xs'
+										: 'text-muted-foreground hover:text-foreground'}"
+									onclick={() => {
+										bondDaysPref = 'off';
+										if (!isNewBond) {
+											handleLiveUpdate({
+												milestonePrefs: {
+													...(currentBond.milestonePrefs || {}),
+													years: currentBond.milestonePrefs?.years ?? true,
+													months: currentBond.milestonePrefs?.months ?? true,
+													days: 'off',
+													custom: currentBond.milestonePrefs?.custom ?? true
+												}
+											});
+										}
+									}}
+								>
+									Off
+								</button>
+							</div>
 						</div>
 					</div>
-				{/each}
-			</div>
-		</section>
 
-		<!-- On-device storage -->
-		<section class="p-3 rounded-2xl bg-card border border-border space-y-2.5">
-			<div class="text-sm font-semibold flex items-center gap-1.5 text-foreground">
-				<HardDrive class="h-4 w-4 text-primary" />
-				<span>Data on This Device</span>
-			</div>
-			<p class="text-xs text-muted-foreground">
-				Your names, dates and photos never leave this device. That also means this is the
-				only copy — keep a backup.
-			</p>
-
-			{#if storage}
-				<div class="flex items-center justify-between text-[11px] text-muted-foreground font-medium">
-					<span>{storage.usageLabel} used</span>
-					<span>{storage.quotaLabel} available</span>
+					<!-- Custom Moments -->
+					<div class="flex items-center justify-between text-xs text-foreground">
+						<div class="flex items-center gap-2">
+							<HeartHandshake class="h-3.5 w-3.5 text-primary" />
+							<span>Custom Moments</span>
+						</div>
+						<Switch
+							checked={isNewBond ? bondCustomPref : (currentBond.milestonePrefs?.custom ?? true)}
+							onchange={(v) => {
+								bondCustomPref = v;
+								if (!isNewBond) {
+									handleLiveUpdate({
+										milestonePrefs: {
+											...(currentBond.milestonePrefs || {}),
+											years: currentBond.milestonePrefs?.years ?? true,
+											months: currentBond.milestonePrefs?.months ?? true,
+											days: currentBond.milestonePrefs?.days ?? 'all',
+											custom: v
+										}
+									});
+								}
+							}}
+						/>
+					</div>
 				</div>
 			{/if}
+		</section>
 
-			{#if pwaStore.isStoragePersisted}
-				<div class="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-					<ShieldCheck class="h-3.5 w-3.5 shrink-0" />
-					<span>Protected from automatic cleanup</span>
-				</div>
-			{:else}
-				<div class="space-y-2">
-					<div class="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
-						<CloudOff class="h-3.5 w-3.5 shrink-0 mt-0.5" />
-						<span>
-							{pwaStore.isStandalone
-								? 'Storage is not marked as persistent yet.'
-								: 'In a browser tab, iOS can clear this data after ~7 days unused. Install Open Love to your Home Screen to keep it safe.'}
-						</span>
-					</div>
-					<Button
-						size="sm"
-						variant="outline"
-						class="w-full h-8 text-xs"
-						onclick={() => pwaStore.ensurePersistentStorage()}
-					>
-						<ShieldCheck class="h-3.5 w-3.5 mr-1.5" />
-						<span>Request Persistent Storage</span>
+		<!-- Milestones List & Custom Milestones (Per-Bond) -->
+		{#if !isNewBond}
+			<section class="space-y-3">
+				<div class="flex items-center justify-between">
+					<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Milestones for {currentBond.names}</span>
+					<Button size="sm" variant="ghost" onclick={() => (isAddingMilestone = !isAddingMilestone)}>
+						<Plus class="h-4 w-4 mr-1" />
+						<span>Add Custom</span>
 					</Button>
 				</div>
-			{/if}
 
-			<Button variant="outline" class="w-full" onclick={downloadBackup}>
-				<Download class="h-4 w-4 mr-1.5" />
-				<span>Download JSON Backup (All Bonds)</span>
-			</Button>
-		</section>
+				{#if isAddingMilestone}
+					<div class="p-3 rounded-2xl bg-card border border-border space-y-2">
+						<Input placeholder="Milestone Name (e.g. First Date, Moved In)" bind:value={newMilestoneTitle} />
+						<Input type="date" bind:value={newMilestoneDate} />
+						<div class="flex gap-2">
+							<Button size="sm" class="flex-1" onclick={addCustomMilestone}>Save</Button>
+							<Button size="sm" variant="outline" onclick={() => (isAddingMilestone = false)}>Cancel</Button>
+						</div>
+					</div>
+				{/if}
 
-		<!-- Backup & Reset -->
-		<section class="pt-2 border-t border-border space-y-2">
-			<Button variant="outline" class="w-full" onclick={() => (isScanModalOpen = true)}>
-				<QrCode class="h-4 w-4 mr-1.5" />
-				<span>Sync with Partner / Scan QR</span>
-			</Button>
+				<!-- Filter tabs -->
+				<div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+					{#each [
+						{ id: 'all' as const, label: 'All' },
+						{ id: 'months' as const, label: 'Months' },
+						{ id: 'years' as const, label: 'Years' },
+						{ id: 'days' as const, label: 'Days' },
+						{ id: 'custom' as const, label: 'Custom' }
+					] as tab}
+						<button
+							type="button"
+							class="px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer {selectedMilestoneTab === tab.id
+								? 'bg-primary text-white shadow-sm'
+								: 'bg-card text-muted-foreground hover:text-foreground border border-border'}"
+							onclick={() => (selectedMilestoneTab = tab.id)}
+						>
+							{tab.label}
+						</button>
+					{/each}
+				</div>
 
-			<input
-				type="file"
-				accept=".json"
-				class="hidden"
-				bind:this={backupInputRef}
-				onchange={handleBackupImport}
-			/>
-			<Button variant="outline" class="w-full" onclick={() => backupInputRef?.click()}>
-				<UploadCloud class="h-4 w-4 mr-1.5" />
-				<span>Restore from JSON Backup</span>
-			</Button>
+				<div class="space-y-2 max-h-52 overflow-y-auto pr-1">
+					{#each filteredMilestones as m}
+						<div class="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border/60 text-xs text-foreground">
+							<div class="flex items-center gap-2">
+								{#if m.type === 'years'}
+									<PartyPopper class="h-4 w-4 text-amber-500 shrink-0" />
+								{:else if m.type === 'months'}
+									<Sparkles class="h-4 w-4 text-rose-500 shrink-0" />
+								{:else if m.type === 'custom'}
+									<HeartHandshake class="h-4 w-4 text-primary shrink-0" />
+								{:else}
+									<Trophy class="h-4 w-4 text-amber-600 shrink-0" />
+								{/if}
+								<span class="font-medium {m.isAchieved ? 'line-through text-muted-foreground' : 'text-foreground'}">{m.title}</span>
+							</div>
+							<div class="flex items-center gap-1.5">
+								<Badge variant={m.isAchieved ? 'secondary' : 'romantic'} class="text-[10px]">
+									{m.isAchieved ? 'Achieved' : `in ${m.daysRemaining} days`}
+								</Badge>
+								{#if m.type === 'custom'}
+									<button
+										type="button"
+										class="text-muted-foreground hover:text-destructive p-1 rounded transition-colors cursor-pointer"
+										onclick={() => deleteCustomMilestone(m.id.replace('custom_', ''))}
+										title="Delete"
+										aria-label="Delete milestone"
+									>
+										<Trash2 class="h-3.5 w-3.5" />
+									</button>
+								{/if}
+							</div>
+						</div>
+					{/each}
+				</div>
+			</section>
+		{/if}
 
-			<Button variant="ghost" class="w-full text-destructive hover:bg-destructive/10" onclick={handleResetData}>
-				<RotateCcw class="h-4 w-4 mr-1.5" />
-				<span>Reset All Data</span>
-			</Button>
-		</section>
-
-		<!-- App Version Indicator -->
-		<div class="pt-2 pb-1 text-center space-y-1">
-			<div class="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-muted/60 border border-border/50 text-[11px] font-medium text-muted-foreground">
-				<Heart class="h-3 w-3 text-primary fill-primary/30" />
-				<span>Open Love v{APP_VERSION}</span>
+		<!-- Create New Bond Action -->
+		{#if isNewBond}
+			<div class="pt-2">
+				<Button class="w-full h-11" onclick={handleCreateNewBond} disabled={!bondNames.trim() || !bondTogetherSince}>
+					<Plus class="h-4 w-4 mr-2" />
+					<span>Create Bond</span>
+				</Button>
 			</div>
-			<p class="text-[10px] text-muted-foreground/60">Privacy-first & self-hosted
-			<br>Made with 🩵 by Frozd</p>
-			<a class="text-[10px] text-muted-foreground/40" href="https://github.com/frozdbyte/openlove">
-				<Code class="inline size-2.5 mr-0.5" />
-				View Source on GitHub
-			</a>
-		</div>
+		{/if}
+
+		<!-- Delete Bond Button (Scoped edit mode when multiple bonds exist) -->
+		{#if !isNewBond && !showAppWideSettings && profileStore.state.bonds.length > 1}
+			<div class="pt-2 border-t border-border">
+				<Button variant="outline" class="w-full text-destructive hover:bg-destructive/10" onclick={handleDeleteCurrentBond}>
+					<Trash2 class="h-4 w-4 mr-1.5" />
+					<span>Delete Bond</span>
+				</Button>
+			</div>
+		{/if}
+
+		<!-- App-Wide System Settings (Header gear mode only) -->
+		{#if showAppWideSettings && !isNewBond}
+			<!-- Push Notifications Master Connection -->
+			<section class="p-3.5 rounded-2xl bg-card border border-border space-y-3">
+				<div class="flex items-center justify-between">
+					<div class="space-y-0.5">
+						<div class="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+							<BellRing class="h-4 w-4 text-primary" />
+							<span>Device Notifications</span>
+						</div>
+						<div class="text-xs text-muted-foreground">Receive background WebPush alerts on this device</div>
+					</div>
+					<Switch
+						checked={profileStore.state.pushSubscribed}
+						disabled={isPushLoading}
+						onchange={handlePushToggle}
+					/>
+				</div>
+
+				{#if profileStore.state.pushSubscribed}
+					<div class="pt-2 border-t border-border/50 space-y-2">
+						<div class="flex items-center justify-between gap-2">
+							<span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓ Device Connected</span>
+							<Button
+								size="sm"
+								variant="outline"
+								class="h-7 text-xs px-2.5"
+								onclick={handleTestPush}
+								disabled={isPushLoading || !networkStore.isOnline}
+							>
+								<span>{networkStore.isOnline ? 'Test Alert' : 'Offline'}</span>
+							</Button>
+						</div>
+
+						<div class="flex items-center gap-1.5 pt-1">
+							<Button
+								size="sm"
+								variant="outline"
+								class="flex-1 h-7 text-[11px] px-2"
+								onclick={handleTestMilestonePush}
+								disabled={isPushLoading || !networkStore.isOnline}
+								title="Sends a test milestone alert formatted specifically for your active relationship/friendship"
+							>
+								<span>Test Milestone Alert</span>
+							</Button>
+							<Button
+								size="sm"
+								variant="outline"
+								class="flex-1 h-7 text-[11px] px-2"
+								onclick={handleTriggerScheduler}
+								disabled={isPushLoading || !networkStore.isOnline}
+								title="Triggers the server's milestone evaluation logic on all registered bonds right now"
+							>
+								<span>Run Cron Check</span>
+							</Button>
+						</div>
+					</div>
+				{:else if profileStore.state.pushIntent}
+					<div class="pt-2 border-t border-border/50 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
+						<CloudOff class="h-3.5 w-3.5 shrink-0" />
+						<span>Waiting for a connection to activate on this device</span>
+					</div>
+				{/if}
+
+				{#if pushStatusMessage}
+					<p class="text-xs text-muted-foreground italic">{pushStatusMessage}</p>
+				{/if}
+			</section>
+
+			<!-- On-device storage durability -->
+			<section class="p-3.5 rounded-2xl bg-card border border-border space-y-2.5">
+				<div class="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+					<HardDrive class="h-4 w-4 text-primary" />
+					<span>Data on This Device</span>
+				</div>
+				<p class="text-xs text-muted-foreground">
+					Your names, dates and photos never leave this device. That also means this is the
+					only copy — keep a backup.
+				</p>
+
+				{#if storage}
+					<div class="flex items-center justify-between text-[11px] text-muted-foreground font-medium">
+						<span>{storage.usageLabel} used</span>
+						<span>{storage.quotaLabel} available</span>
+					</div>
+				{/if}
+
+				{#if pwaStore.isStoragePersisted}
+					<div class="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+						<ShieldCheck class="h-3.5 w-3.5 shrink-0" />
+						<span>Protected from automatic cleanup</span>
+					</div>
+				{:else}
+					<div class="space-y-2">
+						<div class="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
+							<CloudOff class="h-3.5 w-3.5 shrink-0 mt-0.5" />
+							<span>
+								{pwaStore.isStandalone
+									? 'Storage is not marked as persistent yet.'
+									: 'In a browser tab, iOS can clear this data after ~7 days unused. Install Open Love to your Home Screen to keep it safe.'}
+							</span>
+						</div>
+						<Button
+							size="sm"
+							variant="outline"
+							class="w-full h-8 text-xs"
+							onclick={() => pwaStore.ensurePersistentStorage()}
+						>
+							<ShieldCheck class="h-3.5 w-3.5 mr-1.5" />
+							<span>Request Persistent Storage</span>
+						</Button>
+					</div>
+				{/if}
+
+				<Button variant="outline" class="w-full" onclick={downloadBackup}>
+					<Download class="h-4 w-4 mr-1.5" />
+					<span>Download JSON Backup (All Bonds)</span>
+				</Button>
+			</section>
+
+			<!-- Backup & Reset -->
+			<section class="pt-2 border-t border-border space-y-2">
+				<Button variant="outline" class="w-full" onclick={() => (isScanModalOpen = true)}>
+					<QrCode class="h-4 w-4 mr-1.5" />
+					<span>Sync with Partner / Scan QR</span>
+				</Button>
+
+				<input
+					type="file"
+					accept=".json"
+					class="hidden"
+					bind:this={backupInputRef}
+					onchange={handleBackupImport}
+				/>
+				<Button variant="outline" class="w-full" onclick={() => backupInputRef?.click()}>
+					<UploadCloud class="h-4 w-4 mr-1.5" />
+					<span>Restore from JSON Backup</span>
+				</Button>
+
+				<Button variant="ghost" class="w-full text-destructive hover:bg-destructive/10" onclick={handleResetData}>
+					<RotateCcw class="h-4 w-4 mr-1.5" />
+					<span>Reset All Data</span>
+				</Button>
+			</section>
+
+			<!-- App Version Indicator -->
+			<div class="pt-2 pb-1 text-center space-y-1">
+				<div class="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-muted/60 border border-border/50 text-[11px] font-medium text-muted-foreground">
+					<Heart class="h-3 w-3 text-primary fill-primary/30" />
+					<span>Open Love v{APP_VERSION}</span>
+				</div>
+				<p class="text-[10px] text-muted-foreground/60">Privacy-first & self-hosted
+				<br>Made with 🩵 by Frozd</p>
+				<a class="text-[10px] text-muted-foreground/40" href="https://github.com/frozdbyte/openlove">
+					<Code class="inline size-2.5 mr-0.5" />
+					View Source on GitHub
+				</a>
+			</div>
+		{/if}
 	</div>
 </Modal>
 

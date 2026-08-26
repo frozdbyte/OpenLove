@@ -153,13 +153,15 @@
 <!-- Modals & Sheets -->
 <SettingsSheet
 	bind:open={isSettingsOpen}
-	milestones={milestoneData.milestones}
+	showAppWideSettings={true}
+	targetBondId={null}
 	onOpenSwitcher={() => {
 		isSettingsOpen = false;
 		isSwitcherOpen = true;
 	}}
 	onclose={() => (isSettingsOpen = false)}
 />
+
 
 <ShareModal
 	bind:open={isShareOpen}

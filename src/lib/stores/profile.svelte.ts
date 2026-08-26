@@ -8,7 +8,12 @@ import {
 	clearAllStorage
 } from '$lib/storage/db';
 import type { CoupleProfile, ColorMode, ColorPalette, UIThemeId } from '$lib/types/profile';
-import type { AppState, Bond } from '$lib/types/bonds';
+import {
+	DEFAULT_MILESTONE_PREFS_FRIENDSHIP,
+	DEFAULT_MILESTONE_PREFS_ROMANTIC,
+	type AppState,
+	type Bond
+} from '$lib/types/bonds';
 
 export type ProfileMutationHook = (
 	next: AppState,
@@ -44,25 +49,29 @@ class ProfileStore {
 
 	/**
 	 * Backward compatibility alias for components reading `profileStore.profile`.
-	 * Reflects the active bond's data and global preferences.
+	 * Reflects the active bond's data and UI preferences.
 	 */
-	profile = $derived<CoupleProfile>({
-		names: this.activeBond.names,
-		togetherSince: this.activeBond.togetherSince,
-		photoBlob: this.activeBond.photoBlob,
-		photoUrl: this.activeBond.photoUrl,
-		uiTheme: this.state.uiTheme,
-		colorMode: this.state.colorMode,
-		colorPalette: this.activeBond.colorPalette || this.state.colorPalette,
-		showSeconds: this.state.showSeconds,
-		isConfigured: this.state.isConfigured,
-		pushSubscribed: this.state.pushSubscribed,
-		pushIntent: this.state.pushIntent,
-		customMilestones: this.activeBond.customMilestones
-	});
+	get profile(): CoupleProfile {
+		const active = this.activeBond;
+		return {
+			names: active.names,
+			togetherSince: active.togetherSince,
+			photoBlob: active.photoBlob,
+			photoUrl: active.photoUrl,
+			uiTheme: active.uiTheme ?? this.state.uiTheme,
+			colorMode: active.colorMode ?? this.state.colorMode,
+			colorPalette: active.colorPalette ?? this.state.colorPalette,
+			showSeconds: active.showSeconds ?? this.state.showSeconds,
+			isConfigured: this.state.isConfigured,
+			pushSubscribed: this.state.pushSubscribed,
+			pushIntent: this.state.pushIntent,
+			customMilestones: active.customMilestones
+		};
+	}
 
 	/**
 	 * Resolves once IndexedDB has been read.
+
 	 */
 	readonly ready: Promise<void>;
 	private resolveReady!: () => void;
@@ -103,13 +112,14 @@ class ProfileStore {
 		}
 	}
 
-	private applyThemeAndDarkMode() {
+	applyThemeAndDarkMode() {
 		if (typeof document === 'undefined') return;
 
 		const root = document.documentElement;
-		const colorMode = this.state.colorMode;
-		const colorPalette = this.activeBond.colorPalette || this.state.colorPalette;
-		const uiTheme = this.state.uiTheme;
+		const active = this.activeBond;
+		const colorMode = active.colorMode ?? this.state.colorMode;
+		const colorPalette = active.colorPalette ?? this.state.colorPalette;
+		const uiTheme = active.uiTheme ?? this.state.uiTheme;
 
 		try {
 			localStorage.setItem('openlove_theme_mode', colorMode);
@@ -149,7 +159,9 @@ class ProfileStore {
 		if (typeof window === 'undefined') return;
 		const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 		mediaQuery.addEventListener('change', () => {
-			if (this.state.colorMode === 'system') {
+			const active = this.activeBond;
+			const mode = active.colorMode ?? this.state.colorMode;
+			if (mode === 'system') {
 				this.applyThemeAndDarkMode();
 			}
 		});
@@ -181,9 +193,30 @@ class ProfileStore {
 	}
 
 	/**
-	 * Add a new bond.
+	 * Add a new bond. Inherits UI theme and color palette from the currently active bond.
 	 */
-	async addBond(bond: Bond) {
+	async addBond(newBond: Partial<Bond>) {
+		const currentActive = this.activeBond;
+		const bond: Bond = {
+			id: newBond.id || `bond_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+			type: newBond.type || 'romantic',
+			names: newBond.names || '',
+			togetherSince: newBond.togetherSince || new Date().toISOString().split('T')[0],
+			photoBlob: newBond.photoBlob ?? null,
+			photoUrl: newBond.photoUrl,
+			customMilestones: newBond.customMilestones || [],
+			notificationsEnabled: newBond.notificationsEnabled ?? true,
+			milestonePrefs:
+				newBond.milestonePrefs ||
+				(newBond.type === 'friendship'
+					? DEFAULT_MILESTONE_PREFS_FRIENDSHIP
+					: DEFAULT_MILESTONE_PREFS_ROMANTIC),
+			uiTheme: newBond.uiTheme ?? currentActive.uiTheme ?? this.state.uiTheme,
+			colorPalette: newBond.colorPalette ?? currentActive.colorPalette ?? this.state.colorPalette,
+			colorMode: newBond.colorMode ?? currentActive.colorMode ?? this.state.colorMode,
+			showSeconds: newBond.showSeconds ?? currentActive.showSeconds ?? this.state.showSeconds
+		};
+
 		const previous = { ...this.state };
 		this.state.bonds = [...this.state.bonds, bond];
 		this.state.activeBondId = bond.id;
@@ -191,6 +224,7 @@ class ProfileStore {
 		this.applyThemeAndDarkMode();
 		await saveAppStateToStorage(this.state);
 		this.notifyMutation(previous);
+		return bond;
 	}
 
 	/**
@@ -244,28 +278,26 @@ class ProfileStore {
 			pushIntent
 		} = fields;
 
-		if (uiTheme !== undefined) this.state.uiTheme = uiTheme;
-		if (colorMode !== undefined) this.state.colorMode = colorMode;
-		if (colorPalette !== undefined) this.state.colorPalette = colorPalette;
-		if (showSeconds !== undefined) this.state.showSeconds = showSeconds;
 		if (isConfigured !== undefined) this.state.isConfigured = isConfigured;
 		if (pushSubscribed !== undefined) this.state.pushSubscribed = pushSubscribed;
 		if (pushIntent !== undefined) this.state.pushIntent = pushIntent;
 
 		// Update active bond
-		if (names !== undefined || togetherSince !== undefined || customMilestones !== undefined) {
-			this.state.bonds = this.state.bonds.map((b) => {
-				if (b.id === this.state.activeBondId) {
-					return {
-						...b,
-						names: names !== undefined ? names : b.names,
-						togetherSince: togetherSince !== undefined ? togetherSince : b.togetherSince,
-						customMilestones: customMilestones !== undefined ? customMilestones : b.customMilestones
-					};
-				}
-				return b;
-			});
-		}
+		this.state.bonds = this.state.bonds.map((b) => {
+			if (b.id === this.state.activeBondId) {
+				return {
+					...b,
+					names: names !== undefined ? names : b.names,
+					togetherSince: togetherSince !== undefined ? togetherSince : b.togetherSince,
+					customMilestones: customMilestones !== undefined ? customMilestones : b.customMilestones,
+					uiTheme: uiTheme !== undefined ? uiTheme : b.uiTheme,
+					colorPalette: colorPalette !== undefined ? colorPalette : b.colorPalette,
+					colorMode: colorMode !== undefined ? colorMode : b.colorMode,
+					showSeconds: showSeconds !== undefined ? showSeconds : b.showSeconds
+				};
+			}
+			return b;
+		});
 
 		this.applyThemeAndDarkMode();
 		await saveAppStateToStorage(this.state);
@@ -286,16 +318,19 @@ class ProfileStore {
 		await saveAppStateToStorage(this.state);
 	}
 
-	async setUITheme(uiTheme: UIThemeId) {
-		await this.update({ uiTheme });
+	async setUITheme(uiTheme: UIThemeId, targetBondId?: string) {
+		const bondId = targetBondId || this.state.activeBondId;
+		await this.updateBond(bondId, { uiTheme });
 	}
 
-	async setColorMode(colorMode: ColorMode) {
-		await this.update({ colorMode });
+	async setColorMode(colorMode: ColorMode, targetBondId?: string) {
+		const bondId = targetBondId || this.state.activeBondId;
+		await this.updateBond(bondId, { colorMode });
 	}
 
-	async setColorPalette(colorPalette: ColorPalette) {
-		await this.update({ colorPalette });
+	async setColorPalette(colorPalette: ColorPalette, targetBondId?: string) {
+		const bondId = targetBondId || this.state.activeBondId;
+		await this.updateBond(bondId, { colorPalette });
 	}
 
 	async completeOnboarding() {

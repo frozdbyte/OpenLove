@@ -21,7 +21,10 @@ export interface Bond {
 	customMilestones: CustomMilestone[];
 	notificationsEnabled: boolean;   // Master notification toggle for this bond
 	milestonePrefs: MilestoneCategoryPrefs;
-	colorPalette?: ColorPalette;     // Optional per-bond accent override
+	uiTheme?: UIThemeId;             // Per-bond UI style (modern / cover / traditional)
+	colorPalette?: ColorPalette;     // Per-bond accent color
+	colorMode?: ColorMode;           // Per-bond color appearance (system / light / dark)
+	showSeconds?: boolean;           // Per-bond ticking seconds toggle
 }
 
 export interface AppState {

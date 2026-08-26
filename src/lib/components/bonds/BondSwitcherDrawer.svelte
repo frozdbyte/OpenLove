@@ -6,7 +6,7 @@
 	import Badge from '$lib/components/ui/badge';
 	import { Heart, Sparkles, Plus, Check, Edit3, Calendar } from '@lucide/svelte';
 	import { calculateTimeBreakdown } from '$lib/utils/time';
-	import BondEditModal from './BondEditModal.svelte';
+	import SettingsSheet from '$lib/components/settings/SettingsSheet.svelte';
 
 	interface Props {
 		open?: boolean;
@@ -15,18 +15,21 @@
 
 	let { open = $bindable(false), onclose }: Props = $props();
 
-	let isEditModalOpen = $state(false);
-	let selectedBondToEdit = $state<Bond | null>(null);
+	let isSettingsOpen = $state(false);
+	let selectedBondIdToEdit = $state<string | null>(null);
+	let isNewBond = $state(false);
 
 	function openAddModal() {
-		selectedBondToEdit = null;
-		isEditModalOpen = true;
+		selectedBondIdToEdit = null;
+		isNewBond = true;
+		isSettingsOpen = true;
 	}
 
 	function openEditModal(bond: Bond, e: MouseEvent) {
 		e.stopPropagation();
-		selectedBondToEdit = bond;
-		isEditModalOpen = true;
+		selectedBondIdToEdit = bond.id;
+		isNewBond = false;
+		isSettingsOpen = true;
 	}
 
 	async function handleSelectBond(id: string) {
@@ -127,11 +130,14 @@
 	</div>
 </Modal>
 
-<BondEditModal
-	bind:open={isEditModalOpen}
-	bondToEdit={selectedBondToEdit}
+<SettingsSheet
+	bind:open={isSettingsOpen}
+	targetBondId={selectedBondIdToEdit}
+	{isNewBond}
+	showAppWideSettings={false}
 	onclose={() => {
-		isEditModalOpen = false;
-		selectedBondToEdit = null;
+		isSettingsOpen = false;
+		selectedBondIdToEdit = null;
+		isNewBond = false;
 	}}
 />
