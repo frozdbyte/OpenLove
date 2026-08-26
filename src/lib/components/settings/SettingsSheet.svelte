@@ -257,10 +257,10 @@
 			</div>
 		</section>
 
-		<!-- UI Style (Modern vs Traditional) -->
+		<!-- UI Style (Modern vs Modern Cover vs Traditional) -->
 		<section class="space-y-3">
 			<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">UI Style Theme</span>
-			<div class="grid grid-cols-2 gap-2.5">
+			<div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
 				<button
 					type="button"
 					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {profileStore.profile.uiTheme === 'modern'
@@ -268,6 +268,7 @@
 						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
 					onclick={() => profileStore.setUITheme('modern')}
 				>
+					
 					<div class="flex items-center justify-between font-bold text-sm">
 						<span>Modern UI</span>
 						{#if profileStore.profile.uiTheme === 'modern'}
@@ -275,6 +276,22 @@
 						{/if}
 					</div>
 					<p class="text-[11px] text-muted-foreground mt-1">Cards, glowing avatar & progress metrics</p>
+				</button>
+
+				<button
+					type="button"
+					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {profileStore.profile.uiTheme === 'cover'
+						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground'
+						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
+					onclick={() => profileStore.setUITheme('cover')}
+				>
+					<div class="flex items-center justify-between font-bold text-sm">
+						<span>Cover Image</span>
+						{#if profileStore.profile.uiTheme === 'cover'}
+							<Check class="h-4 w-4 text-primary" />
+						{/if}
+					</div>
+					<p class="text-[11px] text-muted-foreground mt-1">Full-bleed photo, top header names & cards</p>
 				</button>
 
 				<button
@@ -334,7 +351,7 @@
 			</div>
 
 			<!-- Accent Palette -->
-			{#if profileStore.profile.uiTheme === 'modern'}
+			{#if profileStore.profile.uiTheme !== 'traditional'}
 				<div class="pt-2">
 					<span class="text-[11px] text-muted-foreground font-medium block mb-2">Accent Color</span>
 					<div class="flex items-center gap-3 px-2">

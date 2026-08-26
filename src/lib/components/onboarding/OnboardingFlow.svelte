@@ -447,7 +447,7 @@
 
 				<div class="space-y-3 text-left">
 					<!-- Theme selector cards -->
-					<div class="grid grid-cols-2 gap-2.5 sm:gap-3">
+					<div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
 						<button
 							type="button"
 							class="p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between {selectedTheme === 'modern'
@@ -469,7 +469,31 @@
 									</div>
 								{/if}
 							</div>
-							<p class="text-xs text-muted-foreground mt-2 leading-snug">Card layout with progress rings</p>
+							<p class="text-xs text-muted-foreground mt-2 leading-snug">Avatar card layout with metrics</p>
+						</button>
+
+						<button
+							type="button"
+							class="p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between {selectedTheme === 'cover'
+								? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
+								: 'border-border bg-card text-foreground hover:bg-accent'}"
+							onclick={() => {
+								selectedTheme = 'cover';
+								profileStore.setUITheme('cover');
+							}}
+						>
+							<div class="flex items-center justify-between w-full">
+								<div class="flex items-center gap-1.5 font-bold text-sm text-foreground">
+									<Heart class="h-4 w-4 text-primary shrink-0" />
+									<span>Cover</span>
+								</div>
+								{#if selectedTheme === 'cover'}
+									<div class="h-5 w-5 rounded-full bg-primary text-white flex items-center justify-center shrink-0">
+										<Check class="h-3 w-3 stroke-[3]" />
+									</div>
+								{/if}
+							</div>
+							<p class="text-xs text-muted-foreground mt-2 leading-snug">Full-bleed photo with top names</p>
 						</button>
 
 						<button
@@ -493,7 +517,7 @@
 									</div>
 								{/if}
 							</div>
-							<p class="text-xs text-muted-foreground mt-2 leading-snug">Crimson top bar layout</p>
+							<p class="text-xs text-muted-foreground mt-2 leading-snug">My Love crimson bar layout</p>
 						</button>
 					</div>
 

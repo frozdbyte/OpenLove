@@ -1,6 +1,6 @@
 import type { TimeBreakdown, NextMilestoneInfo, MilestoneItem } from './time';
 
-export type UIThemeId = 'modern' | 'traditional';
+export type UIThemeId = 'modern' | 'traditional' | 'cover';
 export type ColorMode = 'system' | 'light' | 'dark';
 export type ColorPalette = 'rose' | 'lavender' | 'terracotta' | 'sage' | 'midnight';
 
