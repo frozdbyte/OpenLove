@@ -23,10 +23,12 @@
 		Plus,
 		Check,
 		BellRing,
-		QrCode
+		QrCode,
+		Heart
 	} from '@lucide/svelte';
 	import { subscribeToPush, unsubscribeFromPush, sendTestPush, isPushSupported } from '$lib/push/client';
 	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
+	import { APP_VERSION } from '$lib/version';
 
 	interface Props {
 		open?: boolean;
@@ -466,6 +468,15 @@
 				<span>Reset All Data</span>
 			</Button>
 		</section>
+
+		<!-- App Version Indicator -->
+		<div class="pt-2 pb-1 text-center space-y-1">
+			<div class="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-muted/60 border border-border/50 text-[11px] font-medium text-muted-foreground">
+				<Heart class="h-3 w-3 text-primary fill-primary/30" />
+				<span>Open Love v{APP_VERSION}</span>
+			</div>
+			<p class="text-[10px] text-muted-foreground/60">Privacy-first & self-hosted</p>
+		</div>
 	</div>
 </Modal>
 
