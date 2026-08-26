@@ -49,6 +49,9 @@
     --accent-fg: #be123c;
     --border-color: #e4e4e7;
     --input-color: #e4e4e7;
+    --scrollbar-thumb: rgba(0, 0, 0, 0.16);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
+    --scrollbar-track: transparent;
   }
 
   .dark {
@@ -66,6 +69,9 @@
     --accent-fg: #fda4af;
     --border-color: #3f3f46;
     --input-color: #3f3f46;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.18);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.32);
+    --scrollbar-track: transparent;
   }
 
   /* Color Palettes */
@@ -126,6 +132,31 @@
 
   * {
     border-color: var(--border-color);
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  /* Discrete scrollbar styling for WebKit/Blink browsers */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 
   html, body {
@@ -191,3 +222,12 @@
 .animate-gentle-pulse {
   animation: gentle-pulse 3s infinite ease-in-out;
 }
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
