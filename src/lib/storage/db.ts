@@ -108,6 +108,11 @@ export async function clearProfileStorage(currentPhotoUrl?: string): Promise<voi
 	await del(PROFILE_KEY);
 	await del(PHOTO_KEY);
 	await del(PUSH_SUB_KEY);
+	try {
+		localStorage.removeItem('openlove_theme_mode');
+		localStorage.removeItem('openlove_theme_palette');
+		localStorage.removeItem('openlove_theme_ui');
+	} catch {}
 }
 
 /**

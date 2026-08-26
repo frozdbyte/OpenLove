@@ -53,6 +53,17 @@ class ProfileStore {
 		});
 
 		if (typeof window !== 'undefined') {
+			// Synchronously populate initial visual preferences from localStorage cache
+			// so the reactive profile state matches document state before IndexedDB loads
+			try {
+				const mode = localStorage.getItem('openlove_theme_mode') as ColorMode | null;
+				const palette = localStorage.getItem('openlove_theme_palette') as ColorPalette | null;
+				const ui = localStorage.getItem('openlove_theme_ui') as UIThemeId | null;
+				if (mode) this.profile.colorMode = mode;
+				if (palette) this.profile.colorPalette = palette;
+				if (ui) this.profile.uiTheme = ui;
+			} catch {}
+
 			this.init();
 		} else {
 			this.resolveReady();
@@ -79,6 +90,13 @@ class ProfileStore {
 
 		const root = document.documentElement;
 		const { colorMode, colorPalette, uiTheme } = this.profile;
+
+		// Persist fast-path visual cache for zero-FOUC startup
+		try {
+			localStorage.setItem('openlove_theme_mode', colorMode);
+			localStorage.setItem('openlove_theme_palette', colorPalette);
+			localStorage.setItem('openlove_theme_ui', uiTheme);
+		} catch {}
 
 		// 1. Color Palette theme
 		root.setAttribute('data-theme', colorPalette);
@@ -193,6 +211,11 @@ class ProfileStore {
 	 */
 	async reset() {
 		const previous = { ...this.profile };
+		try {
+			localStorage.removeItem('openlove_theme_mode');
+			localStorage.removeItem('openlove_theme_palette');
+			localStorage.removeItem('openlove_theme_ui');
+		} catch {}
 		await clearProfileStorage(this.profile.photoUrl);
 		this.profile = { ...DEFAULT_PROFILE };
 		this.applyThemeAndDarkMode();

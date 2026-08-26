@@ -35,6 +35,7 @@
 
 @layer base {
   :root {
+    color-scheme: light;
     --bg-color: #fff1f2;
     --fg-color: #1c1917;
     --card-bg: rgba(255, 255, 255, 0.9);
@@ -55,6 +56,7 @@
   }
 
   .dark {
+    color-scheme: dark;
     --bg-color: #09090b;
     --fg-color: #f4f4f5;
     --card-bg: rgba(24, 24, 27, 0.92);

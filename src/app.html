@@ -13,6 +13,43 @@
 		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 		<link rel="manifest" href="/manifest.webmanifest" />
 
+		<!-- Prevent theme flashbang on initial page load by resolving dark mode and theme synchronously -->
+		<script>
+			(function () {
+				try {
+					var mode = localStorage.getItem('openlove_theme_mode');
+					var palette = localStorage.getItem('openlove_theme_palette') || 'rose';
+					var uiTheme = localStorage.getItem('openlove_theme_ui') || 'modern';
+
+					var isDark = false;
+					if (mode === 'dark') {
+						isDark = true;
+					} else if (mode === 'light') {
+						isDark = false;
+					} else {
+						isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+					}
+
+					var root = document.documentElement;
+					if (isDark) {
+						root.classList.add('dark');
+					} else {
+						root.classList.remove('dark');
+					}
+					root.setAttribute('data-theme', palette);
+
+					var metaTheme = document.querySelector('meta[name="theme-color"]');
+					if (metaTheme) {
+						if (uiTheme === 'traditional') {
+							metaTheme.setAttribute('content', isDark ? '#4a0e17' : '#8B1E2D');
+						} else {
+							metaTheme.setAttribute('content', isDark ? '#18181b' : '#e11d48');
+						}
+					}
+				} catch (e) {}
+			})();
+		</script>
+
 		<!-- Fonts are self-hosted via @fontsource-variable and imported from app.css, so they
 		     are precached with the rest of the bundle and never leak an IP to a third party. -->
 
