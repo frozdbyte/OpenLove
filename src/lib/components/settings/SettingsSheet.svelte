@@ -793,84 +793,99 @@
 					</div>
 
 					<!-- Day Milestones -->
-					<div class="space-y-1.5 pt-1">
-						<div class="flex items-center justify-between text-xs text-foreground">
-							<div class="flex items-center gap-2">
-
-								<Trophy class="h-3.5 w-3.5 text-amber-600" />
+					<div class="space-y-2 pt-1.5">
+						<div class="flex items-center justify-between text-xs">
+							<div class="flex items-center gap-2 font-semibold text-foreground">
+								<Trophy class="h-4 w-4 text-amber-500 shrink-0" />
 								<span>Day Milestones</span>
 							</div>
-							<div class="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border/40 text-[11px]">
-								<button
-									type="button"
-									class="px-2 py-0.5 rounded-md transition-colors cursor-pointer {currentDays === 'all'
-										? 'bg-primary text-white font-semibold shadow-xs'
-										: 'text-muted-foreground hover:text-foreground'}"
-									onclick={() => {
-										bondDaysPref = 'all';
-										if (!isNewBond) {
-											handleLiveUpdate({
-												milestonePrefs: {
-													...(currentBond.milestonePrefs || {}),
-													years: currentBond.milestonePrefs?.years ?? true,
-													months: currentBond.milestonePrefs?.months ?? true,
-													days: 'all',
-													custom: currentBond.milestonePrefs?.custom ?? true
-												}
-											});
-										}
-									}}
-								>
-									All
-								</button>
-								<button
-									type="button"
-									class="px-2 py-0.5 rounded-md transition-colors cursor-pointer {currentDays === 'major'
-										? 'bg-primary text-white font-semibold shadow-xs'
-										: 'text-muted-foreground hover:text-foreground'}"
-									onclick={() => {
-										bondDaysPref = 'major';
-										if (!isNewBond) {
-											handleLiveUpdate({
-												milestonePrefs: {
-													...(currentBond.milestonePrefs || {}),
-													years: currentBond.milestonePrefs?.years ?? true,
-													months: currentBond.milestonePrefs?.months ?? true,
-													days: 'major',
-													custom: currentBond.milestonePrefs?.custom ?? true
-												}
-											});
-										}
-									}}
-									title="Only 1,000+ days (1000, 2500, 5000...)"
-								>
-									Major (1000+)
-								</button>
-								<button
-									type="button"
-									class="px-2 py-0.5 rounded-md transition-colors cursor-pointer {currentDays === 'off'
-										? 'bg-primary text-white font-semibold shadow-xs'
-										: 'text-muted-foreground hover:text-foreground'}"
-									onclick={() => {
-										bondDaysPref = 'off';
-										if (!isNewBond) {
-											handleLiveUpdate({
-												milestonePrefs: {
-													...(currentBond.milestonePrefs || {}),
-													years: currentBond.milestonePrefs?.years ?? true,
-													months: currentBond.milestonePrefs?.months ?? true,
-													days: 'off',
-													custom: currentBond.milestonePrefs?.custom ?? true
-												}
-											});
-										}
-									}}
-								>
-									Off
-								</button>
-							</div>
+							<span class="text-[11px] text-muted-foreground font-medium">
+								{#if currentDays === 'all'}
+									Every 50–100 days
+								{:else if currentDays === 'major'}
+									1,000+ days only
+								{:else}
+									Disabled
+								{/if}
+							</span>
+						</div>
+
+						<div class="grid grid-cols-3 gap-1.5 p-1 bg-muted/60 rounded-2xl border border-border/60">
+							<button
+								type="button"
+								class="flex flex-col items-center justify-center py-2 px-1.5 rounded-xl transition-all cursor-pointer {currentDays === 'all'
+									? 'bg-card text-foreground font-bold shadow-xs ring-1 ring-border/50 text-primary'
+									: 'text-muted-foreground hover:text-foreground'}"
+								onclick={() => {
+									bondDaysPref = 'all';
+									if (!isNewBond) {
+										handleLiveUpdate({
+											milestonePrefs: {
+												...(currentBond.milestonePrefs || {}),
+												years: currentBond.milestonePrefs?.years ?? true,
+												months: currentBond.milestonePrefs?.months ?? true,
+												days: 'all',
+												custom: currentBond.milestonePrefs?.custom ?? true
+											}
+										});
+									}
+								}}
+							>
+								<span class="text-xs font-semibold">All Days</span>
+								<span class="text-[10px] opacity-70 font-normal mt-0.5">50, 100, 200...</span>
+							</button>
+
+							<button
+								type="button"
+								class="flex flex-col items-center justify-center py-2 px-1.5 rounded-xl transition-all cursor-pointer {currentDays === 'major'
+									? 'bg-card text-foreground font-bold shadow-xs ring-1 ring-border/50 text-primary'
+									: 'text-muted-foreground hover:text-foreground'}"
+								onclick={() => {
+									bondDaysPref = 'major';
+									if (!isNewBond) {
+										handleLiveUpdate({
+											milestonePrefs: {
+												...(currentBond.milestonePrefs || {}),
+												years: currentBond.milestonePrefs?.years ?? true,
+												months: currentBond.milestonePrefs?.months ?? true,
+												days: 'major',
+												custom: currentBond.milestonePrefs?.custom ?? true
+											}
+										});
+									}
+								}}
+								title="Only 1,000+ days (1000, 2500, 5000...)"
+							>
+								<span class="text-xs font-semibold">Major Only</span>
+								<span class="text-[10px] opacity-70 font-normal mt-0.5">1k, 2.5k, 5k...</span>
+							</button>
+
+							<button
+								type="button"
+								class="flex flex-col items-center justify-center py-2 px-1.5 rounded-xl transition-all cursor-pointer {currentDays === 'off'
+									? 'bg-card text-foreground font-bold shadow-xs ring-1 ring-border/50 text-primary'
+									: 'text-muted-foreground hover:text-foreground'}"
+								onclick={() => {
+									bondDaysPref = 'off';
+									if (!isNewBond) {
+										handleLiveUpdate({
+											milestonePrefs: {
+												...(currentBond.milestonePrefs || {}),
+												years: currentBond.milestonePrefs?.years ?? true,
+												months: currentBond.milestonePrefs?.months ?? true,
+												days: 'off',
+												custom: currentBond.milestonePrefs?.custom ?? true
+											}
+										});
+									}
+								}}
+							>
+								<span class="text-xs font-semibold">Off</span>
+								<span class="text-[10px] opacity-70 font-normal mt-0.5">No alerts</span>
+							</button>
 						</div>
 					</div>
+
 
 					<!-- Custom Moments -->
 					<div class="flex items-center justify-between text-xs text-foreground">
