@@ -136,6 +136,7 @@
     border-color: var(--border-color);
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    touch-action: manipulation;
   }
 
   /* Discrete scrollbar styling for WebKit/Blink browsers */
@@ -168,10 +169,25 @@
     font-family: var(--font-sans);
     background-color: var(--bg-color);
     color: var(--fg-color);
+    touch-action: manipulation;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: inherit;
+  }
+
+  /* Prevent iOS Safari auto-zoom on input focus by guaranteeing minimum 16px font size */
+  input,
+  select,
+  textarea,
+  button {
+    touch-action: manipulation;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
   }
 
   /* iOS WebKit Date / Time input sizing and alignment fix */
@@ -188,6 +204,7 @@
     box-sizing: border-box;
     margin: 0;
     line-height: normal;
+    font-size: 16px;
   }
 
   input[type="date"]::-webkit-date-and-time-value,
@@ -201,6 +218,7 @@
     margin: 0;
     padding: 0;
     overflow: hidden;
+    font-size: 16px;
   }
 }
 
