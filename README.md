@@ -1,3 +1,5 @@
+![](./static/head1.png)
+
 # OpenLove ❤️
 
 > **A free, self-hosted, privacy-first relationship tracker and anniversary reminder alternative to "My Love".**
