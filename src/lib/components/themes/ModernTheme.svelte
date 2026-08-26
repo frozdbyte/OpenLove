@@ -9,7 +9,7 @@
 	let { profile, timeBreakdown, nextMilestone, onOpenSettings, onOpenShare }: ThemeProps = $props();
 </script>
 
-<div class="relative min-h-screen w-full max-w-md mx-auto px-4 py-6 flex flex-col justify-between pb-12">
+<div class="relative min-h-svh w-full max-w-md mx-auto px-4 py-6 flex flex-col justify-between pb-12">
 	<!-- Top Bar -->
 	<header class="flex items-center justify-between py-2">
 		<button
