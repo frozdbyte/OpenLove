@@ -283,7 +283,7 @@ subsequent sweep/GET treats it as already expired.
 
 ---
 
-## Stage 4 — Client crypto + relay helpers
+## Stage 4 — Client crypto + relay helpers ✅ Done
 
 - `src/lib/utils/imageCrypto.ts` (new): `encryptBlob(blob): Promise<{ciphertext: ArrayBuffer, key: string, iv: string}>`
   and `decryptToBlob(ciphertext, key, iv, mimeType): Promise<Blob>`, built on
@@ -300,6 +300,43 @@ subsequent sweep/GET treats it as already expired.
 
 **Tests:** encrypt→decrypt round-trip unit test (this is the one place worth
 testing crypto correctness in isolation, before it's wired into any UI).
+
+→ Shipped as planned, with the wire shape tightened and one type-strictness
+  fix repeating a pattern from Stage 3:
+- **`EncryptedBlob.ciphertext` is base64 (`string`), not `ArrayBuffer`** —
+  a deviation from the plan's literal `Promise<{ciphertext: ArrayBuffer, ...}>`
+  signature. `key`/`iv` were always going to be base64 (they travel in a
+  JSON share payload), and the relay's wire format (Stage 3) is JSON
+  `{ciphertext: base64}` either direction — keeping `encryptBlob()`'s output
+  all-base64 means `shareImage.ts` needs zero extra conversion at either
+  call site, and `decryptToBlob()`'s three string params are uniform instead
+  of mixing a raw buffer with two base64 strings.
+- **`imageBase64.ts` refactored, not duplicated**: pulled the byte-level
+  `bytesToBase64`/`base64ToBytes` out of `blobToBase64`/`base64ToBlob`
+  (Stage 1) so `imageCrypto.ts` reuses the same chunked-encode logic for
+  raw key/iv/ciphertext bytes instead of a second copy. `blobToBase64`/
+  `base64ToBlob`'s public behavior is unchanged — their existing Stage 1
+  tests still pass untouched.
+- **Same `ArrayBufferLike` vs `ArrayBuffer` type friction as Stage 3**
+  (`Uint8Array.from()` there): `base64ToBytes()`'s inferred return type
+  didn't satisfy `Blob`'s constructor or `crypto.subtle`'s `BufferSource`
+  params. Fixed with an explicit `Uint8Array<ArrayBuffer>` return
+  annotation rather than reaching for `.from()` again, to avoid an extra
+  copy on every decode.
+- **Verified**: `pnpm check` (0 errors), `pnpm test` (106/106, +17 new —
+  crypto round trip including a wrong-key/wrong-iv rejection check and a
+  >32KB payload, `bytesToBase64`/`base64ToBytes` direct coverage, and
+  `shareImage.ts`'s fail-soft contract for every failure mode: flag off,
+  network error, non-ok response, malformed body, and a failed decrypt —
+  plus a fully mocked upload→fetch pipeline test), `pnpm build`. Then,
+  since Stage 4 is the first point real `crypto.subtle` and the real Stage
+  3 server can be exercised together: loaded the running dev server in an
+  actual browser and dynamically imported `shareImage.ts` directly (nothing
+  in the UI calls it yet — Stage 5 wires that in) to run
+  `uploadSharedImage`→`fetchSharedImage` against the live endpoints with
+  real encryption. Confirmed byte-exact round trip, a second fetch of the
+  same id also succeeding (unlimited loads), and a bogus id failing soft to
+  `null` rather than throwing.
 
 ---
 

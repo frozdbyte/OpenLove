@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { blobToBase64, base64ToBlob } from './imageBase64';
+import { blobToBase64, base64ToBlob, bytesToBase64, base64ToBytes } from './imageBase64';
+
+describe('bytesToBase64 / base64ToBytes', () => {
+	it('round-trips raw bytes, including a chunk-boundary-crossing length', () => {
+		const bytes = new Uint8Array(0x8000 + 3);
+		for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 7) % 256;
+
+		const restored = base64ToBytes(bytesToBase64(bytes));
+		expect(Array.from(restored)).toEqual(Array.from(bytes));
+	});
+
+	it('round-trips an empty array', () => {
+		expect(Array.from(base64ToBytes(bytesToBase64(new Uint8Array(0))))).toEqual([]);
+	});
+});
 
 describe('blobToBase64 / base64ToBlob', () => {
 	it('round-trips small binary content and preserves the mime type', async () => {
