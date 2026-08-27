@@ -60,15 +60,13 @@
 
 	async function handleBackupImport(e: Event) {
 		const target = e.target as HTMLInputElement;
-		if (target.files && target.files[0]) {
-			const file = target.files[0];
-			const text = await file.text();
-			const ok = await profileStore.importJSON(text);
-			if (ok) {
-				alert('Data restored successfully!');
-			} else {
-				alert('Failed to restore backup. Invalid file format.');
-			}
+		const file = target.files?.[0];
+		if (!file) return;
+		const ok = await profileStore.importJSONFromFile(file);
+		if (ok) {
+			alert('Data restored successfully!');
+		} else {
+			alert('Failed to restore backup. Invalid file format.');
 		}
 	}
 

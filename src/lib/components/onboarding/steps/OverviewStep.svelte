@@ -5,13 +5,38 @@
 	 * "scan partner QR" shortcut, so it needs no state of its own.
 	 */
 	import Card from '$lib/components/ui/card';
-	import { Heart, ShieldCheck, Calendar, Sparkles, QrCode } from '@lucide/svelte';
+	import { Heart, ShieldCheck, Calendar, Sparkles, QrCode, UploadCloud } from '@lucide/svelte';
+	import { profileStore } from '$lib/stores/profile.svelte';
 
 	interface Props {
 		onScanQR: () => void;
 	}
 
 	let { onScanQR }: Props = $props();
+
+	let backupInputRef = $state<HTMLInputElement | null>(null);
+	let restoreError = $state('');
+
+	/**
+	 * `mode: 'replace'` mirrors `ScanImportModal.svelte`'s own "nothing to
+	 * lose" branch — this button only exists during onboarding, where
+	 * `profileStore.state.isConfigured` is guaranteed false, so there's
+	 * nothing a full-backup replace could overwrite. That's also why this
+	 * skips `detectFullBackup()`/a confirm dialog (AGENTS.md Invariant 9):
+	 * that machinery exists to gate a full-backup import on an
+	 * already-configured device, which this entry point can never be. On
+	 * success, `profileStore.state.isConfigured` flips to true and
+	 * `+page.svelte`'s reactive check swaps away from onboarding on its own.
+	 */
+	async function handleRestoreFile(e: Event) {
+		const target = e.target as HTMLInputElement;
+		const file = target.files?.[0];
+		target.value = ''; // allow re-selecting the same file after an error
+		if (!file) return;
+		restoreError = '';
+		const ok = await profileStore.importJSONFromFile(file, 'replace');
+		if (!ok) restoreError = "Couldn't read that file — make sure it's a valid Open Love backup.";
+	}
 </script>
 
 <div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
@@ -72,7 +97,7 @@
 		</Card>
 	</div>
 
-	<div class="pt-0.5">
+	<div class="pt-0.5 space-y-1.5">
 		<button
 			type="button"
 			class="text-xs font-semibold text-primary hover:underline flex items-center justify-center gap-1.5 mx-auto py-1 px-3 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer"
@@ -81,5 +106,25 @@
 			<QrCode class="h-3.5 w-3.5" />
 			<span>Have an invite? Scan Partner QR</span>
 		</button>
+
+		<input
+			type="file"
+			accept=".json"
+			class="hidden"
+			bind:this={backupInputRef}
+			onchange={handleRestoreFile}
+		/>
+		<button
+			type="button"
+			class="text-xs font-semibold text-muted-foreground hover:text-primary hover:underline flex items-center justify-center gap-1.5 mx-auto py-1 px-3 rounded-full bg-muted/60 hover:bg-primary/10 transition-colors cursor-pointer"
+			onclick={() => backupInputRef?.click()}
+		>
+			<UploadCloud class="h-3.5 w-3.5" />
+			<span>Restore from a backup file</span>
+		</button>
+
+		{#if restoreError}
+			<p class="text-[11px] text-destructive text-center">{restoreError}</p>
+		{/if}
 	</div>
 </div>

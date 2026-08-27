@@ -194,6 +194,34 @@ describe('exportBackupJSON / importJSON photo round trip', () => {
 });
 
 /**
+ * `importJSONFromFile()` is a thin wrapper around `importJSON()` for the
+ * "user picked a .json file" case (Settings' restore button, onboarding's
+ * restore shortcut) — these tests cover the wrapper's own two jobs: reading
+ * the `File`, and turning a read failure into `false` rather than a thrown
+ * error (the only failure mode `importJSON()` doesn't already handle
+ * internally, since it wraps its own body in try/catch).
+ */
+describe('importJSONFromFile', () => {
+	beforeEach(async () => {
+		await profileStore.reset();
+	});
+
+	it('reads a File and imports it, delegating to importJSON', async () => {
+		const json = await profileStore.exportBackupJSON(false);
+		await profileStore.reset();
+
+		const file = new File([json], 'backup.json', { type: 'application/json' });
+		expect(await profileStore.importJSONFromFile(file)).toBe(true);
+		expect(profileStore.state.isConfigured).toBe(true);
+	});
+
+	it('returns false, without throwing, when the file cannot be read as text', async () => {
+		const brokenFile = { text: () => Promise.reject(new Error('read error')) } as unknown as File;
+		expect(await profileStore.importJSONFromFile(brokenFile)).toBe(false);
+	});
+});
+
+/**
  * Stage 5 of IMAGE_SHARING_PLAN.md: `exportJSON()`'s optional `sharedImage`
  * param and `importJSON()`'s Case 2 attaching a relay-fetched photo. Unlike
  * the Stage 1 tests above, `photo` (inline base64) is never involved here —

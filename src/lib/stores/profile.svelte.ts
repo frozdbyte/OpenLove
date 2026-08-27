@@ -754,6 +754,24 @@ class ProfileStore {
 			return false;
 		}
 	}
+
+	/**
+	 * Convenience wrapper around `importJSON()` for the common "user picked a
+	 * .json file" case (Settings' restore button, onboarding's restore
+	 * shortcut) — reads the file and imports it in one call so neither caller
+	 * duplicates `file.text()` + read-failure handling. `importJSON()` already
+	 * catches bad JSON internally; this adds the one failure mode it can't —
+	 * `file.text()` itself throwing (a file-read I/O error).
+	 */
+	async importJSONFromFile(file: File, mode: 'auto' | 'replace' | 'add' = 'auto'): Promise<boolean> {
+		try {
+			const text = await file.text();
+			return await this.importJSON(text, mode);
+		} catch (error) {
+			console.error('Failed to read backup file:', error);
+			return false;
+		}
+	}
 }
 
 /**
