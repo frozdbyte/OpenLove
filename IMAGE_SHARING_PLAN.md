@@ -1,0 +1,276 @@
+# Image Sharing & Backup — Implementation Plan
+
+Plan only — no application code changes have been made yet. Follows the same
+staged, one-stage-at-a-time pattern as `REFACTOR_PLAN.md`: this doc gets
+checked off and annotated with `→` notes after each stage actually ships,
+and each stage is independently verifiable (`pnpm check` / `pnpm test` /
+`pnpm build`, plus a manual check where noted) before moving to the next.
+
+## Scope
+
+Two related but independently-useful pieces of work:
+
+1. **JSON backups (file download/upload) include photos.** No server
+   involvement — photos travel as inline base64 inside the JSON file, exactly
+   like every other field already in a backup.
+2. **QR-code / link shares can optionally include a photo**, via a
+   client-encrypted, server-relayed blob, retained for a **configurable TTL**
+   (default 24h) with unlimited loads during that window — because *that*
+   payload is genuinely size-constrained (URL length / QR density), unlike a
+   downloaded file. Toggleable via an env var, default enabled, built on a
+   small reusable feature-flag system (the same system the previously-discussed
+   multi-bond toggle will reuse later).
+
+## Key design decision: two different mechanisms, not one
+
+It would be tempting to route *every* exported photo (file backups included)
+through the same server-relay/key mechanism, so `importJSON()` only ever
+handles one photo shape. **Rejected**, for a concrete reason: the relay is
+TTL-bound (default 24h, configurable). A JSON backup is explicitly this
+app's "keep a backup, this is the only copy" safety net
+(`StorageBackupPanel.svelte`'s own copy) — if restoring a week-old backup
+silently lost every photo because the relay copy had long since expired,
+that's a Zero Data Loss regression, not a feature. So:
+
+- **File backups** (`downloadBackupJSON`, "Download JSON Backup (All
+  Bonds)", and their restore paths): photo embedded inline as base64,
+  self-contained, works fully offline, never expires. **Not** gated by the
+  `FEATURE_SHARE_IMAGES` flag — an operator disabling the *server relay* is
+  worried about public upload-endpoint abuse / server storage, not about a
+  user downloading their own file to their own disk, which already happens
+  today with every other field.
+- **QR/link/sync-code shares** (`ShareModal.svelte`): photo relayed via the
+  encrypted server round-trip, gated by `FEATURE_SHARE_IMAGES`.
+
+A second, smaller decision: even without read-once semantics, the image
+should still be fetched at actual import **commit** time, not during
+`parseSharePayload()`'s preview step (`PartnerInviteModal`'s
+Add-as-New/Replace-Current screen) — the preview doesn't show a photo today,
+so fetching+decrypting one there would just be a wasted round trip (and a
+wasted decrypt) for every share the user ends up declining. This is now a
+plain efficiency call, not a data-loss one — worth relaxing later if the
+preview ever grows a photo thumbnail.
+
+---
+
+## Stage 1 — JSON backup photo embedding
+
+Independent of every other stage; ships value with no new server surface.
+
+- `src/lib/utils/base64.ts` (existing, DOM-free): add
+  `blobToBase64(blob): Promise<string>` / `base64ToBlob(base64, mimeType): Blob`.
+  No encryption — this data never leaves the device except by the user's own
+  explicit download/upload action, same trust level as the rest of the file.
+- `src/lib/stores/profile.svelte.ts`: new **async** `exportBackupJSON(activeOnly: boolean): Promise<string>`,
+  separate from the existing synchronous `exportJSON()` (which stays exactly
+  as-is and keeps serving the compact QR/link/sync-code paths — those must
+  stay small and synchronous). `exportBackupJSON` embeds
+  `photo: { dataBase64, mimeType }` per bond when `photoBlob` exists.
+- `importJSON()`: extend bond normalization (`normalizeIncomingBond` /
+  a new `resolveIncomingPhoto(raw)` helper) to decode an inline
+  `raw.photo.dataBase64` back into a `Blob` and persist it through the
+  existing photo-save path (`saveBondPhoto`/`setPhoto`'s underlying
+  mechanism). Must tolerate the field being absent (legacy backups, and
+  bonds that never had a photo).
+- `ShareModal.svelte`'s `downloadBackupJSON()`: `await profileStore.exportBackupJSON(true)`.
+- `StorageBackupPanel.svelte`'s "Download JSON Backup (All Bonds)": `await profileStore.exportBackupJSON(false)`.
+- "Restore from JSON Backup" needs no change beyond `importJSON()` already
+  handling the new field.
+
+**Tests:** extend `share.test.ts`/`profile.test.ts` with an export→import
+round trip that carries a photo, and confirm a backup *without* the field
+(current shape) still imports cleanly.
+
+**Manual verification:** create a bond with a photo → download full backup →
+reset app → restore from that file → photo reappears.
+
+---
+
+## Stage 2 — Shared feature-flag infrastructure
+
+Reusable for `FEATURE_SHARE_IMAGES` now and `FEATURE_MULTI_BOND` later.
+Necessary because the root route is prerendered with `ssr = false`
+(Invariant 7) — `$env/static/public` and server `load` functions both
+resolve at *build* time, which can't reflect a Docker `docker-compose.yml`
+env var set at *container start*. The existing `PUBLIC_VAPID_KEY` /
+`/api/push/vapid-public-key` pattern already solves this correctly; this
+stage generalizes it.
+
+- `src/lib/types/featureFlags.ts` (new): shared `FeatureFlags` interface,
+  e.g. `{ shareImages: boolean }` (extended later with `multiBond`).
+- `src/lib/server/featureFlags.ts` (new): a small registry —
+  `{ shareImages: { env: 'FEATURE_SHARE_IMAGES', default: true } }` — and
+  `getFeatureFlags(): FeatureFlags`, parsing `process.env` the same
+  defensive way `getVapidSubject()` already does (`"false"`/`"0"` → off,
+  unset/anything else → default).
+- `src/routes/api/share/config/+server.ts` (new): `GET`, `prerender = false`,
+  returns `getFeatureFlags()` as JSON. Mirrors `vapid-public-key/+server.ts`.
+- `src/lib/stores/featureFlags.svelte.ts` (new): fetches the endpoint once
+  (called from `profileStore.init()`), caches the result via the existing
+  `setSyncMeta()` (`outbox.ts`) so it survives offline, exposes `$state`
+  reactive booleans defaulting to each flag's compiled-in default until the
+  first successful fetch.
+- `.env.example`: document `FEATURE_SHARE_IMAGES=true` (commented, default
+  shown), with a one-line note reserving `FEATURE_MULTI_BOND` for later.
+  Also document `SHARED_IMAGE_TTL_HOURS=24` here (default shown, commented)
+  — grouped with the other share-image config even though it's read
+  directly by `sharedImage.ts` in Stage 3, not by `featureFlags.ts`, since
+  from a self-hoster's point of view it's the same feature's config.
+
+**Tests:** unit test `getFeatureFlags()`'s parsing table (true/false/"0"/unset/garbage).
+
+**Manual verification:** hit `/api/share/config` in dev with the var unset
+(expect `true`) and set to `false` (expect `false`, no rebuild needed).
+
+---
+
+## Stage 3 — Server: encrypted image relay storage
+
+Gated by the Stage 2 flag end-to-end (both endpoints 404 when disabled).
+
+- `prisma/schema.prisma`: add
+  ```
+  model SharedImage {
+    id         String   @id @default(uuid())
+    ciphertext Bytes
+    createdAt  DateTime @default(now())
+  }
+  ```
+  additive only, no change to existing models. Apply via this project's
+  existing `pnpm prisma:push` convention (no other model has needed a
+  migration file yet).
+- `src/lib/server/sharedImage.ts` (new): size-cap constant (e.g. 8MB
+  post-encryption); a `getSharedImageTtlMs()` helper reading
+  `SHARED_IMAGE_TTL_HOURS` from `process.env` the same defensive way
+  `getVapidSubject()` parses its own vars (invalid/unset/≤0 → default 24h,
+  one console warning on a bad value, not a crash);
+  `saveSharedImage(ciphertext): Promise<{id}>`;
+  `getSharedImage(id): Promise<Buffer|null>` — looks the row up and returns
+  it if not past its TTL, **does not delete on read** (unlimited loads within
+  the window — deletion is TTL-sweep-only, never a side effect of a GET);
+  `cleanupExpiredSharedImages(): Promise<{deleted:number}>`, using the
+  *current* `getSharedImageTtlMs()` value so a TTL changed at container
+  restart applies to the next sweep without needing a data migration.
+- `src/routes/api/share/image/+server.ts` (new): `POST`, `prerender = false`.
+  404s when the flag is off; 413-equivalent JSON error over the size cap;
+  otherwise stores and returns `{ shareId }`.
+- `src/routes/api/share/image/[id]/+server.ts` (new): `GET`, `prerender = false`.
+  404s when the flag is off or the id doesn't exist/has expired; otherwise
+  returns the ciphertext bytes. Repeatable — does not mutate/delete state.
+- `hooks.server.ts`: start/stop a `cleanupExpiredSharedImages()` interval
+  using the exact `setInterval` + `unref()` + shutdown-hook pattern
+  `startMilestoneScheduler()`/`stopMilestoneScheduler()` already establish —
+  new `startSharedImageCleanup()`/`stopSharedImageCleanup()` pair, same file
+  layout as `scheduler.ts`. Sweep interval itself can stay a fixed cadence
+  (e.g. hourly) independent of the configurable TTL value it's enforcing.
+
+**Tests:** mirror `scheduler.test.ts`'s `vi.hoisted` + in-memory-fake-Prisma
+pattern for `cleanupExpiredSharedImages()` (including a case with a
+non-default `SHARED_IMAGE_TTL_HOURS`); endpoint tests for the flag-off-404,
+size-cap-rejected, and expired-id-404 cases; a test that two GETs against
+the same unexpired id both succeed.
+
+**Manual verification:** `curl` round trip — POST bytes, GET twice (both
+succeed, same bytes), set `SHARED_IMAGE_TTL_HOURS=0` and confirm a
+subsequent sweep/GET treats it as already expired.
+
+---
+
+## Stage 4 — Client crypto + relay helpers
+
+- `src/lib/utils/imageCrypto.ts` (new): `encryptBlob(blob): Promise<{ciphertext: ArrayBuffer, key: string, iv: string}>`
+  and `decryptToBlob(ciphertext, key, iv, mimeType): Promise<Blob>`, built on
+  `crypto.subtle` (AES-GCM, 256-bit) — no new dependency, consistent with
+  this codebase's existing preference for native/hand-rolled over a library
+  (same instinct that avoided `workbox-background-sync`). Pure functions,
+  no DOM dependency beyond `crypto`/`Blob`/`ArrayBuffer`, which are
+  available in Vitest's Node environment too.
+- `src/lib/utils/shareImage.ts` (new): `uploadSharedImage(blob): Promise<{shareId,key,iv}|null>`
+  (checks the feature-flag store first, fails soft — returns `null` rather
+  than throwing — on any network/flag-off condition) and
+  `fetchSharedImage(shareId, key, iv, mimeType): Promise<Blob|null>` (same
+  fail-soft contract).
+
+**Tests:** encrypt→decrypt round-trip unit test (this is the one place worth
+testing crypto correctness in isolation, before it's wired into any UI).
+
+---
+
+## Stage 5 — QR/link share: image toggle + relay wiring
+
+The originally-requested feature, now sitting on top of Stages 2–4.
+
+- `ShareModal.svelte`: new toggle, rendered only when
+  `featureFlags.shareImages && profileStore.activeBond.photoBlob`. Upload is
+  **lazy** — only on first actual "generate/copy" action with the toggle on,
+  not eagerly when the modal opens or the toggle is flipped, so an abandoned
+  share doesn't leave orphaned ciphertext waiting on the 24h TTL. The
+  resulting `{shareId,key,iv}` is cached locally for the lifetime of the
+  modal so switching between "Copy Link" / QR / "Copy Sync Code" doesn't
+  re-upload three times.
+- `exportJSON()` (the existing *compact/synchronous* export used for
+  QR/link/sync-code — untouched by Stage 1): gains an optional
+  `sharedImage?: {shareId, key, iv}` field on the single-bond payload when
+  a share was generated with the toggle on.
+- `parseSharePayload()`: recognizes `sharedImage` for shape-detection
+  purposes only — **does not fetch it**. See the preview-efficiency
+  rationale above (no longer a data-loss concern now that GETs don't
+  consume the image, just an avoided wasted round trip for declined shares).
+- Actual import-commit paths — `+page.svelte`'s `completeHashImport`,
+  `ScanImportModal.svelte`'s `handleImportData`, and `PartnerInviteModal`'s
+  `handleAcceptInvite` (via `importJSON`) — after a bond is
+  created/replaced, if `sharedImage` is present: `fetchSharedImage()` +
+  `setPhoto()`. Fail-soft: a failed/expired fetch logs and leaves the bond
+  photo-less rather than blocking the import.
+
+**Tests:** payload-shape detection unit tests (crypto itself already covered
+in Stage 4).
+
+**Manual verification:** two browser contexts — generate a share with the
+photo toggle on in one, import via the link in the other, confirm the photo
+arrives; import the *same* link again (either context) and confirm the
+photo arrives again too (unlimited loads within the TTL); manually expire
+the row (or set a very short `SHARED_IMAGE_TTL_HOURS`) and confirm a later
+import still succeeds, just without a photo (fail-soft).
+
+---
+
+## Stage 6 — Docs & hardening
+
+- `AGENTS.md`: new **Invariant 11** documenting `SharedImage` — what it
+  stores (opaque ciphertext only, server never holds the key), why that's
+  still consistent with the Zero-Knowledge Privacy invariant, and its
+  TTL-bound (default 24h, `SHARED_IMAGE_TTL_HOURS`-configurable), unlimited-reads-within-window
+  lifetime. Update the Repository Directory Map and Key Subsystems
+  Breakdown for the new `server/sharedImage.ts`, `server/featureFlags.ts`,
+  `stores/featureFlags.svelte.ts`, `utils/imageCrypto.ts`,
+  `utils/shareImage.ts`, and the two new API routes. Update `.env.example`
+  documentation.
+- `share-import-safety` skill (existing): extend with the new photo-arrival
+  shapes (inline base64 vs. relay shareId+key) and a note on the relay's
+  TTL-only (not read-count) expiry model, so a future agent doesn't assume
+  either "unlimited forever" or "one-shot" without checking.
+- Full `pnpm check` / `pnpm test` / `pnpm build` pass; a final manual PWA
+  offline check (Stage 1's file-backup restore should work fully offline;
+  Stage 5's relay fetch should fail soft, not crash, when offline).
+
+---
+
+## Open items for confirmation before implementation starts
+
+- Size cap for the relay upload (proposed: 8MB post-encryption — roughly a
+  compressed phone photo; large enough to not be annoying, small enough to
+  bound abuse without new infra).
+- No per-IP rate limiting on the upload endpoint in this plan (this app has
+  none anywhere today); size cap + TTL bounds the blast radius for a
+  self-hosted single-instance app. Flagged as an intentional scope cut, not
+  an oversight — worth revisiting given reads are now unlimited within the
+  TTL window (a leaked link now stays fetchable by anyone for the full TTL,
+  not just once), though the actual secret is still the shareId+key pair,
+  same as every other field in a leaked share payload already unlimited for
+  as long as it's held.
+- `SHARED_IMAGE_TTL_HOURS` default: proposed 24h, matching the original
+  spec. Open to a different default; the config plumbing (Stage 2/3) doesn't
+  care what the number is.
+- Endpoint path naming (`/api/share/image`, `/api/share/config`) — matches
+  the existing `/api/push/*` grouping convention; open to renaming.
