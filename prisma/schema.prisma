@@ -35,3 +35,17 @@ model SubscriptionBond {
   @@unique([subscriptionId, bondId])
   @@index([subscriptionId])
 }
+
+// Temporary relay for a client-encrypted photo shared via QR/link — see
+// AGENTS.md Invariant 11. `ciphertext` is opaque to the server: the
+// decryption key travels only in the share payload itself (QR/link),
+// never here. Rows are TTL-swept by `startSharedImageCleanup()`
+// (`SHARED_IMAGE_TTL_HOURS`, default 24h) — this table is not a
+// permanent store, unlike every other model in this file.
+model SharedImage {
+  id         String   @id @default(uuid())
+  ciphertext Bytes
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}

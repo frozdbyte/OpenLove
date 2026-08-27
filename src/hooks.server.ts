@@ -1,8 +1,10 @@
 import type { Handle } from '@sveltejs/kit';
 import { startMilestoneScheduler, stopMilestoneScheduler } from '$lib/server/scheduler';
+import { startSharedImageCleanup, stopSharedImageCleanup } from '$lib/server/sharedImage';
 
 // Start the background milestone scheduler on server startup
 startMilestoneScheduler();
+startSharedImageCleanup();
 
 /**
  * adapter-node registers its own SIGINT/SIGTERM handlers, which close the HTTP
@@ -21,6 +23,7 @@ if (!globalForShutdown.openloveShutdownHooked) {
 	(process as NodeJS.EventEmitter).on('sveltekit:shutdown', (reason: string) => {
 		console.log(`\n\u{1F44B} Shutting down OpenLove (${reason})...`);
 		stopMilestoneScheduler();
+		stopSharedImageCleanup();
 	});
 }
 

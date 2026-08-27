@@ -196,7 +196,7 @@ stage generalizes it.
 
 ---
 
-## Stage 3 — Server: encrypted image relay storage
+## Stage 3 — Server: encrypted image relay storage ✅ Done
 
 Gated by the Stage 2 flag end-to-end (both endpoints 404 when disabled).
 
@@ -245,6 +245,41 @@ the same unexpired id both succeed.
 **Manual verification:** `curl` round trip — POST bytes, GET twice (both
 succeed, same bytes), set `SHARED_IMAGE_TTL_HOURS=0` and confirm a
 subsequent sweep/GET treats it as already expired.
+
+→ Shipped as planned, with three deviations:
+- **`@@index([createdAt])`** added to the `SharedImage` model — not in the
+  plan's original schema snippet, but the cleanup sweep's `WHERE createdAt <
+  cutoff` query benefits from it and every other model in this schema
+  indexes its own hot lookup column already.
+- **`Uint8Array.from(ciphertext)`** in `saveSharedImage()`: Prisma's
+  generated `create()` input wants a `Uint8Array<ArrayBuffer>` specifically;
+  Node's `Buffer` is typed against `ArrayBufferLike` (which also covers
+  `SharedArrayBuffer`), so passing a `Buffer` straight through failed
+  `pnpm check`. `.from()` allocates a fresh, non-shared buffer, which
+  satisfies the stricter type.
+- **The `SHARED_IMAGE_TTL_HOURS=0` manual-verification step, as literally
+  written, contradicts what got built** — and what got built is correct.
+  `getSharedImageTtlMs()` treats `0` (and negative/non-numeric values) as
+  *invalid input*, warns once, and falls back to the 24h default — the same
+  defensive philosophy `getVapidSubject()` already uses elsewhere in this
+  codebase, so a self-hoster's typo can't silently make every future share's
+  photo permanently unfetchable with no visible error. That means `=0`
+  does **not** expire anything immediately; verified live (see below) that
+  it instead logs the fallback warning and the image stays retrievable.
+  Real expiry was demonstrated instead with a tiny *valid* positive TTL
+  (`SHARED_IMAGE_TTL_HOURS=0.001`, ~3.6s).
+- **Verified**: `pnpm check` (0 errors), `pnpm test` (89/89, +10 new —
+  TTL parsing table, save/get round trip, unlimited-reads-within-TTL,
+  live TTL-expiry-before-any-sweep, and cleanup honoring a TTL changed after
+  the row was saved), `pnpm build` (Prisma client regenerated cleanly,
+  precache still DOM-free). Live via `curl` against the dev server: full
+  POST→GET→GET round trip (same bytes both times); both endpoints 404 with
+  `FEATURE_SHARE_IMAGES=false`; a ~9MB payload rejected with `413` under the
+  8MB cap; `SHARED_IMAGE_TTL_HOURS=0.001` (~3.6s) demonstrated a real image
+  going from retrievable to `404` purely from the read-time TTL check, with
+  no sweep having run yet; `SHARED_IMAGE_TTL_HOURS=0` confirmed to log the
+  fallback warning and leave the image retrievable, per the corrected
+  behavior above.
 
 ---
 
