@@ -401,6 +401,25 @@ class ProfileStore {
 		await saveAppStateToStorage(this.state);
 	}
 
+	/**
+	 * Regenerate a bond's photo object URL from its already-in-memory Blob.
+	 *
+	 * Object URLs are scoped to the browsing context, never persisted (see
+	 * `saveAppStateToStorage`'s `sanitizedBonds`, which strips `photoUrl` before
+	 * writing to IndexedDB) — every fresh load calls `URL.createObjectURL` anew.
+	 * But a PWA that sits backgrounded for a while can have the browser reclaim
+	 * an object URL's registry entry without tearing down the page's JS heap,
+	 * which surfaces as an `<img>` failing to load a `photoUrl` that looks
+	 * perfectly valid. Since the `Blob` itself is untouched, this is a one-line
+	 * self-heal — see the `onerror` handlers next to every `<img src={...photoUrl}>`.
+	 */
+	regeneratePhotoUrl(bondId: string) {
+		const bond = this.state.bonds.find((b) => b.id === bondId);
+		if (!bond?.photoBlob || typeof URL === 'undefined') return;
+		const url = URL.createObjectURL(bond.photoBlob);
+		this.state.bonds = this.state.bonds.map((b) => (b.id === bondId ? { ...b, photoUrl: url } : b));
+	}
+
 	async setUITheme(uiTheme: UIThemeId, targetBondId?: string) {
 		const bondId = targetBondId || this.state.activeBondId;
 		await this.updateBond(bondId, { uiTheme });

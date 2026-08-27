@@ -161,6 +161,17 @@
 	async function handleCreateNewBond() {
 		if (!bondNames.trim() || !bondTogetherSince) return;
 
+		// Captured before the `addBond` await below: adding the bond makes it
+		// active, which changes `profileStore.activeBond` — a dependency this
+		// component's mount `$effect` reads inside its `isNewBond` branch. Svelte
+		// re-runs that effect on the resulting microtask (while this function is
+		// still suspended on the `await`), and since `open`/`isNewBond` are both
+		// still true at that point, it resets every draft field, including
+		// `bondPhotoBlob`, back to its initial value. Re-reading the reactive
+		// `bondPhotoBlob` after the await silently drops whatever photo was
+		// picked; the captured local doesn't.
+		const photoToSave = bondPhotoBlob;
+
 		const newBond: Bond = {
 			id: `bond_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
 			type: bondType,
@@ -183,8 +194,8 @@
 		};
 
 		await profileStore.addBond(newBond);
-		if (bondPhotoBlob) {
-			await profileStore.setPhoto(bondPhotoBlob, newBond.id);
+		if (photoToSave) {
+			await profileStore.setPhoto(photoToSave, newBond.id);
 		}
 
 		open = false;

@@ -37,6 +37,18 @@
 		open = false;
 		onclose?.();
 	}
+
+	// Guards each bond's photo to at most one regeneration attempt — see
+	// `profileStore.regeneratePhotoUrl`'s doc comment for why `<img>` can fail to
+	// load a `photoUrl` that looks valid. Keyed per bond id since this list
+	// renders every bond in one component instance (not one per row).
+	let photoRegenAttempted = $state<Record<string, boolean>>({});
+
+	function handlePhotoError(bond: Bond) {
+		if (photoRegenAttempted[bond.id] || !bond.photoBlob) return;
+		photoRegenAttempted = { ...photoRegenAttempted, [bond.id]: true };
+		profileStore.regeneratePhotoUrl(bond.id);
+	}
 </script>
 
 <Modal
@@ -62,23 +74,34 @@
 					onkeydown={(e) => e.key === 'Enter' && handleSelectBond(bond.id)}
 				>
 					<div class="flex items-center gap-3 min-w-0">
-						<!-- Avatar / Icon -->
-						<div class="relative h-12 w-12 rounded-full overflow-hidden bg-muted border border-border/80 flex items-center justify-center shrink-0">
-							{#if bond.photoUrl}
-								<img src={bond.photoUrl} alt={bond.names} class="h-full w-full object-cover" />
-							{:else if bond.type === 'friendship'}
-								<div class="h-full w-full bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-									<Sparkles class="h-6 w-6" />
-								</div>
-							{:else}
-								<div class="h-full w-full bg-rose-50 dark:bg-rose-950/50 flex items-center justify-center text-rose-500">
-									<Heart class="h-6 w-6 fill-rose-500/20" />
-								</div>
-							{/if}
+						<!-- Avatar / Icon. The "selected" badge is a sibling of the
+						     clipped image wrapper, not a child of it — a child would
+						     get its negative-offset corner clipped by the wrapper's
+						     own `overflow-hidden` rounding, same as ModernTheme's
+						     avatar badge is structured. -->
+						<div class="relative h-12 w-12 shrink-0">
+							<div class="h-12 w-12 rounded-full overflow-hidden bg-muted border border-border/80 flex items-center justify-center">
+								{#if bond.photoUrl}
+									<img
+										src={bond.photoUrl}
+										alt={bond.names}
+										class="h-full w-full object-cover"
+										onerror={() => handlePhotoError(bond)}
+									/>
+								{:else if bond.type === 'friendship'}
+									<div class="h-full w-full bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+										<Sparkles class="h-6 w-6" />
+									</div>
+								{:else}
+									<div class="h-full w-full bg-rose-50 dark:bg-rose-950/50 flex items-center justify-center text-rose-500">
+										<Heart class="h-6 w-6 fill-rose-500/20" />
+									</div>
+								{/if}
+							</div>
 
 							{#if isActive}
 								<div class="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-primary text-white flex items-center justify-center shadow-xs">
-									<Check class="h-2.5 w-2.5 stroke-[3]" />
+									<Check class="h-2.5 w-2.5 stroke-3" />
 								</div>
 							{/if}
 						</div>

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ThemeProps } from '$lib/types/profile';
 	import { Heart, Settings, Share2, Sparkles, ChevronDown } from '@lucide/svelte';
+	import { profileStore } from '$lib/stores/profile.svelte';
 	import SyncStatusPill from '$lib/components/offline/SyncStatusPill.svelte';
 	import ThemeIconButton from '$lib/components/themes/shared/ThemeIconButton.svelte';
 	import HeroCounterCard from '$lib/components/themes/shared/HeroCounterCard.svelte';
@@ -10,6 +11,22 @@
 	let { profile, bond, timeBreakdown, nextMilestone, onOpenSettings, onOpenShare, onOpenSwitcher }: ThemeProps = $props();
 
 	let isFriendship = $derived(bond?.type === 'friendship');
+
+	// See `profileStore.regeneratePhotoUrl`'s doc comment: an `<img>` can fail to
+	// load a `photoUrl` that looks valid after the app sits backgrounded a
+	// while. One retry per distinct Blob — reset only when the underlying photo
+	// itself changes (bond switch, new upload), not by our own regeneration
+	// (which reuses the same Blob and would otherwise retrigger this and loop).
+	let photoRegenAttempted = $state(false);
+	$effect(() => {
+		bond?.photoBlob;
+		photoRegenAttempted = false;
+	});
+	function handlePhotoError() {
+		if (photoRegenAttempted || !bond?.photoBlob) return;
+		photoRegenAttempted = true;
+		profileStore.regeneratePhotoUrl(bond.id);
+	}
 </script>
 
 <div class="relative min-h-svh w-full max-w-md mx-auto px-4 py-6 flex flex-col justify-between pb-12">
@@ -59,6 +76,7 @@
 							src={profile.photoUrl}
 							alt={profile.names}
 							class="h-full w-full object-cover"
+							onerror={handlePhotoError}
 						/>
 					{:else if isFriendship}
 						<div class="h-full w-full bg-gradient-to-br from-emerald-100 to-teal-200 dark:from-emerald-950/60 dark:to-zinc-900 flex items-center justify-center text-primary">
@@ -116,7 +134,11 @@
 			variant="default"
 		/>
 
-		<!-- Next Milestone Progress Bar -->
-		<NextMilestoneCard {nextMilestone} variant="default" />
+		<!-- Next Milestone Progress Bar. Keyed on bond id so switching bonds remounts
+		     the bar instead of CSS-transitioning its width from the previous bond's
+		     unrelated percentage — see Progress.svelte's `transition-all`. -->
+		{#key bond?.id}
+			<NextMilestoneCard {nextMilestone} variant="default" />
+		{/key}
 	</main>
 </div>
