@@ -5,6 +5,12 @@
 	 * see REFACTOR_PLAN.md, High H1. Only ever mounted when
 	 * `showAppWideSettings && !isNewBond`, so it owns its `isPushLoading`/
 	 * `pushStatusMessage` state outright rather than sharing it with anything else.
+	 *
+	 * The test/debug buttons (and their `/api/push/test`,
+	 * `/api/push/trigger-scheduler` endpoints) are gated behind `dev` from
+	 * `$app/environment` — `trigger-scheduler` dispatches to every subscriber in
+	 * the DB with no auth, and `test` relays a push to any endpoint/keys the
+	 * caller supplies, so both must stay unreachable in a live deployment.
 	 */
 	import type { Bond } from '$lib/types/bonds';
 	import { profileStore } from '$lib/stores/profile.svelte';
@@ -13,6 +19,7 @@
 	import Button from '$lib/components/ui/button';
 	import Switch from '$lib/components/ui/switch';
 	import { BellRing, CloudOff } from '@lucide/svelte';
+	import { dev } from '$app/environment';
 
 	interface Props {
 		currentBond: Bond;
@@ -125,39 +132,43 @@
 		<div class="pt-2 border-t border-border/50 space-y-2">
 			<div class="flex items-center justify-between gap-2">
 				<span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓ Device Connected</span>
-				<Button
-					size="sm"
-					variant="outline"
-					class="h-7 text-xs px-2.5"
-					onclick={handleTestPush}
-					disabled={isPushLoading || !networkStore.isOnline}
-				>
-					<span>{networkStore.isOnline ? 'Test Alert' : 'Offline'}</span>
-				</Button>
+				{#if dev}
+					<Button
+						size="sm"
+						variant="outline"
+						class="h-7 text-xs px-2.5"
+						onclick={handleTestPush}
+						disabled={isPushLoading || !networkStore.isOnline}
+					>
+						<span>{networkStore.isOnline ? 'Test Alert' : 'Offline'}</span>
+					</Button>
+				{/if}
 			</div>
 
-			<div class="flex items-center gap-1.5 pt-1">
-				<Button
-					size="sm"
-					variant="outline"
-					class="flex-1 h-7 text-[11px] px-2"
-					onclick={handleTestMilestonePush}
-					disabled={isPushLoading || !networkStore.isOnline}
-					title="Sends a test milestone alert formatted specifically for your active relationship/friendship"
-				>
-					<span>Test Milestone Alert</span>
-				</Button>
-				<Button
-					size="sm"
-					variant="outline"
-					class="flex-1 h-7 text-[11px] px-2"
-					onclick={handleTriggerScheduler}
-					disabled={isPushLoading || !networkStore.isOnline}
-					title="Triggers the server's milestone evaluation logic on all registered bonds right now"
-				>
-					<span>Run Cron Check</span>
-				</Button>
-			</div>
+			{#if dev}
+				<div class="flex items-center gap-1.5 pt-1">
+					<Button
+						size="sm"
+						variant="outline"
+						class="flex-1 h-7 text-[11px] px-2"
+						onclick={handleTestMilestonePush}
+						disabled={isPushLoading || !networkStore.isOnline}
+						title="Sends a test milestone alert formatted specifically for your active relationship/friendship"
+					>
+						<span>Test Milestone Alert</span>
+					</Button>
+					<Button
+						size="sm"
+						variant="outline"
+						class="flex-1 h-7 text-[11px] px-2"
+						onclick={handleTriggerScheduler}
+						disabled={isPushLoading || !networkStore.isOnline}
+						title="Triggers the server's milestone evaluation logic on all registered bonds right now"
+					>
+						<span>Run Cron Check</span>
+					</Button>
+				</div>
+			{/if}
 		</div>
 	{:else if profileStore.state.pushIntent}
 		<div class="pt-2 border-t border-border/50 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">

@@ -1,11 +1,20 @@
-import { json } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { dev } from '$app/environment';
 
 // The root layout sets `prerender = true`; server endpoints must opt out.
 export const prerender = false;
 import { sendPushNotification } from '$lib/server/push';
 
+// Dev-only: this endpoint sends a push to whatever endpoint/keys the caller
+// supplies, which would otherwise let anyone use a live deployment as an
+// open relay for arbitrary Web Push messages. See PushNotificationPanel.svelte
+// (client-side "Test Alert"/"Test Milestone Alert" buttons, also dev-gated).
 export const POST: RequestHandler = async ({ request }) => {
+	if (!dev) {
+		error(404, 'Not found');
+	}
+
 	try {
 		const body = await request.json();
 		const { endpoint, keys, bondId, milestoneTitle, milestoneType } = body;
