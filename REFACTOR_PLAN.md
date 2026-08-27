@@ -624,13 +624,67 @@ ones, not on each other.
       touched no tested logic files).
 *(H3; depended on nothing from Phase 2, ran after it.)*
 
-### Phase 4 — `SettingsSheet` decomposition
-- [ ] Extract `MilestonePrefsEditor.svelte` with the `updateMilestonePrefs()` helper. *(H2)*
-- [ ] Extract `BondIdentityForm.svelte`, `MilestonesList.svelte`,
+### Phase 4 — `SettingsSheet` decomposition — ✅ DONE (2026-08-27)
+- [x] Extract `MilestonePrefsEditor.svelte` with the `updateMilestonePrefs()` helper. *(H2)*
+      → Implemented as `updatePrefs(patch)`: verified field-by-field against all six
+      original handlers before extracting — each original handler's explicit
+      `?? true` / `?? 'all'` fallback fields were dead code whenever
+      `currentBond.milestonePrefs` is defined (spreading it already supplied those
+      exact values), so `{ ...(currentBond.milestonePrefs ?? DEFAULT_MILESTONE_PREFS_ROMANTIC), ...patch }`
+      reproduces all six byte-for-byte, including the one non-obvious original
+      quirk preserved deliberately: the type-optional-field fallback branch (when
+      `currentBond.milestonePrefs` is itself undefined) always defaults to
+      *romantic* prefs regardless of the bond's actual type — matching the
+      original's own inconsistency rather than "fixing" it into a behavior change.
+      Also owns `notificationsEnabled` and the master toggle (the section they
+      gate together), using `$bindable()` for the five draft fields the parent
+      still needs for `handleCreateNewBond`.
+- [x] Extract `BondIdentityForm.svelte`, `MilestonesList.svelte`,
       `PushNotificationPanel.svelte`, `StorageBackupPanel.svelte`.
-- [ ] Reduce `SettingsSheet.svelte` to mode resolution + composition of the above. *(H1)*
-*(Depends on Phase 3's selectors existing so `BondIdentityForm`/composition can consume
-them directly instead of re-extracting mid-phase.)*
+      → `MilestonesList` and `PushNotificationPanel` turned out fully
+      self-containable: both are only ever mounted for an existing bond
+      (`{#if !isNewBond}` / `{#if showAppWideSettings && !isNewBond}` in the
+      parent), so their `isNewBond` ternaries and guards — dead branches at their
+      only real call site — were dropped rather than threaded through as props,
+      and each now calls `profileStore.updateBond`/push functions directly instead
+      of via the parent's `handleLiveUpdate` wrapper. `StorageBackupPanel` keeps an
+      `open` prop specifically because `Modal.svelte` keeps children mounted
+      through its own ~260ms close animation before tearing them down — a plain
+      mount-effect would have subtly changed the storage-estimate refresh's
+      re-fire timing on rapid reopen; threading `open` through preserves the
+      original effect's exact dependency-driven semantics instead.
+- [x] Reduce `SettingsSheet.svelte` to mode resolution + composition of the above. *(H1)*
+      → 1,212 lines → 393. Retains only: props/mode resolution, the draft `$state`
+      needed across multiple children plus `handleCreateNewBond`, the sync-on-open
+      `$effect`, and composition of the five extracted components plus the
+      Phase 3 selectors (Theme/Color Appearance section wasn't in this phase's
+      extraction list, so it stays inline using `ThemeSelector`/
+      `ColorModeSelector`/`ColorPaletteSelector` directly, as before).
+- [x] **Visual verification across all four `isNewBond` × `showAppWideSettings`
+      combinations** — actually three: `(true, true, false)`≡main gear icon,
+      `(false, true)`≡switcher "Add", `(false, false)`≡switcher "Edit" cover every
+      reachable state; `showAppWideSettings=true` with `isNewBond=true` is a valid
+      prop combination but is never actually wired to any button in the app, so
+      it was out of scope to test. Drove a full Playwright flow through all three:
+      toggled a day-milestone filter button and read back its actual DOM class
+      list (confirming the H2 `updatePrefs` merge produces the right selected
+      state, not just a plausible-looking screenshot); added and then deleted a
+      custom milestone, checking `isVisible()` before and after (confirms
+      `MilestonesList`'s self-contained `profileStore.updateBond` calls persist
+      correctly); created a second bond through the `isNewBond` form and verified
+      it appeared correctly in the switcher with the right computed day-count;
+      opened scoped-edit mode with two bonds and confirmed via `isVisible()` (not
+      just a screenshot) that "Delete Bond" is shown. Zero console/page errors
+      across the entire flow. One test-script-only false alarm, caught and
+      resolved without touching app code: a screenshot taken immediately after
+      opening the new-bond modal (`BondSwitcherDrawer` opens `SettingsSheet` as a
+      second stacked `Modal` on top of itself — pre-existing design, untouched
+      here) appeared to show the wrong content because the
+      screenshot raced the modal's own open transition; a longer settle wait
+      produced a clean, correct screenshot confirming no actual issue.
+- [x] Verification: `pnpm check` → 0 errors, 0 warnings across 4,281 files.
+      `pnpm test` → 6 files, 52/52 passing. `pnpm build` → succeeds end-to-end,
+      `verify-precache.js` confirms the service worker is still DOM-free.
 
 ### Phase 5 — Onboarding decomposition
 - [ ] Split `OnboardingFlow.svelte`'s six steps into `src/lib/components/onboarding/steps/`.
