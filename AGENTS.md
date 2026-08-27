@@ -29,8 +29,9 @@ Welcome! This document is the **single source of truth** for human contributors 
 | **Scheduler** | Node Background Cron | Hourly timezone-aware milestone checker initialized in [`src/hooks.server.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/hooks.server.ts). |
 | **PWA & Offline** | `@vite-pwa/sveltekit` (`injectManifest`) + Workbox 7 | **One** service worker doing precaching, navigation fallback, push and sync. Prerendered SPA shell. See Invariant 7. |
 | **Offline Sync** | Hand-rolled IndexedDB outbox | One-directional client→server queue with coalescing, backoff and last-write-wins. See Invariant 8. |
-| **Sharing & Sync** | URL Hash + QR Code | `#import=<base64-json>` + QR camera scanner (`jsqr`) & QR generator (`qrcode`). |
+| **Sharing & Sync** | URL Hash + QR Code | `#import=<base64-json>` + QR camera scanner (`jsqr`) & QR generator (`qrcode`). Single-source decode/detect logic lives in [`src/lib/utils/share.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/share.ts) — see Invariant 9. |
 | **Containerization** | Multi-Arch Docker/Podman | Multi-stage build with `--platform=$BUILDPLATFORM` for native host compilation. |
+| **Testing** | Vitest | Pure-function unit tests only (no DOM) — date/milestone math, outbox coalescing, server sync conflict resolution, share-payload parsing. Run via `pnpm test`. See "Testing" under Common Commands. |
 
 ---
 
@@ -126,6 +127,15 @@ handlers. Keep it that way; a pull phase would reintroduce every problem this de
   anniversary date left the server firing milestone pushes on the old schedule forever.
 - **Never sync before `await profileStore.ready`.** Until IndexedDB has been read, `profile` holds
   `DEFAULT_PROFILE` — whose `togetherSince` is *today*. Syncing that overwrites the real date.
+  This applies to **mount-time `$effect`s just as much as imperative code** — a top-level effect
+  in `+page.svelte` can run, and even finish an async write, *before* `profileStore.init()`
+  (kicked off from the store's own constructor) resolves. When `init()`'s `this.state = loaded`
+  lands afterward, it silently reverts whatever the early write just did. This is not
+  hypothetical: the `#import=` hash-import effect shipped with exactly this race — a full-backup
+  import would complete, clear the URL, then the page would revert back to onboarding a moment
+  later. Any mount-time effect that reads `profileStore.state` for a real decision, or calls a
+  mutating method, must `await profileStore.ready` first. See the `share-import-safety` skill
+  and `handleImportHash()` in `+page.svelte` for the fixed reference pattern.
 - **Background Sync is a progressive enhancement, never the mechanism.** Neither Safari nor
   Firefox supports it. The baseline is four foreground triggers: app start, `online`,
   `visibilitychange`, and an opportunistic flush on `push`.
@@ -134,6 +144,38 @@ handlers. Keep it that way; a pull phase would reintroduce every problem this de
   impossible.
 - **`navigator.onLine` is a hint only** — it reports `true` behind captive portals. It may drive
   presentation, never a decision to skip a flush.
+
+### 9. Full-Backup Import Safety (CRITICAL)
+- [`profileStore.importJSON(json, mode)`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/stores/profile.svelte.ts)
+  has three branches. The single-bond branches (V2 single-bond invite, V1 legacy) respect
+  `mode: 'replace' | 'add'`. **The full-backup branch (`data.version === 2 && Array.isArray(data.bonds)`)
+  does not** — it always replaces the entire local app state regardless of `mode`.
+- **Never** route a payload of unverified shape through the single-bond Add-as-New/Replace-Current
+  UI without checking [`detectFullBackup()`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/share.ts)
+  first. A full backup routed through that UI silently wipes every bond already on the device
+  while the button claims to be additive — a real, user-facing Zero-Data-Loss violation, not a
+  theoretical one; it was one commit away from shipping in `ScanImportModal.svelte`.
+- The fixed reference pattern lives in `ScanImportModal.svelte`'s `handleImportData` and
+  `+page.svelte`'s `handleImportHash`: an unconfigured device (nothing to lose) imports a full
+  backup directly; a configured device requires an explicit native `confirm()` naming the exact
+  bond count — the same pattern this codebase already uses for its other irreversible actions
+  (`handleResetData`/`handleDeleteCurrentBond` in `SettingsSheet.svelte`), not a new UI convention.
+- See the `share-import-safety` skill before touching any of this code.
+
+### 10. Local-Calendar-Day Comparisons (Timezone Safety)
+- [`calculateMilestones()`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/time.ts)
+  builds every `targetDate` with `new Date(year, month, day)` — a **local-timezone** constructor.
+  `date.toISOString()` always renders in **UTC**. Comparing one against the other to answer "is
+  this the same calendar day" introduces a bug that depends on the *server process's* timezone
+  offset — independent of any subscriber's own timezone setting.
+- This shipped: the milestone scheduler compared `m.targetDate.toISOString().split('T')[0]`
+  against the subscriber's local calendar date string, silently firing push notifications a day
+  early, a day late, or not at all whenever the container's `TZ` wasn't UTC. It stayed invisible
+  because the common Docker default happens to be UTC, where the bug is a no-op.
+- **The rule:** compare `getFullYear()`/`getMonth()`/`getDate()` directly when the intent is
+  "same calendar day" — never `.toISOString().split('T')[0]`. See
+  [`toLocalDateString()`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/server/scheduler.ts)
+  for the fixed reference pattern, and the `share-import-safety` skill.
 
 ---
 
@@ -159,12 +201,27 @@ OpenLove/
 │   ├── hooks.server.ts         # SvelteKit server hook (boots background milestone scheduler)
 │   ├── lib/
 │   │   ├── components/
+│   │   │   ├── bonds/          # BondSwitcherDrawer (multi-bond list, switch, add, edit entry point)
 │   │   │   ├── offline/        # SyncStatusPill (offline / N-changes-pending indicator)
-│   │   │   ├── onboarding/     # 5-step interactive onboarding wizard
+│   │   │   ├── onboarding/
+│   │   │   │   ├── OnboardingFlow.svelte  # Thin stepper shell: nav, footer, shared draft state
+│   │   │   │   └── steps/      # OverviewStep, PwaInstallStep, NamesStep, DateStep, PhotoStep, StyleStep
 │   │   │   ├── pwa/            # PWAToast: the single SW registration + update/offline-ready toast
-│   │   │   ├── settings/       # Customization drawer, dark mode, color accents, push toggle
+│   │   │   ├── settings/
+│   │   │   │   ├── SettingsSheet.svelte      # Thin orchestrator: mode resolution + composition
+│   │   │   │   ├── BondIdentityForm.svelte   # Type, names, date, photo
+│   │   │   │   ├── MilestonePrefsEditor.svelte # Per-bond notification toggle + category prefs
+│   │   │   │   ├── MilestonesList.svelte     # Milestone list + custom-milestone add/delete
+│   │   │   │   ├── PushNotificationPanel.svelte # Device-wide push subscription card
+│   │   │   │   └── StorageBackupPanel.svelte # Storage estimate, backup/restore/reset
 │   │   │   ├── share/          # ShareModal, PartnerInviteModal, ScanImportModal (QR scanner)
-│   │   │   ├── themes/         # ModernTheme, TraditionalTheme, and theme registry
+│   │   │   ├── shared/         # BondTypeSelector, ThemeSelector, ColorModeSelector,
+│   │   │   │                   #   ColorPaletteSelector — used by both SettingsSheet and
+│   │   │   │                   #   OnboardingFlow via `variant`/`layout` props (see H3/H5 below)
+│   │   │   ├── themes/
+│   │   │   │   ├── shared/     # ThemeIconButton, HeroCounterCard, StatBreakdownGrid,
+│   │   │   │   │               #   NextMilestoneCard — used by both ModernTheme and CoverTheme
+│   │   │   │   ├── ModernTheme.svelte, CoverTheme.svelte, TraditionalTheme.svelte, registry.ts
 │   │   │   └── ui/             # shadcn-style UI atoms (Button, Card, Modal, Switch, Badge, etc.)
 │   │   ├── generated/prisma/   # Generated Prisma v7 client output
 │   │   ├── push/
@@ -172,7 +229,7 @@ OpenLove/
 │   │   ├── server/
 │   │   │   ├── db.ts           # Prisma 7 client instance with PrismaBetterSqlite3
 │   │   │   ├── push.ts         # Server WebPush sender & VAPID key manager
-│   │   │   ├── scheduler.ts    # Hourly timezone-aware milestone background scheduler
+│   │   │   ├── scheduler.ts    # Hourly timezone-aware milestone background scheduler (see Invariant 10)
 │   │   │   └── sync.ts         # Idempotent, last-write-wins sync op handlers
 │   │   ├── storage/
 │   │   │   ├── db.ts           # IndexedDB profile & photo blob storage (idb-keyval)
@@ -189,6 +246,8 @@ OpenLove/
 │   │       ├── base64.ts       # VAPID key decoding (DOM-free: SW imports it)
 │   │       ├── clipboard.ts    # Robust fallback clipboard copying
 │   │       ├── pwa.ts          # Standalone PWA detection (iOS Safari, Android, Desktop)
+│   │       ├── share.ts        # decodeSharePayloadString + detectFullBackup — single source of
+│   │       │                   #   truth for share-payload parsing (see Invariant 9)
 │   │       ├── storage.ts      # navigator.storage persist()/estimate() helpers
 │   │       └── time.ts         # Exact calendar time & multi-category milestone calculations
 │   └── routes/
@@ -221,8 +280,23 @@ OpenLove/
   - **`modern`**: Glassmorphic cards, glowing avatar, accent color palettes (*Rose, Lavender, Terracotta, Sage, Midnight*).
   - **`cover`**: Full-bleed cover photo with clean top header and floating metric cards.
   - **`traditional`**: Authentic replica of classic "My Love" design with deep crimson header and serif typography.
+- **`modern` and `cover` compose from `themes/shared/`** (`ThemeIconButton`, `HeroCounterCard`,
+  `StatBreakdownGrid`, `NextMilestoneCard`) rather than duplicating markup. These two themes use
+  **different Tailwind tokens for the same-looking cards** (padding, icon size, `backdrop-blur-md`,
+  `min-w-0` — Cover is deliberately more compact to leave room for its cover photo), captured as an
+  explicit `variant: 'default' | 'compact'` prop on each shared component. **Never** collapse that
+  difference to "unify" the two themes further — see the `ui-refactor-verification` skill before
+  touching any of these. `traditional`'s layout is different enough it doesn't share these.
 - **Per-Bond Customization**: Each `Bond` independently configures its own `uiTheme`, `colorPalette`, `colorMode`, `showSeconds`, `milestonePrefs`, and `notificationsEnabled`.
-- **Unified Settings**: [`SettingsSheet.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/settings/SettingsSheet.svelte) provides scoped bond editing and applies progressive disclosure (omits the Active Bond header when only 1 bond exists).
+- **Unified Settings**: [`SettingsSheet.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/settings/SettingsSheet.svelte)
+  is a thin orchestrator (mode resolution + composition) over `BondIdentityForm`,
+  `MilestonePrefsEditor`, `MilestonesList`, `PushNotificationPanel`, `StorageBackupPanel`, and the
+  `shared/` selectors — it provides scoped bond editing and applies progressive disclosure (omits
+  the Active Bond header when only 1 bond exists). **When adding a new settings control**, decide
+  which of those five components it belongs in (or whether it's genuinely a new one) rather than
+  adding directly to `SettingsSheet.svelte` — it was 1,212 lines before this split and is
+  deliberately kept thin now. The bond-type/theme/color-mode/palette pickers it uses are the same
+  `shared/` components `OnboardingFlow` uses — check there first before writing a new picker.
 
 ### 2. Multi-Category Milestone Engine ([`src/lib/utils/time.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/time.ts))
 - **Months**: 1st through 11th months, 18 months, 30 months, 42 months, etc.
@@ -237,9 +311,29 @@ OpenLove/
   - **Unconfigured Users (A)**: Smart landing options (*Install App pre-synced, Copy Sync Code, Continue in Browser*).
   - **Single-Bond Users (B)**: Displays incoming preview with choices to **➕ Add as New Bond** or **🔄 Replace Current Bond**.
   - **Multi-Bond Users (C)**: Displays incoming preview with choice to **➕ Add to My Bonds**.
+  - This preview/replace/add flow is for **single-bond invites only**. It is never shown for a
+    full multi-bond backup — see Invariant 9.
 - **QR Code Scanner ([`ScanImportModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/ScanImportModal.svelte))**: Real-time camera scanner (`jsqr`), image upload, and paste code handler with preview confirmation.
 - **Add Bond Integration**: Top-level action in the Add Bond sheet to directly scan or paste shared partner profiles.
+- **Decode/detect logic** (`#import=` URL parsing, bare base64 sync codes, full-backup detection)
+  is centralized in [`src/lib/utils/share.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/share.ts)
+  and shared by `ScanImportModal.svelte`, `+page.svelte`'s hash effect, and
+  `profileStore.parseSharePayload`. **Do not** reimplement any of it inline at a new call site —
+  import from `share.ts`. See the `share-import-safety` skill before touching any of this.
 
+### 4. Onboarding Wizard
+- [`OnboardingFlow.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/onboarding/OnboardingFlow.svelte)
+  is a thin stepper shell (progress header, footer nav, shared draft `$state`) over six step
+  components in `onboarding/steps/`: `OverviewStep`, `PwaInstallStep` (skipped when already
+  running standalone), `NamesStep`, `DateStep`, `PhotoStep`, `StyleStep`.
+- **State ownership is deliberate, not automatic** — a value stays in `OnboardingFlow` itself
+  (passed down as a prop) whenever something *outside* the step that sets it also needs to read
+  it. The clearest example: the footer's "Continue"/"Continue in Browser" label reads
+  `installSuccess`, even though only `PwaInstallStep`'s markup sets it. Before moving a piece of
+  step state further down, check the `ui-refactor-verification` skill's state-ownership section.
+- `StyleStep` composes the same `shared/` `ThemeSelector`/`ColorModeSelector` components
+  `SettingsSheet` uses, with `layout="detailed"` (icon + circular check badge) instead of Settings'
+  `layout="compact"` (label + inline check) — see subsystem 1 above.
 
 ---
 
@@ -260,6 +354,27 @@ pnpm build
 pnpm prisma:push
 ```
 
+### Testing
+```bash
+# Run the unit test suite once
+pnpm test
+
+# Watch mode
+pnpm test:watch
+```
+`vitest.config.ts` scopes tests to `src/**/*.test.ts` and deliberately configures **no DOM
+environment** — every current test target is a pure function (date/milestone math in `time.ts`,
+outbox coalescing in `outbox.ts`, share-payload parsing in `share.ts`) or a server module with its
+Prisma-touching `./db` import mocked out (`server/sync.ts`, `server/scheduler.ts` — see those
+`*.test.ts` files for the `vi.hoisted` + in-memory-fake-Prisma pattern). Prefer this style of test
+— fast, no browser, no real database — over reaching for a DOM testing library.
+
+For anything that actually renders (a new shared component, a theme, a settings/onboarding flow
+change), **there is no automated UI test suite** — verify by running the app
+(`pnpm dev`/`pnpm build && pnpm preview`) and, for anything claiming not to change existing visual
+output, see the `ui-refactor-verification` skill for the Playwright screenshot-diff pattern this
+codebase's refactor history used to actually prove that, rather than eyeballing it.
+
 ### Container DevOps & Release
 ```bash
 # Build multi-arch container image (AMD64 + ARM64)
@@ -277,9 +392,48 @@ pnpm image:release
 
 ## 💡 Quick Tips for Future Agents
 
-- **When adding new settings**: Add reactive state in [`src/lib/stores/profile.svelte.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/stores/profile.svelte.ts), update `CoupleProfile` type in [`src/lib/types/profile.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/types/profile.ts), and render the control in [`src/lib/components/settings/SettingsSheet.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/settings/SettingsSheet.svelte).
-- **When adding new themes**: Create `YourTheme.svelte` under `src/lib/components/themes/` and register it in `registry.ts` and `THEMES` list.
-- **When modifying push notifications**: Check [`src/lib/server/push.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/server/push.ts) (server), [`src/lib/server/scheduler.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/server/scheduler.ts) (cron), [`src/service-worker.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/service-worker.ts) (notification display), and [`src/lib/push/client.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/push/client.ts) (subscribe as intent).
+- **When adding a new settings control**: Decide which of `BondIdentityForm`,
+  `MilestonePrefsEditor`, `MilestonesList`, `PushNotificationPanel`, or `StorageBackupPanel`
+  (all in `src/lib/components/settings/`) it belongs in — rather than adding directly to
+  `SettingsSheet.svelte`, which is deliberately kept thin (orchestration only) after being split
+  out of a 1,212-line file. Add reactive state in [`src/lib/stores/profile.svelte.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/stores/profile.svelte.ts)
+  and update `CoupleProfile`/`Bond` types in [`src/lib/types/`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/types/) as needed.
+- **When adding a control that could appear in both Settings and Onboarding** (a picker/selector):
+  check `src/lib/components/shared/` first (`BondTypeSelector`, `ThemeSelector`,
+  `ColorModeSelector`, `ColorPaletteSelector`). Each already takes a `variant`/`layout` prop for
+  the two contexts' different Tailwind tokens — read the `ui-refactor-verification` skill before
+  assuming the two contexts render identically enough to reuse without one.
+- **When adding a new onboarding step**: add it to `src/lib/components/onboarding/steps/` and
+  wire it into `OnboardingFlow.svelte`'s step list — don't add it inline. Check whether anything
+  outside the step (the footer, another step) needs to read its state before deciding where that
+  state should live; see subsystem 4 above.
+- **When adding new themes**: Create `YourTheme.svelte` under `src/lib/components/themes/` and register it in `registry.ts` and `THEMES` list. Reuse `themes/shared/` components (`ThemeIconButton`, `HeroCounterCard`, `StatBreakdownGrid`, `NextMilestoneCard`) where the new theme's layout genuinely matches Modern/Cover's card structure — but verify with the `ui-refactor-verification` skill's pixel-diff pattern before claiming it does, don't assume from a glance.
+- **When modifying push notifications**: Check [`src/lib/server/push.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/server/push.ts) (server), [`src/lib/server/scheduler.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/server/scheduler.ts) (cron — see Invariant 10 before touching its date comparisons), [`src/service-worker.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/service-worker.ts) (notification display), and [`src/lib/push/client.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/push/client.ts) (subscribe as intent).
 - **When adding a field the server needs**: extend `SyncOp` in [`src/lib/types/sync.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/types/sync.ts), handle it in [`src/lib/server/sync.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/server/sync.ts), amend the Invariant 1 column list **in the same PR**, and extend the `onProfileMutation` hook in [`src/lib/sync/index.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/sync/index.ts).
+- **Before importing any payload of unverified shape via `profileStore.importJSON()`**: check
+  `detectFullBackup()` first. See Invariant 9 and the `share-import-safety` skill — this is a real
+  data-loss trap, not a style nitpick.
+- **Before writing or approving any date comparison meant to answer "same calendar day"**:
+  compare local `Date` getters, never `.toISOString()`. See Invariant 10 and the
+  `share-import-safety` skill.
+- **Before claiming a Svelte/Tailwind change has "zero visual impact"**: verify it — see the
+  `ui-refactor-verification` skill for the Playwright pixel-diff pattern and its specific gotchas
+  (`page.clock.setFixedTime` vs. `install()+pauseAt()` breaking `Modal.svelte`'s entrance
+  transition; `canvas-confetti` not being CSS-animation-driven).
 - **When touching anything PWA-related**: verify against `pnpm build && pnpm preview`, never `pnpm dev`. Then check DevTools → Application: exactly one service worker at scope `/`, script `/service-worker.js`, and a populated `workbox-precache-v2` cache containing `/`.
 - **Before adding a dependency the service worker imports**: it must be a *direct* dependency. pnpm's strict layout will not resolve transitive packages from either the SW source or `virtual:pwa-register`.
+- **Run `pnpm test` alongside `pnpm check`/`pnpm build`** before considering a non-trivial logic
+  change done. See "Testing" under Common Commands.
+
+## 📚 Skills
+
+Project-specific skill instructions live in `.agents/skills/`. Load these before touching the
+areas they cover — they exist because each one documents a real bug found and fixed in this
+codebase, not a hypothetical:
+
+- **`share-import-safety`** — `profileStore.importJSON()`'s full-backup branch ignoring `mode`,
+  `profileStore.ready` timing for mount-time effects, reactive-effect re-entrancy, and
+  local-vs-UTC date comparisons (Invariants 8, 9, 10).
+- **`ui-refactor-verification`** — how to safely extract/unify near-duplicate Svelte/Tailwind UI
+  in this app and how to actually verify "zero visual impact" with Playwright, including its
+  gotchas specific to this codebase (`Modal.svelte`'s rAF-dependent transition, `canvas-confetti`).
