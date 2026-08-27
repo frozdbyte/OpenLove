@@ -5,7 +5,7 @@
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
 	import Button from '$lib/components/ui/button';
 	import Switch from '$lib/components/ui/switch';
-	import { Trash2, Plus, QrCode, Users, Clock } from '@lucide/svelte';
+	import { Trash2, Plus, QrCode, Users, Clock, BellOff } from '@lucide/svelte';
 	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
 	import ThemeSelector from '$lib/components/shared/ThemeSelector.svelte';
 	import ColorModeSelector from '$lib/components/shared/ColorModeSelector.svelte';
@@ -331,17 +331,32 @@
 			/>
 		</section>
 
-		<MilestonePrefsEditor
-			{isNewBond}
-			{currentBond}
-			bind:notificationsEnabled={bondNotificationsEnabled}
-			bind:years={bondYearsPref}
-			bind:months={bondMonthsPref}
-			bind:days={bondDaysPref}
-			bind:custom={bondCustomPref}
-			onNotificationsChange={(v) => handleLiveUpdate({ notificationsEnabled: v })}
-			onPrefsChange={(prefs) => handleLiveUpdate({ milestonePrefs: prefs })}
-		/>
+		<!-- Device Notifications (App-Wide) — moved above Bond Notifications so the
+		     master toggle a bond's alerts actually depend on is visible before it. -->
+		{#if showAppWideSettings && !isNewBond}
+			<PushNotificationPanel {currentBond} />
+		{/if}
+
+		<!-- Bond Notifications: meaningless without an active device subscription
+		     to actually deliver them, so only shown once one exists. -->
+		{#if profileStore.state.pushSubscribed}
+			<MilestonePrefsEditor
+				{isNewBond}
+				{currentBond}
+				bind:notificationsEnabled={bondNotificationsEnabled}
+				bind:years={bondYearsPref}
+				bind:months={bondMonthsPref}
+				bind:days={bondDaysPref}
+				bind:custom={bondCustomPref}
+				onNotificationsChange={(v) => handleLiveUpdate({ notificationsEnabled: v })}
+				onPrefsChange={(prefs) => handleLiveUpdate({ milestonePrefs: prefs })}
+			/>
+		{:else}
+			<section class="p-3.5 rounded-2xl bg-muted/40 border border-dashed border-border flex items-center gap-2.5 text-xs text-muted-foreground">
+				<BellOff class="h-4 w-4 shrink-0" />
+				<span>Turn on Device Notifications to choose which milestones alert you for this bond.</span>
+			</section>
+		{/if}
 
 		{#if !isNewBond}
 			<MilestonesList {currentBond} />
@@ -369,7 +384,6 @@
 
 		<!-- App-Wide System Settings (Header gear mode only) -->
 		{#if showAppWideSettings && !isNewBond}
-			<PushNotificationPanel {currentBond} />
 			<StorageBackupPanel
 				{open}
 				onScanQR={() => (isScanModalOpen = true)}
