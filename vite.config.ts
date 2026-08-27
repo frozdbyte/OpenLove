@@ -57,7 +57,8 @@ export default defineConfig({
 				],
 				launch_handler: {
 					client_mode: 'focus-existing'
-				}
+				},
+				handle_links: 'preferred'
 			},
 			injectManifest: {
 				// Workbox globs `.svelte-kit/output`, not `build/`. The prerendered SPA shell
