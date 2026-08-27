@@ -451,14 +451,46 @@ any item above.
 Ordered so each phase is independently shippable and later phases depend only on earlier
 ones, not on each other.
 
-### Phase 0 — Safety net (do first, before any structural change)
-- [ ] Add `vitest` as a dev dependency and a `test` script.
-- [ ] Write unit tests for `calculateMilestones()` / `getCalendarDifference()`
+### Phase 0 — Safety net (do first, before any structural change) — ✅ DONE (2026-08-27)
+- [x] Add `vitest` as a dev dependency and a `test` script.
+      → `vitest@4.1.11` added to `devDependencies`; `package.json` scripts gained
+      `"test": "vitest run"` and `"test:watch": "vitest"`; `vitest.config.ts` added,
+      reusing the `sveltekit()` plugin (from `vite.config.ts`) solely for `$lib` alias
+      resolution, scoped to `src/**/*.test.ts` only — no DOM environment configured,
+      since every test target here is a pure function.
+- [x] Write unit tests for `calculateMilestones()` / `getCalendarDifference()`
       (`src/lib/utils/time.ts`), including a case that pins down C1's expected fixed
       behavior under a mocked non-UTC server timezone.
-- [ ] Write unit tests for `coalesce()` (`src/lib/storage/outbox.ts`).
-- [ ] Write unit tests for `applySyncOps`'s LWW branching (`src/lib/server/sync.ts`),
+      → `src/lib/utils/time.test.ts` (18 tests): `getCalendarDifference` borrow/edge
+      cases, `formatLongDate`, `calculateTimeBreakdown` totals/formatting, and
+      `calculateMilestones` filters/achieved-state/next-milestone progress. A
+      dedicated `describe` block mocks `process.env.TZ` (verified to take effect
+      per-`Date`-construction on this Node version, not just at process start) to
+      pin down C1: it asserts `targetDate`'s local Y/M/D getters always give the
+      correct calendar date, while `targetDate.toISOString()` — what
+      `scheduler.ts:78-81` currently compares against — diverges under a
+      positive-UTC-offset zone (Asia/Tokyo) and agrees only under UTC. This encodes
+      the *expected* fixed-comparison behavior for Phase 1 without modifying
+      `scheduler.ts` itself, which stays out of Phase 0's scope.
+- [x] Write unit tests for `coalesce()` (`src/lib/storage/outbox.ts`).
+      → `src/lib/storage/outbox.test.ts` (12 tests): upsert deduplication, delete
+      superseding, re-subscribe-after-delete, `oldEndpoint` carry-forward and
+      override, migrated-away endpoint dropping, cross-endpoint independence, and
+      `attempts` max-carrying. Confirmed safe to import `outbox.ts` under Node
+      without IndexedDB — `idb-keyval`'s `createStore()` is lazy and only touches
+      the `indexedDB` global on an actual CRUD call, which these tests never make.
+- [x] Write unit tests for `applySyncOps`'s LWW branching (`src/lib/server/sync.ts`),
       mockable since it only depends on the injected `prisma` client.
+      → `src/lib/server/sync.test.ts` (9 tests): create-on-first-upsert, newer-upsert
+      applies with bond add/update/remove diffing, older-upsert rejected stale
+      without mutation, endpoint-rotation migrates the row in place and preserves
+      `lastNotified`, stale rotation rejected without migrating, rotation with a
+      missing `oldEndpoint` source falls back to create, and delete
+      idempotency/staleness. `./db` (which opens a real SQLite file as an import
+      side effect) is replaced via `vi.mock` with an in-memory fake implementing
+      just the Prisma Client surface `sync.ts` calls — no real database touched.
+- [x] Verification: `pnpm test` → 3 files, 39/39 tests passing. `pnpm check`
+      (`svelte-kit sync && svelte-check`) → 0 errors, 0 warnings across 4,268 files.
 *(Resolves M1; gives every later phase a regression check.)*
 
 ### Phase 1 — Isolated bug fix
