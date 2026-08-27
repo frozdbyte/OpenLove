@@ -38,13 +38,38 @@
 		variant === 'compact' ? 'p-2 rounded-2xl bg-primary/10 text-primary shrink-0' : 'p-2.5 rounded-2xl bg-primary/10 text-primary'
 	);
 	let iconSize = $derived(variant === 'compact' ? 'h-4 w-4' : 'h-5 w-5');
-	let textWrapClass = $derived(variant === 'compact' ? 'text-left min-w-0' : 'text-left');
-	let valueClass = $derived(variant === 'compact' ? 'text-lg font-bold leading-none' : 'text-xl font-bold leading-none');
+	// `min-w-0` matters here regardless of `Card`'s own base `min-w-0`
+	// (`ui/card/card.svelte`) — this div is a *flex child* of the Card's own
+	// `flex items-center` row, and a flex child's default `min-width: auto`
+	// keeps it at its content's natural width. Without this, a long number
+	// (e.g. an old bond's Hours count) doesn't shrink or wrap — it gets
+	// silently cropped by Card's `overflow-hidden` instead.
+	let textWrapClass = 'text-left min-w-0';
 	let labelClass = $derived(
 		variant === 'compact'
 			? 'text-[10px] text-muted-foreground font-medium mt-1'
 			: 'text-[11px] text-muted-foreground font-medium mt-1'
 	);
+
+	/**
+	 * Steps the value's font size down as its formatted length grows, so a
+	 * long-running bond's larger numbers (Hours/Days) shrink to fit instead
+	 * of wrapping awkwardly or getting clipped by `Card`'s `overflow-hidden`.
+	 * Thresholds are picked off realistic magnitudes: Months/Weeks stay
+	 * full-size for any realistic bond age; Days steps down around the
+	 * 100-year mark; Hours is the stat most likely to reach the larger
+	 * tiers. Each cell sizes independently — e.g. Hours can shrink while
+	 * Months stays full-size — since they don't share a text length.
+	 */
+	function valueSizeClass(value: number): string {
+		const chars = value.toLocaleString().length;
+		const sizes =
+			variant === 'compact' ? ['text-lg', 'text-base', 'text-sm', 'text-xs'] : ['text-xl', 'text-lg', 'text-base', 'text-sm'];
+		if (chars > 9) return sizes[3];
+		if (chars > 6) return sizes[2];
+		if (chars > 3) return sizes[1];
+		return sizes[0];
+	}
 </script>
 
 <div class={gridClass}>
@@ -54,7 +79,7 @@
 				<cell.icon class={iconSize} />
 			</div>
 			<div class={textWrapClass}>
-				<div class={valueClass}>{cell.value.toLocaleString()}</div>
+				<div class="{valueSizeClass(cell.value)} font-bold leading-none">{cell.value.toLocaleString()}</div>
 				<div class={labelClass}>{cell.label}</div>
 			</div>
 		</Card>
