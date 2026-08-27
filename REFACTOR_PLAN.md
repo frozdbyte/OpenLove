@@ -686,9 +686,44 @@ ones, not on each other.
       `pnpm test` → 6 files, 52/52 passing. `pnpm build` → succeeds end-to-end,
       `verify-precache.js` confirms the service worker is still DOM-free.
 
-### Phase 5 — Onboarding decomposition
-- [ ] Split `OnboardingFlow.svelte`'s six steps into `src/lib/components/onboarding/steps/`.
-*(M5; depends on Phase 3 since the `style` step consumes the shared selectors.)*
+### Phase 5 — Onboarding decomposition — ✅ DONE (2026-08-27)
+- [x] Split `OnboardingFlow.svelte`'s six steps into `src/lib/components/onboarding/steps/`.
+      → `OnboardingFlow.svelte`: 696 → 228 lines. Created `OverviewStep.svelte`,
+      `PwaInstallStep.svelte`, `NamesStep.svelte`, `DateStep.svelte`,
+      `PhotoStep.svelte`, `StyleStep.svelte` (46–112 lines each).
+      → State ownership followed the same rule as Phase 4: a step keeps its state
+      locally only when nothing outside it needs to read or react to it.
+      `PhotoStep` and the push-opt-in half of `StyleStep` turned out fully
+      self-contained (`fileInputRef`, `pushOptedIn`/`pushLoading` moved in
+      wholesale). `installSuccess` stayed a prop rather than moving into
+      `PwaInstallStep`, because the wizard's *footer* — rendered by the parent,
+      one step removed from the step content — also reads it for the
+      "Continue"/"Continue in Browser" label; moving it in would have required
+      either duplicating it or threading it back out, so it was left where both
+      readers can see it. `selectedTheme`/`selectedColorMode` likewise stayed
+      parent-owned props (not `$bindable`) specifically because
+      `handleThemeChange`/`handleColorModeChange` also live-apply the pick via
+      `profileStore.setUITheme`/`setColorMode` as the user browses — a side effect
+      that has to keep running wherever the state lives, so the existing handlers
+      were passed down as callback props unchanged rather than rebuilt.
+      `namesInput`/`dateInput` did move to `$bindable()` (no such side effect to
+      preserve, and `bind:value` was already the pattern their own `Input`
+      children used).
+- [x] **Visual verification**: drove the full six-step wizard end-to-end in a real
+      browser (Playwright) — confirmed the step counter reads "Step 1 of 6" /
+      "Step 6 of 6" correctly (proving `pwa_install` is still counted when not
+      standalone), toggled Bond Type on the Names step and confirmed *both* the
+      heading ("Your Names" → "Friend Names") and the cross-field names-swap side
+      effect (input value flipped to "Alex & Sam") still fire correctly through
+      the new `onBondTypeChange` callback, walked Date/Photo/Style, finished
+      onboarding, then reopened Settings and confirmed the exact name and date
+      typed during onboarding ("Verify Six" / "2017-11-11") round-tripped
+      correctly through `finishOnboarding()`. Zero console/page errors across the
+      entire flow.
+- [x] Verification: `pnpm check` → 0 errors, 0 warnings across 4,287 files.
+      `pnpm test` → 6 files, 52/52 passing. `pnpm build` → succeeds end-to-end,
+      service worker confirmed still DOM-free.
+*(M5; depended on Phase 3 since the `style` step consumes the shared selectors.)*
 
 ### Phase 6 — Theme component unification (requires visual sign-off per §4)
 - [ ] Extract `ThemeIconButton.svelte` (confirmed byte-identical; lowest risk in this phase).

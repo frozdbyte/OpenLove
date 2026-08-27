@@ -3,44 +3,28 @@
 	import { pwaStore } from '$lib/stores/pwa.svelte';
 	import type { UIThemeId, ColorMode } from '$lib/types/profile';
 	import Button from '$lib/components/ui/button';
-	import Card from '$lib/components/ui/card';
-	import Input from '$lib/components/ui/input';
-	import {
-		Heart,
-		Calendar,
-		Upload,
-		Trash2,
-		Sparkles,
-		Check,
-		ArrowRight,
-		ArrowLeft,
-		Smartphone,
-		BellRing,
-		Share2,
-		QrCode,
-		ShieldCheck,
-		Download
-	} from '@lucide/svelte';
+	import { Sparkles, ArrowRight, ArrowLeft } from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
-	import { subscribeToPush } from '$lib/push/client';
 	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
 	import {
 		type BondType,
 		DEFAULT_MILESTONE_PREFS_FRIENDSHIP,
 		DEFAULT_MILESTONE_PREFS_ROMANTIC
 	} from '$lib/types/bonds';
-	import BondTypeSelector from '$lib/components/shared/BondTypeSelector.svelte';
-	import ThemeSelector from '$lib/components/shared/ThemeSelector.svelte';
-	import ColorModeSelector from '$lib/components/shared/ColorModeSelector.svelte';
-
+	import OverviewStep from './steps/OverviewStep.svelte';
+	import PwaInstallStep from './steps/PwaInstallStep.svelte';
+	import NamesStep from './steps/NamesStep.svelte';
+	import DateStep from './steps/DateStep.svelte';
+	import PhotoStep from './steps/PhotoStep.svelte';
+	import StyleStep from './steps/StyleStep.svelte';
 
 	type OnboardingStepKey = 'overview' | 'pwa_install' | 'names' | 'date' | 'photo' | 'style';
 
 	let currentStepIndex = $state(0);
 	let isScanModalOpen = $state(false);
 
-	let userOS = $derived(pwaStore.userOS);
 	let installSuccess = $state(false);
+	let showAddressBarTip = $state(false);
 
 	// If running as standalone PWA, omit the PWA installation step
 	let steps = $derived<OnboardingStepKey[]>(
@@ -58,33 +42,6 @@
 	let dateInput = $state(profileStore.profile.togetherSince || new Date().toISOString().split('T')[0]);
 	let selectedTheme = $state<UIThemeId>(profileStore.profile.uiTheme || 'modern');
 	let selectedColorMode = $state<ColorMode>(profileStore.profile.colorMode || 'system');
-	let fileInputRef = $state<HTMLInputElement | null>(null);
-
-
-	// Push notification state during onboarding
-	let pushOptedIn = $state(false);
-	let pushLoading = $state(false);
-
-	async function handleOnboardingPushToggle() {
-		pushLoading = true;
-		try {
-			const res = await subscribeToPush();
-			if (res.success) {
-				pushOptedIn = true;
-			}
-		} catch (err) {
-			console.error('Failed to subscribe to push during onboarding:', err);
-		} finally {
-			pushLoading = false;
-		}
-	}
-
-	async function handlePhotoUpload(e: Event) {
-		const target = e.target as HTMLInputElement;
-		if (target.files && target.files[0]) {
-			await profileStore.setPhoto(target.files[0]);
-		}
-	}
 
 	function handleBondTypeChange(newType: BondType) {
 		bondType = newType;
@@ -104,8 +61,6 @@
 		selectedColorMode = mode;
 		profileStore.setColorMode(mode);
 	}
-
-	let showAddressBarTip = $state(false);
 
 	async function handleInstallPWA() {
 		const outcome = await pwaStore.promptInstall();
@@ -221,319 +176,32 @@
 	<!-- Wizard Step Content -->
 	<main class="my-auto flex-1 flex flex-col justify-center min-h-0 overflow-y-auto w-full py-1 sm:py-2">
 		{#if currentStepKey === 'overview'}
-			<!-- Step 1: App Overview & Privacy Focus -->
-			<div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
-				<div class="h-12 w-12 sm:h-16 sm:w-16 mx-auto rounded-full bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center text-primary shadow-md shadow-rose-500/10 shrink-0">
-					<Heart class="h-6 w-6 sm:h-8 sm:w-8 fill-primary text-primary animate-heartbeat" />
-				</div>
-
-				<div class="space-y-1">
-					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">Welcome to Open Love</h1>
-					<p class="text-xs sm:text-sm text-muted-foreground">A private, romantic space to celebrate your journey</p>
-				</div>
-
-				<!-- Feature Highlights with Privacy Emphasis -->
-				<div class="space-y-2 text-left">
-					<!-- Feature 1: Privacy (Highlighted) -->
-					<Card class="p-3 sm:p-3.5 bg-card/90 border-primary/25 shadow-xs flex items-start gap-3 rounded-2xl ring-1 ring-primary/10">
-						<div class="p-2 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
-							<ShieldCheck class="h-4 w-4 sm:h-5 sm:w-5" />
-						</div>
-						<div class="space-y-0.5 min-w-0">
-							<div class="text-xs sm:text-sm font-bold text-foreground flex items-center gap-1.5">
-								<span>100% Private & Zero-Knowledge</span>
-							</div>
-							<p class="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
-								Your names, dates, notes, and photos stay strictly on this device in IndexedDB. No ads, tracking, or cloud data harvesting.
-							</p>
-						</div>
-					</Card>
-
-					<!-- Feature 2: Milestones & Timers -->
-					<Card class="p-3 sm:p-3.5 bg-card border-border shadow-xs flex items-start gap-3 rounded-2xl">
-						<div class="p-2 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5">
-							<Calendar class="h-4 w-4 sm:h-5 sm:w-5" />
-						</div>
-						<div class="space-y-0.5 min-w-0">
-							<div class="text-xs sm:text-sm font-bold text-foreground">
-								Live Timers & Milestones
-							</div>
-							<p class="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
-								Exact years, months, and days together with smart countdowns for anniversaries and custom memories.
-							</p>
-						</div>
-					</Card>
-
-					<!-- Feature 3: Offline PWA & Partner Sync -->
-					<Card class="p-3 sm:p-3.5 bg-card border-border shadow-xs flex items-start gap-3 rounded-2xl">
-						<div class="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
-							<Sparkles class="h-4 w-4 sm:h-5 sm:w-5" />
-						</div>
-						<div class="space-y-0.5 min-w-0">
-							<div class="text-xs sm:text-sm font-bold text-foreground">
-								Themes & Private Sync
-							</div>
-							<p class="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
-								Works offline, supports Modern & Classic themes, and syncs seamlessly with your partner via private QR code.
-							</p>
-						</div>
-					</Card>
-				</div>
-
-				<div class="pt-0.5">
-					<button
-						type="button"
-						class="text-xs font-semibold text-primary hover:underline flex items-center justify-center gap-1.5 mx-auto py-1 px-3 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer"
-						onclick={() => (isScanModalOpen = true)}
-					>
-						<QrCode class="h-3.5 w-3.5" />
-						<span>Have an invite? Scan Partner QR</span>
-					</button>
-				</div>
-			</div>
+			<OverviewStep onScanQR={() => (isScanModalOpen = true)} />
 		{:else if currentStepKey === 'pwa_install'}
-			<!-- Step: Install Open Love as PWA -->
-			<div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
-				<div class="h-12 w-12 sm:h-16 sm:w-16 mx-auto rounded-full bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center text-primary shadow-md shadow-rose-500/10 shrink-0">
-					<Smartphone class="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
-				</div>
-
-				<div class="space-y-1">
-					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">Install Open Love</h1>
-					<p class="text-xs sm:text-sm text-muted-foreground">Add to your home screen for the full app experience</p>
-				</div>
-
-				{#if installSuccess || pwaStore.isInstalled}
-					<!-- Installation Success Feedback -->
-					<Card class="p-4 sm:p-5 bg-emerald-500/10 border-emerald-500/30 text-center space-y-2 rounded-2xl animate-in fade-in zoom-in-95 duration-300">
-						<div class="h-10 w-10 mx-auto rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-							<Check class="h-6 w-6 stroke-[3]" />
-						</div>
-						<div class="text-sm font-bold text-emerald-600 dark:text-emerald-400">Open Love Installed!</div>
-						<p class="text-xs text-muted-foreground">
-							You can now launch Open Love directly from your home screen or continue setting up right here.
-						</p>
-					</Card>
-				{:else if userOS !== 'ios'}
-					<!-- 1-Click PWA Installation Callout (Chromium on Android / Desktop) -->
-					<Card class="p-4 sm:p-5 bg-card border-primary/30 shadow-md text-center space-y-3 rounded-2xl ring-1 ring-primary/15">
-						<div class="space-y-1">
-							<div class="text-sm font-bold text-foreground">Fast 1-Click Install</div>
-							<p class="text-xs text-muted-foreground leading-relaxed">
-								Install Open Love directly to your device for instant offline access, standalone view, and anniversary alerts.
-							</p>
-						</div>
-
-						<Button
-							type="button"
-							class="w-full h-11 sm:h-12 text-sm sm:text-base font-bold shadow-md gap-2 cursor-pointer"
-							size="lg"
-							onclick={handleInstallPWA}
-						>
-							<Download class="h-5 w-5" />
-							<span>Install App Now</span>
-						</Button>
-
-						{#if showAddressBarTip}
-							<p class="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 p-2.5 rounded-xl text-left leading-snug">
-								{#if userOS === 'android'}
-									Tap the <strong class="text-foreground">three dots (⋮)</strong> in Chrome and choose <strong class="text-foreground">"Install app"</strong>.
-								{:else}
-									Click the <strong class="text-foreground">Install App icon (⊕)</strong> in your browser address bar to install.
-								{/if}
-							</p>
-						{/if}
-					</Card>
-				{:else}
-					<!-- iOS Safari Manual Installation Guide -->
-					<Card class="p-3.5 sm:p-4 bg-card border-border shadow-sm text-left space-y-2.5 rounded-2xl">
-						<div class="flex items-start gap-2.5">
-							<div class="p-1.5 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
-								<Share2 class="h-4 w-4" />
-							</div>
-							<div class="text-xs space-y-0.5">
-								<div class="font-bold text-foreground">iPhone & iPad (Safari):</div>
-								<p class="text-muted-foreground leading-snug">
-									Tap the <strong class="text-foreground">Share</strong> icon at the bottom of Safari, then tap <strong class="text-foreground">"Add to Home Screen"</strong>.
-								</p>
-							</div>
-						</div>
-					</Card>
-				{/if}
-
-				<p class="text-[11px] text-muted-foreground">
-					Installed? Open it from your home screen, or continue setup right here in your browser.
-				</p>
-
-				<div class="pt-0.5">
-					<button
-						type="button"
-						class="text-xs font-semibold text-primary hover:underline flex items-center justify-center gap-1.5 mx-auto py-1 px-3 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer"
-						onclick={() => (isScanModalOpen = true)}
-					>
-						<QrCode class="h-3.5 w-3.5" />
-						<span>Sync with Partner / Scan QR</span>
-					</button>
-				</div>
-			</div>
+			<PwaInstallStep
+				{installSuccess}
+				{showAddressBarTip}
+				onInstall={handleInstallPWA}
+				onScanQR={() => (isScanModalOpen = true)}
+			/>
 		{:else if currentStepKey === 'names'}
-			<!-- Step: Names -->
-			<div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
-				<div class="h-12 w-12 sm:h-16 sm:w-16 mx-auto rounded-full bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center text-primary shadow-md shadow-rose-500/10 shrink-0">
-					{#if bondType === 'friendship'}
-						<Sparkles class="h-6 w-6 sm:h-8 sm:w-8 text-emerald-500" />
-					{:else}
-						<Heart class="h-6 w-6 sm:h-8 sm:w-8 fill-primary animate-heartbeat" />
-					{/if}
-				</div>
-
-				<div class="space-y-1">
-					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">
-						{bondType === 'friendship' ? 'Friend Names' : 'Your Names'}
-					</h1>
-					<p class="text-xs sm:text-sm text-muted-foreground">
-						{bondType === 'friendship' ? 'Who are the best friends?' : 'What are your names or nicknames?'}
-					</p>
-				</div>
-
-				<!-- Bond Type Selector -->
-				<BondTypeSelector value={bondType} onchange={handleBondTypeChange} variant="onboarding" showLabel={false} />
-
-				<Card class="p-4 sm:p-5 bg-card border-border shadow-sm rounded-2xl">
-					<div class="space-y-2 text-left">
-						<label for="onboarding-names" class="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-							{bondType === 'friendship' ? 'Friend Names' : 'Couple Names'}
-						</label>
-						<Input
-							id="onboarding-names"
-							placeholder={bondType === 'friendship' ? 'e.g. Alex & Sam' : 'e.g. Emma & Paul'}
-							bind:value={namesInput}
-							class="text-base"
-						/>
-						<p class="text-[11px] text-muted-foreground pt-0.5">Stored 100% locally on your device for privacy.</p>
-					</div>
-				</Card>
-
-				<div>
-					<button
-						type="button"
-						class="text-xs font-semibold text-primary hover:underline flex items-center justify-center gap-1.5 mx-auto py-1 px-3 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer"
-						onclick={() => (isScanModalOpen = true)}
-					>
-						<QrCode class="h-3.5 w-3.5" />
-						<span>Sync with Partner / Scan QR Code</span>
-					</button>
-				</div>
-			</div>
+			<NamesStep
+				{bondType}
+				bind:namesInput
+				onBondTypeChange={handleBondTypeChange}
+				onScanQR={() => (isScanModalOpen = true)}
+			/>
 		{:else if currentStepKey === 'date'}
-			<!-- Step: Date -->
-			<div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
-				<div class="h-12 w-12 sm:h-16 sm:w-16 mx-auto rounded-full bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center text-primary shadow-md shadow-rose-500/10 shrink-0">
-					<Calendar class="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
-				</div>
-
-				<div class="space-y-1">
-					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">
-						{bondType === 'friendship' ? 'Friends Since' : 'Together Since'}
-					</h1>
-					<p class="text-xs sm:text-sm text-muted-foreground">
-						{bondType === 'friendship' ? 'When did your friendship begin?' : 'When did your special journey begin?'}
-					</p>
-				</div>
-
-				<Card class="p-4 sm:p-5 bg-card border-border shadow-sm w-full min-w-0 max-w-full overflow-hidden rounded-2xl">
-					<div class="space-y-2 text-left w-full min-w-0 max-w-full overflow-hidden">
-						<label for="onboarding-date" class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-							{bondType === 'friendship' ? 'Friendship Start Date' : 'Anniversary Date'}
-						</label>
-						<Input
-							id="onboarding-date"
-							type="date"
-							bind:value={dateInput}
-							class="text-base w-full min-w-0 max-w-full"
-						/>
-					</div>
-				</Card>
-			</div>
+			<DateStep {bondType} bind:dateInput />
 		{:else if currentStepKey === 'photo'}
-			<!-- Step: Photo -->
-			<div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
-				<div class="space-y-1">
-					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">
-						{bondType === 'friendship' ? 'Add a Friend Picture' : 'Add a Couple Picture'}
-					</h1>
-					<p class="text-xs sm:text-sm text-muted-foreground">Make your tracker uniquely yours (optional)</p>
-				</div>
-
-
-				<Card class="p-3.5 sm:p-5 bg-card border-border shadow-sm flex flex-col items-center space-y-3 rounded-2xl">
-					<div class="relative h-24 w-24 sm:h-32 sm:w-32 rounded-2xl overflow-hidden bg-muted border-2 border-dashed border-border flex items-center justify-center shadow-inner group shrink-0">
-						{#if profileStore.profile.photoUrl}
-							<img src={profileStore.profile.photoUrl} alt="Preview" class="h-full w-full object-cover" />
-						{:else}
-							<Upload class="h-8 w-8 text-muted-foreground/60 group-hover:scale-110 transition-transform" />
-						{/if}
-					</div>
-
-					<input
-						type="file"
-						accept="image/*"
-						class="hidden"
-						bind:this={fileInputRef}
-						onchange={handlePhotoUpload}
-					/>
-
-					<div class="flex gap-2">
-						<Button variant="outline" size="sm" onclick={() => fileInputRef?.click()}>
-							<Upload class="h-3.5 w-3.5 mr-1" />
-							<span>{profileStore.profile.photoUrl ? 'Change' : 'Upload'}</span>
-						</Button>
-
-						{#if profileStore.profile.photoUrl}
-							<Button variant="ghost" size="sm" class="text-destructive hover:bg-destructive/10" onclick={() => profileStore.setPhoto(null)}>
-								<Trash2 class="h-3.5 w-3.5 mr-1" />
-								<span>Remove</span>
-							</Button>
-						{/if}
-					</div>
-				</Card>
-			</div>
+			<PhotoStep {bondType} />
 		{:else if currentStepKey === 'style'}
-			<!-- Step: UI Theme, Dark Mode & Notifications -->
-			<div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
-				<div class="space-y-1">
-					<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">Choose Your Style</h1>
-					<p class="text-xs sm:text-sm text-muted-foreground">Customize your appearance and notifications</p>
-				</div>
-
-				<div class="space-y-3 text-left">
-					<!-- Theme selector cards -->
-					<ThemeSelector value={selectedTheme} layout="detailed" showLabel={false} onchange={handleThemeChange} />
-
-					<!-- Dark mode selector -->
-					<ColorModeSelector value={selectedColorMode} layout="detailed" showLabel onchange={handleColorModeChange} />
-
-					<!-- Push Notification Opt-in -->
-					<Card class="p-3.5 sm:p-4 bg-card border-border flex items-center justify-between gap-3 text-left rounded-2xl">
-						<div class="flex items-center gap-3 min-w-0 flex-1">
-							<div class="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-								<BellRing class="h-5 w-5" />
-							</div>
-							<div class="space-y-0.5 min-w-0 flex-1">
-								<div class="text-xs sm:text-sm font-bold text-foreground truncate">Anniversary Reminders</div>
-								<p class="text-[11px] sm:text-xs text-muted-foreground truncate">Get notified on special milestones</p>
-							</div>
-						</div>
-						{#if pushOptedIn}
-							<span class="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1.5 rounded-xl shrink-0">✓ Enabled</span>
-						{:else}
-							<Button size="sm" variant="outline" class="h-8 px-3 text-xs font-semibold rounded-xl shrink-0" onclick={handleOnboardingPushToggle} disabled={pushLoading}>
-								<span>Enable</span>
-							</Button>
-						{/if}
-					</Card>
-				</div>
-			</div>
+			<StyleStep
+				{selectedTheme}
+				{selectedColorMode}
+				onThemeChange={handleThemeChange}
+				onColorModeChange={handleColorModeChange}
+			/>
 		{/if}
 	</main>
 
