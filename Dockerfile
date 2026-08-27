@@ -51,6 +51,12 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
 ENV DATABASE_URL="file:/app/data/openlove.db"
+# adapter-node's own request-body ceiling defaults to 512K, well below a
+# typical phone photo relayed by the shared-image feature. Disabled here in
+# favor of the app's own explicit MAX_SHARED_IMAGE_BYTES check
+# (src/lib/server/sharedImage.ts), which is the single source of truth for
+# that limit — see the share-import-safety skill.
+ENV BODY_SIZE_LIMIT=Infinity
 
 # Copy built application, config and dependencies from builder
 COPY --from=builder /app/build ./build

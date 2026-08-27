@@ -225,6 +225,16 @@ carving a hole in it.
   attachment code in `importJSON()` wraps it in its *own* try/catch anyway, because
   `setPhoto()` touches IndexedDB and `importJSON()`'s outer catch would otherwise report an
   already-successfully-imported bond as a failed import over a photo that just didn't load.
+- **`MAX_SHARED_IMAGE_BYTES` (8MB) is the *only* upload size limit — `BODY_SIZE_LIMIT` must
+  stay `Infinity`.** `adapter-node` enforces its own request-body ceiling ahead of any route
+  code, defaulting to 512K when the `BODY_SIZE_LIMIT` env var is unset — far below a typical
+  phone photo, and low enough that the upload fails with a 413 before `POST /api/share/image`
+  ever runs, silently making the app's own 8MB check dead code. The `Dockerfile` sets
+  `BODY_SIZE_LIMIT=Infinity` specifically so `MAX_SHARED_IMAGE_BYTES` in
+  `src/lib/server/sharedImage.ts` stays the single source of truth for this limit. If you ever
+  see a `SvelteKitError: Content-length ... exceeds limit` for an image upload, this env var
+  regressed — don't "fix" it by raising `BODY_SIZE_LIMIT` to some other finite number instead;
+  that just reintroduces a second limit that has to be kept in sync with the first by hand.
 
 ### 12. Runtime-Configurable Feature Flags
 The root route is prerendered with `ssr = false` (Invariant 7) — the whole shell is a static
