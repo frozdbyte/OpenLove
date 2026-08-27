@@ -16,6 +16,15 @@ services:
       # - PUBLIC_VAPID_KEY=
       # - PRIVATE_VAPID_KEY=
       # - VAPID_SUBJECT=mailto:admin@yourdomain.com
+      # Optional: disable the encrypted photo-sharing relay's public upload endpoint entirely.
+      # JSON backups still include photos regardless, since those never touch the server.
+      # - FEATURE_SHARE_IMAGES=true
+      # Optional: how long an uploaded encrypted photo stays available for a partner to fetch, in hours.
+      # - SHARED_IMAGE_TTL_HOURS=24
+      # Optional: adapter-node's own request-body ceiling. Already set to Infinity by the Dockerfile
+      # (the app enforces its own 8MB cap regardless — see AGENTS.md Invariant 11); override only if
+      # you have a specific reason to re-impose a lower limit.
+      # - BODY_SIZE_LIMIT=Infinity
     volumes:
       - openlove_data:/app/data
 

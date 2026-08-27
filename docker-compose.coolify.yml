@@ -10,6 +10,12 @@ services:
       # - PUBLIC_VAPID_KEY=
       # - PRIVATE_VAPID_KEY=
       # - VAPID_SUBJECT=mailto:admin@yourdomain.com
+      # The ${VAR:-default} form below (rather than a commented-out line) is what makes Coolify
+      # surface each of these as an editable field, pre-filled with its default, in the service's
+      # Environment Variables tab — a plain `# - VAR=value` comment never shows up in the UI at all.
+      - FEATURE_SHARE_IMAGES=${FEATURE_SHARE_IMAGES:-true}
+      - SHARED_IMAGE_TTL_HOURS=${SHARED_IMAGE_TTL_HOURS:-24}
+      - BODY_SIZE_LIMIT=${BODY_SIZE_LIMIT:-Infinity}
     volumes:
       - openlove_data:/app/data
     healthcheck:
