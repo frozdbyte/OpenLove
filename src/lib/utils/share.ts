@@ -26,3 +26,36 @@ export function decodeSharePayloadString(raw: string): string {
 		return raw;
 	}
 }
+
+export interface FullBackupInfo {
+	bondCount: number;
+}
+
+/**
+ * Detects a full multi-bond backup (`{ version: 2, bonds: [...] }`, the shape
+ * produced by "Download JSON Backup (All Bonds)") in already-decoded JSON text,
+ * distinctly from a single-bond partner invite.
+ *
+ * This distinction matters: `profileStore.importJSON()`'s branch for this shape
+ * always replaces the *entire* local app state, regardless of the `mode`
+ * argument passed to it — unlike the single-bond-invite branches, which respect
+ * `'replace' | 'add'`. A full backup can't be meaningfully previewed as "one
+ * incoming bond" (`parseSharePayload`'s `Partial<Bond>` return shape) either —
+ * there's no single name/date to show. Callers must use this to route full
+ * backups to an explicit, unambiguous "this replaces everything" confirmation
+ * instead of the single-bond invite's Add-as-New/Replace-Current flow, whose
+ * buttons would otherwise silently wipe every bond already on the device. See
+ * REFACTOR_PLAN.md, Phase 7 / M4.
+ */
+export function detectFullBackup(jsonString: string): FullBackupInfo | null {
+	try {
+		const data = JSON.parse(jsonString);
+		if (data?.version === 2 && Array.isArray(data.bonds) && data.bonds.length > 0) {
+			return { bondCount: data.bonds.length };
+		}
+	} catch {
+		// Not JSON — not a backup either. Let the caller's existing parse path
+		// produce the appropriate "invalid format" error.
+	}
+	return null;
+}

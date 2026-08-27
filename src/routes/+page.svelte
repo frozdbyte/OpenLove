@@ -11,7 +11,7 @@
 	import type { Bond } from '$lib/types/bonds';
 	import { Heart } from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
-	import { decodeSharePayloadString } from '$lib/utils/share';
+	import { decodeSharePayloadString, detectFullBackup } from '$lib/utils/share';
 
 	let isSettingsOpen = $state(false);
 	let isShareOpen = $state(false);
@@ -52,40 +52,96 @@
 		}
 	});
 
+	async function completeHashImport(json: string, mode: 'replace' | 'add') {
+		const success = await profileStore.importJSON(json, mode);
+		if (success) {
+			window.history.replaceState(null, '', window.location.pathname);
+			confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
+		}
+		return success;
+	}
+
+	// This effect reads `profileStore.state.isConfigured`, and every import path below
+	// eventually sets that to `true` — which re-triggers the effect while the hash may
+	// still be present (import is async; the hash is only cleared after it resolves).
+	// Without this guard, that re-entrant run would reprocess the same hash a second
+	// time: redundantly re-importing it, or — for the full-backup branch — popping a
+	// second, spurious "this will replace everything" confirm for an import that
+	// already completed. Track the exact hash already being (or having been) handled so
+	// a re-entrant run for the *same* hash is a no-op; a genuinely new share link still
+	// gets a fresh run.
+	let handledImportHash: string | null = null;
+
+	async function handleImportHash(hash: string) {
+		// AGENTS.md Invariant 8: never act on profile state before IndexedDB has been
+		// read. This effect can run on the very first tick, before `profileStore.init()`
+		// (kicked off from its constructor) resolves. Importing before that point is
+		// worse than a stale read — it's a write race: `init()`'s `this.state = loaded`
+		// would land *after* an import that ran ahead of it and silently overwrite the
+		// freshly-imported data with whatever (or nothing) was already on disk. This was
+		// reachable before Phase 7 too (the standalone-auto-import branch below has
+		// always called `importJSON` without awaiting `ready` first), just narrower —
+		// the full-backup branch's unconditional direct-import made it easy to hit in
+		// testing, which is how it surfaced.
+		await profileStore.ready;
+
+		try {
+			const encoded = hash.replace('#import=', '');
+			const raw = decodeURIComponent(encoded);
+			const json = decodeSharePayloadString(raw);
+
+			// A full multi-bond backup needs different handling than a single-bond
+			// invite: it can't be previewed as "one incoming bond", and importing it
+			// always replaces the device's entire local state (see detectFullBackup's
+			// doc comment) — so it never goes through the Add-as-New/Replace-Current
+			// invite flow below, whose buttons would otherwise silently wipe every
+			// bond already on this device instead of adding one.
+			const fullBackup = detectFullBackup(json);
+			if (fullBackup) {
+				if (!profileStore.state.isConfigured) {
+					// Nothing to lose yet.
+					await completeHashImport(json, 'replace');
+					return;
+				}
+				const { bondCount } = fullBackup;
+				const confirmed = confirm(
+					`This link contains a full backup with ${bondCount} relationship${bondCount === 1 ? '' : 's'}/friendship${bondCount === 1 ? '' : 's'}. Importing it will replace ALL bonds currently on this device — this cannot be undone unless you have your own backup. Continue?`
+				);
+				if (confirmed) {
+					await completeHashImport(json, 'replace');
+				}
+				// Declined: leave the hash in place, matching the single-bond invite
+				// flow's existing behavior when its modal is closed without accepting.
+				return;
+			}
+
+			const parsed = parseSharePayload(raw);
+
+			pendingInviteJson = json;
+			pendingInviteRaw = raw;
+			pendingIncomingBond = parsed;
+			pendingPartnerNames = parsed?.names || 'Your Partner';
+
+			const isStandalone = isRunningAsPWA();
+			if (isStandalone && !profileStore.state.isConfigured) {
+				// Only auto-import silently if user hasn't configured any bond yet
+				await completeHashImport(json, 'replace');
+			} else {
+				// Show smart preview & resolution modal (Case A: unconfigured, Case B: 1 bond replace/add, Case C: multi bond add)
+				isInviteModalOpen = true;
+			}
+		} catch (err) {
+			console.error('Failed to parse share hash:', err);
+		}
+	}
+
 	// Handle Partner Share URL import if present in hash (#import=...)
 	$effect(() => {
 		if (typeof window !== 'undefined' && window.location.hash.startsWith('#import=')) {
-			try {
-				const encoded = window.location.hash.replace('#import=', '');
-				const raw = decodeURIComponent(encoded);
-				const parsed = parseSharePayload(raw);
-				const json = decodeSharePayloadString(raw);
-
-				pendingInviteJson = json;
-				pendingInviteRaw = raw;
-				pendingIncomingBond = parsed;
-				pendingPartnerNames = parsed?.names || 'Your Partner';
-
-				const isStandalone = isRunningAsPWA();
-				if (isStandalone && !profileStore.state.isConfigured) {
-					// Only auto-import silently if user hasn't configured any bond yet
-					profileStore.importJSON(json, 'replace').then((success) => {
-						if (success) {
-							window.history.replaceState(null, '', window.location.pathname);
-							confetti({
-								particleCount: 120,
-								spread: 70,
-								origin: { y: 0.6 }
-							});
-						}
-					});
-				} else {
-					// Show smart preview & resolution modal (Case A: unconfigured, Case B: 1 bond replace/add, Case C: multi bond add)
-					isInviteModalOpen = true;
-				}
-			} catch (err) {
-				console.error('Failed to parse share hash:', err);
-			}
+			const hash = window.location.hash;
+			if (hash === handledImportHash) return;
+			handledImportHash = hash;
+			void handleImportHash(hash);
 		}
 	});
 

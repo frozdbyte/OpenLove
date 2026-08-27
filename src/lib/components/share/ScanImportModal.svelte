@@ -8,7 +8,7 @@
 	import confetti from 'canvas-confetti';
 	import PartnerInviteModal from './PartnerInviteModal.svelte';
 	import type { Bond } from '$lib/types/bonds';
-	import { decodeSharePayloadString } from '$lib/utils/share';
+	import { decodeSharePayloadString, detectFullBackup } from '$lib/utils/share';
 
 	interface Props {
 		open?: boolean;
@@ -167,10 +167,56 @@
 		await handleImportData(pasteInput.trim());
 	}
 
+	/** Runs the import, celebrates on success, and closes this modal. Shared by
+	 * every path that ends in an unconditional `profileStore.importJSON()` call. */
+	async function completeImport(json: string, mode: 'replace' | 'add'): Promise<boolean> {
+		const success = await profileStore.importJSON(json, mode);
+		if (success) {
+			stopCamera();
+			open = false;
+			onSuccess?.();
+			if (typeof window !== 'undefined') {
+				confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
+			}
+		}
+		return success;
+	}
+
 	async function handleImportData(raw: string) {
 		errorMessage = '';
 		try {
 			const jsonString = decodeSharePayloadString(raw);
+
+			// A full multi-bond backup needs different handling than a single-bond
+			// invite: it can't be previewed as "one incoming bond", and importing it
+			// always replaces the device's entire local state (see detectFullBackup's
+			// doc comment) — so it never goes through the Add-as-New/Replace-Current
+			// invite flow below, whose buttons would otherwise silently wipe every
+			// bond already on this device instead of adding one.
+			const fullBackup = detectFullBackup(jsonString);
+			if (fullBackup) {
+				if (!profileStore.state.isConfigured) {
+					// Nothing to lose yet — same as the unconfigured single-bond path.
+					const success = await completeImport(jsonString, 'replace');
+					if (!success) {
+						errorMessage = 'Failed to restore backup. Invalid file format.';
+					}
+					return;
+				}
+
+				const { bondCount } = fullBackup;
+				const confirmed = confirm(
+					`This code contains a full backup with ${bondCount} relationship${bondCount === 1 ? '' : 's'}/friendship${bondCount === 1 ? '' : 's'}. Importing it will replace ALL bonds currently on this device — this cannot be undone unless you have your own backup. Continue?`
+				);
+				if (!confirmed) return;
+
+				const success = await completeImport(jsonString, 'replace');
+				if (!success) {
+					errorMessage = 'Failed to restore backup. Invalid file format.';
+				}
+				return;
+			}
+
 			const parsed = parseSharePayload(raw);
 			if (!parsed) {
 				errorMessage = 'Invalid relationship profile format. Please check the code and try again.';
@@ -179,19 +225,7 @@
 
 			if (!profileStore.state.isConfigured) {
 				// Unconfigured user: import and activate immediately
-				const success = await profileStore.importJSON(jsonString, 'replace');
-				if (success) {
-					stopCamera();
-					open = false;
-					onSuccess?.();
-					if (typeof window !== 'undefined') {
-						confetti({
-							particleCount: 120,
-							spread: 70,
-							origin: { y: 0.6 }
-						});
-					}
-				}
+				await completeImport(jsonString, 'replace');
 			} else {
 				// Configured user (1 or multiple bonds): show preview and ask to Replace or Add As New
 				stopCamera();

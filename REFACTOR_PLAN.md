@@ -768,7 +768,81 @@ highest visual-regression risk in this plan.)*
       logic files touched). `pnpm build` → succeeds end-to-end, service worker
       confirmed still DOM-free.
 
-### Phase 7 — Explicitly product-facing change (separate from the refactor)
-- [ ] Broaden `parseSharePayload`/`ScanImportModal` to accept full V2 backups, after M2's
+### Phase 7 — Explicitly product-facing change (separate from the refactor) — ✅ DONE (2026-08-27)
+- [x] Broaden `parseSharePayload`/`ScanImportModal` to accept full V2 backups, after M2's
       `normalizeIncomingBond` exists to share the logic. *(M4 — ship as its own change, not
       bundled into a "refactor" commit, per the UI Impact Log.)*
+
+      → **Deviated from the plan's literal proposed resolution, for a safety reason
+      found during implementation.** The plan's sketch was "give `parseSharePayload`
+      a branch for `data.version === 2 && Array.isArray(data.bonds)`, mirroring
+      `importJSON`'s own first branch." Implementing that literally turned out to
+      be unsafe: `parseSharePayload` returns `Partial<Bond> | null` — a *single*
+      bond, for the existing Add-as-New/Replace-Current preview UI — and a full
+      backup has no single name/date to put there. Worse, `profileStore.importJSON()`'s
+      full-backup branch **always replaces the entire local state**, ignoring
+      whatever `mode` ('replace'/'add') is passed to it — unlike the single-bond
+      branches, which respect it. Routing a full backup through the existing
+      "Add as New Bond" button would have silently wiped every bond already on the
+      device while telling the user they were *adding* one — a real Zero-Data-Loss
+      violation. Kept `parseSharePayload` untouched (single-bond shapes only) and
+      added a separate, explicit `detectFullBackup()` in `share.ts` that both entry
+      points check *first*, before ever reaching the single-bond preview flow:
+        - **Unconfigured device** (nothing to lose): imports immediately, matching
+          the plan's intent — full backups now work where they used to error.
+        - **Configured device**: gated behind a native `confirm()` naming the exact
+          bond count and stating plainly that it replaces everything — the same
+          pattern this codebase already uses for its other irreversible actions
+          (`handleResetData`/`handleDeleteCurrentBond` in `SettingsSheet.svelte`),
+          not a new UI convention.
+      → Applied to **both** entry points that decode share payloads, not just
+      `ScanImportModal` as literally named in the plan: also fixed the `#import=`
+      URL hash effect in `+page.svelte`, which had the exact same latent hazard
+      (its "Add as New"/"Continue in Browser" buttons also call `importJSON` with
+      a `mode` the full-backup branch would ignore). Leaving one of the two entry
+      points unfixed while hardening the other would have been inconsistent and
+      left a real footgun in place.
+      → **Two additional pre-existing bugs found and fixed while testing this**,
+      both in `+page.svelte`'s hash-import effect specifically (confirmed via
+      before/after Playwright runs, not just reasoned about):
+        1. The effect reads `profileStore.state.isConfigured`, and every import
+           path sets that to `true` on success — re-triggering the *same* effect
+           while the hash might still be present (the hash is only cleared after
+           the async import resolves). Without a guard, that re-entrant run
+           reprocessed the same hash a second time — for the new full-backup
+           branch, popping a spurious second `confirm()` for an import that had
+           already completed. Fixed with a `handledImportHash` guard tracking the
+           exact hash already (being) handled, so a re-entrant run for the *same*
+           hash is a no-op while a genuinely new share link still gets a fresh run.
+        2. A real **AGENTS.md Invariant 8 violation**: the effect can run before
+           `profileStore.init()` (kicked off from the store's constructor)
+           resolves. Importing before that point isn't just a stale read — it's a
+           write race: `init()`'s `this.state = loaded` can land *after* an import
+           that ran ahead of it, silently overwriting the just-imported data.
+           Reproduced directly: an unconfigured-device full-backup hash import
+           would complete, clear the URL hash, then get reverted back to the
+           onboarding screen a moment later as `init()`'s stale read landed on top.
+           This was reachable before Phase 7 too (the pre-existing
+           standalone-auto-import branch also called `importJSON` without
+           awaiting `ready`), just narrow enough not to have been caught — the
+           full-backup branch's unconditional direct-import path made it easy to
+           hit. Fixed by awaiting `profileStore.ready` at the top of the
+           (now-extracted) `handleImportHash()` before any decision-making or
+           import, for every branch, not just the new one.
+      → **Verified in a real browser**, not just reasoned about: 5 Playwright
+      scenarios covering both entry points × unconfigured/configured device ×
+      accept/decline, plus a single-bond-invite regression check. Confirmed via
+      `dialog` event interception that the `confirm()` fires with the correct
+      bond-count message, that declining leaves the existing device data
+      completely untouched (re-read the header after declining and confirmed it
+      still showed the pre-existing bond's name), and that accepting completes
+      the import. Re-ran the same suite after each of the two bug fixes above to
+      confirm each one actually resolved what it claimed to (the reentrancy fix
+      eliminated the spurious second dialog; the `ready` fix eliminated the
+      revert-to-onboarding). Zero console/page errors across all 5 scenarios.
+      → Added `detectFullBackup()` test coverage in `share.test.ts` (6 tests):
+      correct bond-count detection, and `null` for single-bond-invite, V1-legacy,
+      empty-bonds, missing-bonds-field, and invalid-JSON inputs.
+- [x] Verification: `pnpm check` → 0 errors, 0 warnings across 4,291 files.
+      `pnpm test` → 6 files, 58/58 passing. `pnpm build` → succeeds end-to-end,
+      service worker confirmed still DOM-free.
