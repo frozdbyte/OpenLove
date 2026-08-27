@@ -17,6 +17,7 @@ import {
 	type MilestoneCategoryPrefs
 } from '$lib/types/bonds';
 import { decodeSharePayloadString } from '$lib/utils/share';
+import { blobToBase64, base64ToBlob } from '$lib/utils/imageBase64';
 
 export type ProfileMutationHook = (
 	next: AppState,
@@ -50,6 +51,33 @@ interface RawBondLike {
 	colorPalette?: ColorPalette;
 	colorMode?: ColorMode;
 	showSeconds?: boolean;
+	/** Inline base64 photo, present only in JSON *file* backups
+	 * (`exportBackupJSON`) — never in the compact QR/link/sync-code payload
+	 * `exportJSON` produces, which must stay small. See IMAGE_SHARING_PLAN.md. */
+	photo?: { dataBase64?: string; mimeType?: string };
+}
+
+/**
+ * Decode a `RawBondLike.photo` field (if present) back into a `Blob` + a
+ * fresh object URL. Synchronous — base64 decoding needs no I/O, unlike
+ * encoding a `Blob` (`encodeBondPhoto` below), which does.
+ */
+function decodeBondPhoto(photo?: { dataBase64?: string; mimeType?: string }): {
+	blob: Blob | null;
+	url: string | undefined;
+} {
+	if (!photo?.dataBase64) return { blob: null, url: undefined };
+	const blob = base64ToBlob(photo.dataBase64, photo.mimeType || 'image/jpeg');
+	const url = typeof URL !== 'undefined' ? URL.createObjectURL(blob) : undefined;
+	return { blob, url };
+}
+
+/** Inverse of `decodeBondPhoto`, for `exportBackupJSON`. */
+async function encodeBondPhoto(
+	photoBlob: Blob | null | undefined
+): Promise<{ photo?: { dataBase64: string; mimeType: string } }> {
+	if (!photoBlob) return {};
+	return { photo: { dataBase64: await blobToBase64(photoBlob), mimeType: photoBlob.type || 'image/jpeg' } };
 }
 
 type NormalizedBondCore = Pick<
@@ -88,12 +116,13 @@ function normalizeIncomingBond(
 	raw: RawBondLike,
 	envelope: RawBondLike = raw
 ): NormalizedBondCore {
+	const photo = decodeBondPhoto(raw.photo);
 	return {
 		type: bondType,
 		names: raw.names || 'Emma & Paul',
 		togetherSince: raw.togetherSince || new Date().toISOString().split('T')[0],
-		photoBlob: null,
-		photoUrl: undefined,
+		photoBlob: photo.blob,
+		photoUrl: photo.url,
 		customMilestones: Array.isArray(raw.customMilestones)
 			? (raw.customMilestones as CustomMilestone[])
 			: [],
@@ -462,12 +491,31 @@ class ProfileStore {
 	}
 
 	/**
-	 * Export full application state or single active bond to JSON.
+	 * Shape shared by `exportJSON()` (compact — no photo, stays synchronous
+	 * for the QR/link/sync-code paths that need a small payload) and
+	 * `exportBackupJSON()` (JSON *file* backups — same shape, photo embedded
+	 * afterward). Kept as one builder so the two never drift apart on every
+	 * other field. `bond`/`bonds` are typed loosely (`Record<string, unknown>`)
+	 * because `exportBackupJSON()` mutates them in place to add the `photo`
+	 * field — narrowed on which of `bond`/`bonds` is present, not on
+	 * `activeOnly` again, since a boolean parameter doesn't let TypeScript
+	 * narrow a previously-returned union.
 	 */
-	exportJSON(activeOnly = false): string {
+	private buildExportable(activeOnly: boolean): {
+		version: number;
+		isSingleBond?: true;
+		bond?: Record<string, unknown>;
+		activeBondId?: string;
+		bonds?: Record<string, unknown>[];
+		uiTheme: UIThemeId;
+		colorMode: ColorMode;
+		colorPalette: ColorPalette;
+		showSeconds: boolean;
+		exportedAt: string;
+	} {
 		if (activeOnly) {
 			const active = this.activeBond;
-			const exportable = {
+			return {
 				version: 2,
 				isSingleBond: true,
 				bond: {
@@ -487,11 +535,9 @@ class ProfileStore {
 				showSeconds: active.showSeconds ?? this.state.showSeconds,
 				exportedAt: new Date().toISOString()
 			};
-
-			return JSON.stringify(exportable, null, 2);
 		}
 
-		const exportable = {
+		return {
 			version: 2,
 			activeBondId: this.state.activeBondId,
 			bonds: this.state.bonds.map(({ photoBlob, photoUrl, ...rest }) => rest),
@@ -501,6 +547,37 @@ class ProfileStore {
 			showSeconds: this.state.showSeconds,
 			exportedAt: new Date().toISOString()
 		};
+	}
+
+	/**
+	 * Export full application state or single active bond to JSON. Compact —
+	 * never includes photos — for the QR code / share link / sync code paths,
+	 * which must stay small. See `exportBackupJSON()` for JSON file backups.
+	 */
+	exportJSON(activeOnly = false): string {
+		return JSON.stringify(this.buildExportable(activeOnly), null, 2);
+	}
+
+	/**
+	 * Same shape as `exportJSON()`, but embeds each bond's photo inline as
+	 * base64 — for JSON *file* backups only (download / restore), never the
+	 * compact payload above. Async because encoding a `Blob` to base64 needs
+	 * `Blob.arrayBuffer()`.
+	 */
+	async exportBackupJSON(activeOnly = false): Promise<string> {
+		const exportable = this.buildExportable(activeOnly);
+
+		if (exportable.bond) {
+			Object.assign(exportable.bond, await encodeBondPhoto(this.activeBond.photoBlob));
+		} else if (exportable.bonds) {
+			exportable.bonds = await Promise.all(
+				exportable.bonds.map(async (bond, i) => ({
+					...bond,
+					...(await encodeBondPhoto(this.state.bonds[i].photoBlob))
+				}))
+			);
+		}
+
 		return JSON.stringify(exportable, null, 2);
 	}
 
@@ -546,7 +623,11 @@ class ProfileStore {
 				};
 
 				if (mode === 'replace') {
-					// Overwrite current active bond
+					// Overwrite current active bond. Must include photoBlob/photoUrl
+					// explicitly — normalizeIncomingBond() can now decode an inline
+					// backup photo onto `newBond`, and updateBond()'s patch is a plain
+					// object merge, so any field left out here is silently dropped
+					// rather than falling back to the previous bond's own photo.
 					await this.updateBond(this.state.activeBondId, {
 						type: newBond.type,
 						names: newBond.names,
@@ -556,7 +637,9 @@ class ProfileStore {
 						uiTheme: newBond.uiTheme,
 						colorPalette: newBond.colorPalette,
 						colorMode: newBond.colorMode,
-						showSeconds: newBond.showSeconds
+						showSeconds: newBond.showSeconds,
+						photoBlob: newBond.photoBlob,
+						photoUrl: newBond.photoUrl
 					});
 					await this.update({ isConfigured: true });
 				} else if (mode === 'add') {

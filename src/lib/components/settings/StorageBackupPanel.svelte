@@ -44,8 +44,12 @@
 		}
 	});
 
-	function downloadBackup() {
-		const blob = new Blob([profileStore.exportJSON()], { type: 'application/json' });
+	async function downloadBackup() {
+		// exportBackupJSON (not the compact exportJSON) embeds every bond's
+		// photo inline as base64 — safe for a downloaded file, unlike the
+		// QR/link/sync-code payloads, which must stay small.
+		const json = await profileStore.exportBackupJSON();
+		const blob = new Blob([json], { type: 'application/json' });
 		const url = URL.createObjectURL(blob);
 		const anchor = document.createElement('a');
 		anchor.href = url;

@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { parseSharePayload } from './profile.svelte';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { parseSharePayload, profileStore } from './profile.svelte';
+import { blobToBase64 } from '$lib/utils/imageBase64';
 
 /**
  * Regression coverage for the `normalizeIncomingBond()` extraction (REFACTOR_PLAN.md
@@ -89,5 +90,78 @@ describe('parseSharePayload', () => {
 
 	it('returns null for garbage input', () => {
 		expect(parseSharePayload('not json and not valid base64 !!!')).toBeNull();
+	});
+
+	it('leaves photoBlob/photoUrl unset when the payload has no inline photo', () => {
+		const data = { isSingleBond: true, bond: { names: 'No Photo', togetherSince: '2022-01-01' } };
+		const result = parseSharePayload(JSON.stringify(data));
+		expect(result!.photoBlob).toBeNull();
+		expect(result!.photoUrl).toBeUndefined();
+	});
+});
+
+/**
+ * Stage 1 of IMAGE_SHARING_PLAN.md: JSON *file* backups embed each bond's
+ * photo inline as base64 (`profileStore.exportBackupJSON()`), decoded back
+ * into a `Blob` by the same `normalizeIncomingBond()` helper `importJSON()`
+ * already routes every incoming bond shape through. Exercised via the
+ * `profileStore` singleton directly (safe under Node/vitest — see the
+ * `parseSharePayload` describe block's doc comment above) rather than
+ * through the two `.svelte` components that call these methods, since
+ * neither component adds any logic of its own beyond awaiting them.
+ */
+describe('exportBackupJSON / importJSON photo round trip', () => {
+	beforeEach(async () => {
+		await profileStore.reset();
+	});
+
+	it('embeds and restores a photo through a full (all-bonds) file backup', async () => {
+		const bytes = new Uint8Array([10, 20, 30, 40, 50]);
+		profileStore.state.bonds[0].photoBlob = new Blob([bytes], { type: 'image/png' });
+
+		const json = await profileStore.exportBackupJSON(false);
+		const parsed = JSON.parse(json);
+		expect(parsed.bonds[0].photo).toEqual({
+			dataBase64: await blobToBase64(new Blob([bytes], { type: 'image/png' })),
+			mimeType: 'image/png'
+		});
+
+		await profileStore.reset();
+		expect(profileStore.activeBond.photoBlob).toBeNull();
+
+		expect(await profileStore.importJSON(json)).toBe(true);
+		const restored = profileStore.activeBond.photoBlob;
+		expect(restored).not.toBeNull();
+		expect(restored!.type).toBe('image/png');
+		expect(Array.from(new Uint8Array(await restored!.arrayBuffer()))).toEqual(Array.from(bytes));
+	});
+
+	it('embeds and restores a photo through a single-bond file backup (isSingleBond shape)', async () => {
+		const bytes = new Uint8Array([1, 2, 3]);
+		profileStore.state.bonds[0].photoBlob = new Blob([bytes], { type: 'image/webp' });
+
+		const json = await profileStore.exportBackupJSON(true);
+		const parsed = JSON.parse(json);
+		expect(parsed.bond.photo.mimeType).toBe('image/webp');
+
+		await profileStore.reset();
+
+		// mode: 'replace' is the branch that previously dropped photoBlob/photoUrl
+		// entirely (see the fix in importJSON's Case 2) — exercise it directly
+		// rather than 'auto', which would mask the bug via its own bonds=[newBond]
+		// assignment.
+		expect(await profileStore.importJSON(json, 'replace')).toBe(true);
+		const restored = profileStore.activeBond.photoBlob;
+		expect(restored).not.toBeNull();
+		expect(restored!.type).toBe('image/webp');
+		expect(Array.from(new Uint8Array(await restored!.arrayBuffer()))).toEqual(Array.from(bytes));
+	});
+
+	it('imports a backup with no photo field cleanly, without throwing', async () => {
+		const json = await profileStore.exportBackupJSON(false);
+		expect(JSON.parse(json).bonds[0].photo).toBeUndefined();
+
+		expect(await profileStore.importJSON(json)).toBe(true);
+		expect(profileStore.activeBond.photoBlob).toBeNull();
 	});
 });

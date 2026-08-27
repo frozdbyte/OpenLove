@@ -53,9 +53,42 @@ preview ever grows a photo thumbnail.
 
 ---
 
-## Stage 1 — JSON backup photo embedding
+## Stage 1 — JSON backup photo embedding ✅ Done
 
 Independent of every other stage; ships value with no new server surface.
+
+→ Shipped as planned, plus one bug fix surfaced along the way and one
+  deliberate deviation on file location:
+- **New file** [`src/lib/utils/imageBase64.ts`](src/lib/utils/imageBase64.ts)
+  instead of adding to the existing `utils/base64.ts`. That file's own
+  doc comment scopes it to VAPID key decoding and being service-worker-safe;
+  blob↔base64 conversion for backup photos is a different concern the SW
+  never needs, so it got its own single-purpose module rather than growing
+  an unrelated one.
+- **Bug found and fixed in the same change**: `importJSON()`'s Case 2
+  (`isSingleBond` invite) `mode === 'replace'` branch built its `updateBond()`
+  patch as an explicit narrow field list that never included
+  `photoBlob`/`photoUrl` — harmless before (there was nothing to include),
+  but as soon as `normalizeIncomingBond()` could decode a real photo, this
+  branch would have silently dropped it on every "Replace Current Bond"
+  restore. Fixed by adding both fields to the patch. Cases 1 (full backup)
+  and 3 (V1 legacy) already passed whole objects through and needed no
+  change.
+- `exportJSON()` was refactored (not rewritten) into a shared
+  `buildExportable()` private method that `exportBackupJSON()` also calls,
+  to avoid the two field lists silently drifting apart over time.
+  `exportJSON()`'s output is byte-for-byte unchanged — verified by every
+  pre-existing test for it still passing untouched.
+- **Verified**: `pnpm check` (0 errors), `pnpm test` (65/65, 7 new — round
+  trips for both the full-backup and single-bond-file shapes, a
+  no-photo-field backward-compat case, and `imageBase64.ts` unit tests
+  including a >32KB payload to exercise the chunked encode path),
+  `pnpm build` (precache still DOM-free). Live in a real browser: onboarded
+  a bond with a photo, downloaded both "Download JSON Backup (All Bonds)"
+  and `ShareModal`'s "Download Bond JSON File", confirmed both contain an
+  inline `photo.dataBase64`/`mimeType`, then restored the full backup and
+  confirmed the photo blob round-tripped into IndexedDB byte-for-byte
+  (68/68 bytes, correct mime type) with zero console errors.
 
 - `src/lib/utils/base64.ts` (existing, DOM-free): add
   `blobToBase64(blob): Promise<string>` / `base64ToBlob(base64, mimeType): Blob`.
