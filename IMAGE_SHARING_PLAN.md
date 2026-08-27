@@ -340,7 +340,7 @@ testing crypto correctness in isolation, before it's wired into any UI).
 
 ---
 
-## Stage 5 — QR/link share: image toggle + relay wiring
+## Stage 5 — QR/link share: image toggle + relay wiring ✅ Done
 
 The originally-requested feature, now sitting on top of Stages 2–4.
 
@@ -376,6 +376,59 @@ arrives; import the *same* link again (either context) and confirm the
 photo arrives again too (unlimited loads within the TTL); manually expire
 the row (or set a very short `SHARED_IMAGE_TTL_HOURS`) and confirm a later
 import still succeeds, just without a photo (fail-soft).
+
+→ Shipped as planned, with one architectural deviation and a testing
+  limitation worth flagging:
+- **Centralized the relay-photo attachment inside `importJSON()`'s Case 2
+  itself, not at the three external call sites** the plan named
+  (`+page.svelte`'s `completeHashImport`, `ScanImportModal.svelte`'s
+  `handleImportData`, `PartnerInviteModal`'s accept handler). All three
+  already funnel through `importJSON()`, which already knows the resulting
+  bond's id in every branch (`replace`/`add`/`auto`) — so the new private
+  `attachSharedImageIfPresent()` lives there once, and **none of the three
+  call sites needed a single line changed**. `exportJSON()` gained an
+  optional second `sharedImage` param instead of the plan's implied
+  per-call-site wiring, for the same reason.
+- **`parseSharePayload()` needed no code change** — on reflection, the
+  plan's "recognizes `sharedImage` for shape-detection purposes only" was a
+  constraint to honor (don't add fetching there), not a feature to build:
+  the function already ignores fields it doesn't extract into its
+  `Partial<Bond>` return shape, and `sharedImage` isn't one of them. Added
+  a unit test asserting `fetchSharedImage` is never called from
+  `parseSharePayload`, which is the thing actually worth guarding.
+- **`SharedImageRef` grew a fourth field, `mimeType`** — not in the plan's
+  literal `{shareId, key, iv}` — because AES-GCM ciphertext carries no
+  metadata of its own; something has to tell the recipient what to
+  reconstruct the `Blob` as. `uploadSharedImage()` fills it in from the
+  source `Blob.type` (defaulting to `image/jpeg` if empty) so callers never
+  have to track it separately.
+- **A guard added beyond the plan**: if a payload somehow carried *both* an
+  inline `photo` (backup shape) and `sharedImage` (compact-share shape) —
+  which the two export paths never produce together, but nothing enforces
+  that at the type level — the already-decoded inline photo wins and the
+  relay is never fetched. Covered by a test.
+- **Testing limitation**: `setPhoto()` → `saveBondPhoto()` is
+  window-guarded (real IndexedDB only) and no-ops under Node/vitest, same
+  as every other photo-persisting path in this codebase. Two unit tests
+  originally written to assert the *resulting* `photoBlob` had to be
+  rewritten to assert the *dispatch* instead (`fetchSharedImage` called
+  with the right args; `setPhoto` spied on and called with the right bond
+  id) — the actual persistence is what the live two-context browser check
+  below proves instead.
+- **Verified**: `pnpm check` (0 errors), `pnpm test` (116/116, +9 new),
+  `pnpm build`. Live, three real browser contexts against the real Stage
+  2–4 infrastructure — sender (Context A) onboarded with a photo, opened
+  Share, confirmed the toggle only appears because a photo exists, toggled
+  it on, copied the link, and decoded it to confirm a real
+  `{shareId,key,iv,mimeType}` was embedded; a fresh Context B navigated to
+  that link, completed the invite flow, and had the photo land in its own
+  IndexedDB byte-exact (68/68 bytes); a fresh Context C imported the exact
+  same link independently and got the photo too (unlimited loads,
+  confirmed end-to-end through the real UI, not just the API); restarting
+  the server with `SHARED_IMAGE_TTL_HOURS=0.001` (~3.6s), generating a new
+  share, waiting past the TTL, and importing in a fresh context confirmed
+  the bond still imports successfully with zero console errors, just
+  without a photo.
 
 ---
 

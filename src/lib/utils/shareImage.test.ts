@@ -19,7 +19,7 @@ describe('uploadSharedImage', () => {
 		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 
-	it('returns {shareId, key, iv} on a successful upload', async () => {
+	it('returns {shareId, key, iv, mimeType} on a successful upload, mimeType from the source Blob', async () => {
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async () => new Response(JSON.stringify({ shareId: 'abc-123' }), { status: 200 }))
@@ -31,6 +31,16 @@ describe('uploadSharedImage', () => {
 		expect(result!.shareId).toBe('abc-123');
 		expect(typeof result!.key).toBe('string');
 		expect(typeof result!.iv).toBe('string');
+		expect(result!.mimeType).toBe('image/png');
+	});
+
+	it('falls back to image/jpeg when the source Blob has no type', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(JSON.stringify({ shareId: 'abc-123' }), { status: 200 }))
+		);
+		const result = await uploadSharedImage(new Blob([new Uint8Array([1])]));
+		expect(result!.mimeType).toBe('image/jpeg');
 	});
 
 	it('fails soft (null) on a non-ok response (e.g. the 413 size-cap rejection)', async () => {
@@ -114,8 +124,9 @@ describe('uploadSharedImage -> fetchSharedImage, full client pipeline', () => {
 
 		const uploaded = await uploadSharedImage(blob);
 		expect(uploaded).not.toBeNull();
+		expect(uploaded!.mimeType).toBe('image/webp');
 
-		const fetched = await fetchSharedImage(uploaded!.shareId, uploaded!.key, uploaded!.iv, 'image/webp');
+		const fetched = await fetchSharedImage(uploaded!.shareId, uploaded!.key, uploaded!.iv, uploaded!.mimeType);
 		expect(fetched).not.toBeNull();
 		expect(fetched!.type).toBe('image/webp');
 		expect(Array.from(new Uint8Array(await fetched!.arrayBuffer()))).toEqual(Array.from(bytes));

@@ -18,6 +18,7 @@ import {
 } from '$lib/types/bonds';
 import { decodeSharePayloadString } from '$lib/utils/share';
 import { blobToBase64, base64ToBlob } from '$lib/utils/imageBase64';
+import { fetchSharedImage, type SharedImageRef } from '$lib/utils/shareImage';
 
 export type ProfileMutationHook = (
 	next: AppState,
@@ -53,7 +54,17 @@ interface RawBondLike {
 	showSeconds?: boolean;
 	/** Inline base64 photo, present only in JSON *file* backups
 	 * (`exportBackupJSON`) — never in the compact QR/link/sync-code payload
-	 * `exportJSON` produces, which must stay small. See IMAGE_SHARING_PLAN.md. */
+	 * `exportJSON` produces, which must stay small. See IMAGE_SHARING_PLAN.md.
+	 *
+	 * Its sibling field `sharedImage` (relay `{shareId,key,iv,mimeType}`,
+	 * present only on the compact payload, the inverse of `photo` above) is
+	 * deliberately *not* declared here and not decoded by
+	 * `normalizeIncomingBond()`. Unlike `photo`, resolving it means a network
+	 * fetch — `normalizeIncomingBond()` is also called by `parseSharePayload()`
+	 * for the invite *preview*, which must never fetch it (see
+	 * IMAGE_SHARING_PLAN.md, Stage 5's design-decision note). `importJSON()`'s
+	 * Case 2 reads `data.bond.sharedImage` directly, only at actual import
+	 * commit time — see `attachSharedImageIfPresent()`. */
 	photo?: { dataBase64?: string; mimeType?: string };
 }
 
@@ -431,6 +442,37 @@ class ProfileStore {
 	}
 
 	/**
+	 * Fetch and attach a relay-shared photo (`ShareModal.svelte`'s photo
+	 * toggle — IMAGE_SHARING_PLAN.md, Stage 5) to a just-imported bond, if the
+	 * payload carried one. Only ever called from `importJSON()`'s Case 2,
+	 * *after* the bond already exists — never from `normalizeIncomingBond()`
+	 * (used by the invite preview too, which must not trigger a fetch).
+	 *
+	 * Wraps `fetchSharedImage()` (which already fails soft, never throwing)
+	 * in its own try/catch anyway: `setPhoto()` below touches IndexedDB, and
+	 * `importJSON()`'s own outer try/catch would otherwise turn any failure
+	 * here into the whole import being reported as failed, even though the
+	 * bond itself already saved successfully.
+	 */
+	private async attachSharedImageIfPresent(
+		ref: { shareId?: unknown; key?: unknown; iv?: unknown; mimeType?: unknown } | undefined,
+		bondId: string
+	): Promise<void> {
+		if (typeof ref?.shareId !== 'string' || typeof ref.key !== 'string' || typeof ref.iv !== 'string') {
+			return;
+		}
+		try {
+			const mimeType = typeof ref.mimeType === 'string' ? ref.mimeType : 'image/jpeg';
+			const blob = await fetchSharedImage(ref.shareId, ref.key, ref.iv, mimeType);
+			if (blob) {
+				await this.setPhoto(blob, bondId);
+			}
+		} catch (err) {
+			console.error('Failed to attach shared image to imported bond:', err);
+		}
+	}
+
+	/**
 	 * Regenerate a bond's photo object URL from its already-in-memory Blob.
 	 *
 	 * Object URLs are scoped to the browsing context, never persisted (see
@@ -551,11 +593,24 @@ class ProfileStore {
 
 	/**
 	 * Export full application state or single active bond to JSON. Compact —
-	 * never includes photos — for the QR code / share link / sync code paths,
-	 * which must stay small. See `exportBackupJSON()` for JSON file backups.
+	 * never embeds a photo's actual bytes — for the QR code / share link /
+	 * sync code paths, which must stay small. See `exportBackupJSON()` for
+	 * JSON file backups.
+	 *
+	 * `sharedImage` is the one exception: when `ShareModal.svelte`'s photo
+	 * toggle is on, it's already uploaded the active bond's photo to the
+	 * relay (`uploadSharedImage()`) before calling this, and passes the
+	 * resulting `{shareId,key,iv,mimeType}` reference through here — a
+	 * few hundred bytes, not the photo itself, so it doesn't compromise the
+	 * "must stay small" contract. Only applies when `activeOnly` — a full
+	 * multi-bond backup has no single photo to attach it to.
 	 */
-	exportJSON(activeOnly = false): string {
-		return JSON.stringify(this.buildExportable(activeOnly), null, 2);
+	exportJSON(activeOnly = false, sharedImage?: SharedImageRef): string {
+		const exportable = this.buildExportable(activeOnly);
+		if (activeOnly && exportable.bond && sharedImage) {
+			exportable.bond.sharedImage = sharedImage;
+		}
+		return JSON.stringify(exportable, null, 2);
 	}
 
 	/**
@@ -622,12 +677,15 @@ class ProfileStore {
 					...normalizeIncomingBond(b.type || 'romantic', b, data)
 				};
 
+				let targetBondId: string;
+
 				if (mode === 'replace') {
 					// Overwrite current active bond. Must include photoBlob/photoUrl
 					// explicitly — normalizeIncomingBond() can now decode an inline
 					// backup photo onto `newBond`, and updateBond()'s patch is a plain
 					// object merge, so any field left out here is silently dropped
 					// rather than falling back to the previous bond's own photo.
+					targetBondId = this.state.activeBondId;
 					await this.updateBond(this.state.activeBondId, {
 						type: newBond.type,
 						names: newBond.names,
@@ -643,7 +701,8 @@ class ProfileStore {
 					});
 					await this.update({ isConfigured: true });
 				} else if (mode === 'add') {
-					await this.addBond(newBond);
+					const added = await this.addBond(newBond);
+					targetBondId = added.id;
 				} else {
 					// Auto mode: replace if unconfigured initial bond, else add
 					if (this.state.bonds.length <= 1 && !this.state.isConfigured) {
@@ -652,10 +711,23 @@ class ProfileStore {
 						this.state.isConfigured = true;
 						this.applyThemeAndDarkMode();
 						await saveAppStateToStorage(this.state);
+						targetBondId = newBond.id;
 					} else {
-						await this.addBond(newBond);
+						const added = await this.addBond(newBond);
+						targetBondId = added.id;
 					}
 				}
+
+				// A relay-shared photo (IMAGE_SHARING_PLAN.md, Stage 5) and an inline
+				// backup `photo` are never expected to coexist on the same payload —
+				// exportJSON() (compact, can carry sharedImage) and exportBackupJSON()
+				// (file backups, can carry photo) are mutually exclusive export paths.
+				// If they somehow did, the already-decoded inline photo wins rather
+				// than being overwritten by a relay fetch.
+				if (!newBond.photoBlob) {
+					await this.attachSharedImageIfPresent(b.sharedImage, targetBondId);
+				}
+
 				return true;
 			}
 

@@ -1,10 +1,19 @@
 import { featureFlags } from '$lib/stores/featureFlags.svelte';
 import { encryptBlob, decryptToBlob } from './imageCrypto';
 
+/**
+ * Everything a share payload needs to carry to let a recipient fetch and
+ * decrypt a relayed photo — see `RawBondLike.sharedImage` in
+ * `profile.svelte.ts`, the field this shape travels as on the wire.
+ * `mimeType` is carried alongside the ciphertext (AES-GCM has no metadata
+ * of its own) so the recipient can reconstruct a correctly-typed `Blob`
+ * without needing to guess or default it.
+ */
 export interface SharedImageRef {
 	shareId: string;
 	key: string;
 	iv: string;
+	mimeType: string;
 }
 
 /**
@@ -32,7 +41,7 @@ export async function uploadSharedImage(blob: Blob): Promise<SharedImageRef | nu
 
 		const data = await res.json();
 		if (typeof data?.shareId !== 'string') return null;
-		return { shareId: data.shareId, key, iv };
+		return { shareId: data.shareId, key, iv, mimeType: blob.type || 'image/jpeg' };
 	} catch {
 		return null;
 	}
