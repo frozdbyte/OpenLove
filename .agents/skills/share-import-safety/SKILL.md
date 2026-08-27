@@ -1,6 +1,6 @@
 ---
 name: share-import-safety
-description: Data-safety and timing rules for OpenLove's partner-sync/backup import pipeline, profileStore's async IndexedDB init, and the two photo-arrival wire shapes (inline base64 vs encrypted relay). Use before touching profileStore.importJSON, profileStore.exportJSON/exportBackupJSON, profileStore.ready, parseSharePayload, detectFullBackup, the #import= hash effect in src/routes/+page.svelte, src/lib/components/share/*, src/lib/utils/share.ts, src/lib/utils/shareImage.ts, or src/lib/utils/imageCrypto.ts. Also use before adding any date-only comparison (milestone due-dates, "same calendar day" logic). Triggers on "import backup", "share payload", "sync code", "QR import", "profileStore.ready", "importJSON", "hash import", "same day" date comparisons, "shared photo", "relay photo", "sharedImage field".
+description: Data-safety and timing rules for OpenLove's partner-sync/backup import pipeline, profileStore's async IndexedDB init, and the two photo-arrival wire shapes (inline base64 vs encrypted relay). Use before touching profileStore.importJSON, profileStore.exportJSON/exportBackupJSON, profileStore.ready, parseSharePayload, detectFullBackup, buildShareUrl, the #import hash effect in src/routes/+page.svelte, src/lib/components/share/*, src/lib/utils/share.ts, src/lib/utils/shareImage.ts, or src/lib/utils/imageCrypto.ts. Also use before adding any date-only comparison (milestone due-dates, "same calendar day" logic). Triggers on "import backup", "share payload", "sync code", "QR import", "profileStore.ready", "importJSON", "hash import", "same day" date comparisons, "shared photo", "relay photo", "sharedImage field", "share link", "link detection", "linkify".
 ---
 
 # Share/Import Safety & Async-Init Timing
@@ -129,3 +129,64 @@ Cases 1 (full backup) and 3 (V1 legacy) pass whole objects through and needed no
 `updateBond()`/`update()` patch built from its output for an explicit field allowlist that
 would silently drop it — an allowlist that was complete when written can go stale the moment
 the thing it's copying from gains a new field.
+
+## 6. Every character in the share fragment must be base64url-safe, and length matters too (iOS)
+
+`buildShareUrl()` (`src/lib/utils/share.ts`) generates `https://host/#share-<base64url(gzip(json))>`.
+This went through three rounds before landing here, and each earlier round is the instructive part
+— read them in order if you're tempted to "simplify" this again.
+
+**Round 1 (insufficient):** the separator right after `#import` was originally `=`. Several
+chat apps' link auto-detection (WhatsApp confirmed, others suspected) linkify
+`https://host/#import` and then **stop**, silently dropping everything after from the tappable
+link while the URL still displays in full as plain text. The fix at the time swapped `=` for
+`/`, on the theory that `/` reads as an ordinary hash-route path segment.
+
+**Round 2 (still insufficient, but for a different reason than we first thought):** swapping the
+separator alone changed nothing — the same truncation still happened. The cause identified at the
+time was that `encodeURIComponent(btoa(json))` peppers the *entire payload* with `%2B`/`%2F`/`%3D`
+throughout (standard base64's `+`, `/`, and `=` all get percent-escaped, and a typical payload
+contains many of each). The fix was base64url encoding (RFC 4648 §5) instead of
+`encodeURIComponent(btoa(...))` — `toBase64Url()`/`fromBase64Url()` in `share.ts` — keeping the
+whole fragment inside `[A-Za-z0-9_-]`, separator `#import-`.
+
+**Round 3 (the actual fix — the real cause was length, not character set):** Round 2 was verified
+live and confirmed fully character-set-clean, yet the *same* truncation was still reported —
+specifically on **iOS** (WhatsApp Desktop/Windows had been working fine with every prior format
+the whole time, which is what exposed that character set was never the real variable on iOS).
+iOS's system-wide link/data detector (used by Messages, WhatsApp-on-iOS, Mail, etc.) is understood
+to give up recognizing a very long fragment as a link at all, independent of what characters it
+contains — a stricter and differently-tuned detector than the JS-regex linkifiers desktop/Android
+clients use. The fix: gzip-compress the JSON (via the native Compression Streams API,
+`gzipEncode()`/`gzipDecode()` in `share.ts`) before base64url-encoding it. A typical payload
+(`milestonePrefs`, `colorPalette`, `togetherSince`, etc. repeated per bond) compresses well —
+measured ~47% shorter in practice — and the marker changed to `#share-` (shorter than `#import-`,
+and an unambiguous "this needs gzip decompression" signal distinguishing it from every prior,
+uncompressed format).
+
+**The rule:** the entire fragment, not just the character immediately after `#`, must stay inside
+`[A-Za-z0-9_-]` — base64url, never `encodeURIComponent(btoa(...))`. *And* the fragment must be as
+short as the payload allows — gzip it before encoding, don't just base64url the raw JSON. If you
+ever need to add a second field to the fragment payload, do not reach for `#share?key=value` or
+`#share;key=value` query-string-flavored syntax either — anything outside that same safe character
+class reintroduces the Round-1/2 problem. If a future report shows even the gzip version getting
+truncated on some device, the next lever is reducing the *number of fields* shipped by
+`exportJSON()`, not further encoding tricks — there's nothing left to compress harder once gzip is
+already in the pipeline. Verify any future change here against a real chat app on a real iOS
+device, not just a browser or a desktop client — this bug was invisible on desktop the entire
+time, only showed up in iOS's own link-detection pass, and no automated test in this repo can
+drive that.
+
+**Backward compatibility, not a breaking change:** `decodeSharePayloadString()` checks the current
+`#share-` (gzip) form first, then falls back through a private `extractLegacyShareCode()` helper
+that still accepts *all three* prior uncompressed forms — `#import-` (round 2), `#import/` (round
+1), and the original `#import=`. Links, QR codes, and bookmarks already shared under any prior
+scheme, or embedded in a printed/saved image, must keep working. `+page.svelte`'s hash effect and
+`handleImportHash()` check for all four prefixes too. Never remove a legacy branch; the whole
+point of a link is that it can outlive the session that generated it.
+
+**Note on `buildShareUrl()`/`decodeSharePayloadString()`/`parseSharePayload()` being `async`:**
+gzip (de)compression is inherently asynchronous (the Streams API has no sync form), so all three
+functions — and every call site — are `async`. If you add a new call site, await it; don't
+special-case a "fast path" that reads the fragment synchronously, since the current format can no
+longer be decoded without a decompression step.

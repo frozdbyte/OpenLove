@@ -86,9 +86,14 @@
 		await profileStore.ready;
 
 		try {
-			const encoded = hash.replace('#import=', '');
-			const raw = decodeURIComponent(encoded);
-			const json = decodeSharePayloadString(raw);
+			// decodeSharePayloadString()/parseSharePayload() both detect and strip
+			// whichever '#share'/'#import' wrapper is present internally, so the
+			// full hash can be passed straight through — `raw` (kept as the hash
+			// itself, not a pre-stripped form) also doubles as the pasteable sync
+			// code shown via `pendingInviteRaw`, mirroring ScanImportModal.svelte's
+			// own `pendingRaw` (the original scanned/pasted value, unprocessed).
+			const raw = hash;
+			const json = await decodeSharePayloadString(raw);
 
 			// A full multi-bond backup needs different handling than a single-bond
 			// invite: it can't be previewed as "one incoming bond", and importing it
@@ -115,7 +120,7 @@
 				return;
 			}
 
-			const parsed = parseSharePayload(raw);
+			const parsed = await parseSharePayload(raw);
 
 			pendingInviteJson = json;
 			pendingInviteRaw = raw;
@@ -135,9 +140,16 @@
 		}
 	}
 
-	// Handle Partner Share URL import if present in hash (#import=...)
+	// Handle Partner Share URL import if present in hash (#share-... current;
+	// #import-..., #import/..., and #import=... are all legacy, still accepted).
 	$effect(() => {
-		if (typeof window !== 'undefined' && window.location.hash.startsWith('#import=')) {
+		if (
+			typeof window !== 'undefined' &&
+			(window.location.hash.startsWith('#share-') ||
+				window.location.hash.startsWith('#import-') ||
+				window.location.hash.startsWith('#import/') ||
+				window.location.hash.startsWith('#import='))
+		) {
 			const hash = window.location.hash;
 			if (hash === handledImportHash) return;
 			handledImportHash = hash;

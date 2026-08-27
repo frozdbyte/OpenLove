@@ -758,10 +758,13 @@ class ProfileStore {
 
 /**
  * Helper to safely extract incoming bond data for previews.
+ *
+ * Async: `decodeSharePayloadString()` needs an async gzip-decompress step
+ * for the current share-link format — see its doc comment in utils/share.ts.
  */
-export function parseSharePayload(rawOrJson: string): Partial<Bond> | null {
+export async function parseSharePayload(rawOrJson: string): Promise<Partial<Bond> | null> {
 	try {
-		const jsonString = decodeSharePayloadString(rawOrJson);
+		const jsonString = await decodeSharePayloadString(rawOrJson);
 		const data = JSON.parse(jsonString);
 
 		if (data.isSingleBond && data.bond?.names && data.bond?.togetherSince) {

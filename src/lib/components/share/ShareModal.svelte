@@ -3,10 +3,11 @@
 	import { featureFlags } from '$lib/stores/featureFlags.svelte';
 	import { networkStore } from '$lib/stores/network.svelte';
 	import { uploadSharedImage, type SharedImageRef } from '$lib/utils/shareImage';
+	import { buildShareUrl } from '$lib/utils/share';
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
 	import Button from '$lib/components/ui/button';
 	import Switch from '$lib/components/ui/switch';
-	import { Copy, Check, QrCode, Download, Heart, ImageUp } from '@lucide/svelte';
+	import { Copy, Check, QrCode, Download, Heart, ImageUp, Share2 } from '@lucide/svelte';
 	import QRCode from 'qrcode';
 	import { copyToClipboard } from '$lib/utils/clipboard';
 
@@ -16,6 +17,11 @@
 	}
 
 	let { open = $bindable(false), onclose }: Props = $props();
+
+	// Feature-detected, not assumed from a user-agent/viewport check — true on
+	// most mobile browsers and a growing set of desktop ones, absent on the
+	// rest. Doesn't change during a session, so a plain const is enough.
+	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
 	let qrDataUrl = $state<string>('');
 	let copied = $state(false);
@@ -74,7 +80,7 @@
 	async function generateQR() {
 		try {
 			const json = await buildShareJson();
-			const shareUrl = `${window.location.origin}/#import=${encodeURIComponent(btoa(json))}`;
+			const shareUrl = await buildShareUrl(window.location.origin, json);
 			qrDataUrl = await QRCode.toDataURL(shareUrl, {
 				width: 280,
 				margin: 2,
@@ -88,11 +94,36 @@
 		}
 	}
 
+	/**
+	 * Native OS share sheet (Web Share API) — the primary action when
+	 * available (mostly mobile), since it's a single tap into Messages/AirDrop/
+	 * WhatsApp/etc. rather than copy-then-switch-apps-then-paste. Reuses
+	 * buildShareJson() so the "Share Photo" toggle behaves identically
+	 * regardless of which action the user ends up tapping.
+	 */
+	async function shareNative() {
+		if (!canShare || typeof window === 'undefined') return;
+		try {
+			const json = await buildShareJson();
+			const shareUrl = await buildShareUrl(window.location.origin, json);
+			await navigator.share({
+				title: `${profileStore.activeBond.names} on Open Love`,
+				text: `Add "${profileStore.activeBond.names}" to Open Love`,
+				url: shareUrl
+			});
+		} catch (err: any) {
+			// The user dismissing the share sheet also rejects the promise with
+			// AbortError — not a failure, nothing to log or show.
+			if (err?.name === 'AbortError') return;
+			console.error('Failed to open the share sheet:', err);
+		}
+	}
+
 	async function copyShareLink() {
 		if (typeof window === 'undefined') return;
 		try {
 			const json = await buildShareJson();
-			const shareUrl = `${window.location.origin}/#import=${encodeURIComponent(btoa(json))}`;
+			const shareUrl = await buildShareUrl(window.location.origin, json);
 			const ok = await copyToClipboard(shareUrl);
 			if (ok) {
 				copied = true;
@@ -199,9 +230,23 @@
 
 		<!-- Actions -->
 		<div class="w-full space-y-2 pt-2">
-			<Button class="w-full" onclick={copyShareLink}>
+			{#if canShare}
+				<!-- Native share sheet is primary on platforms that support it — a
+				     single tap straight into Messages/AirDrop/WhatsApp/etc., rather
+				     than copy-then-switch-apps-then-paste. -->
+				<Button class="w-full" onclick={shareNative}>
+					<Share2 class="h-4 w-4" />
+					<span>Share</span>
+				</Button>
+			{/if}
+
+			<Button variant={canShare ? 'outline' : undefined} class="w-full" onclick={copyShareLink}>
 				{#if copied}
-					<Check class="h-4 w-4 text-green-300" />
+					<!-- text-green-300 reads correctly against the solid primary button
+					     background (canShare false); once "Copy Share Link" becomes
+					     outline (canShare true), it needs the same darker green the
+					     already-outline "Copy Sync Code" button below uses. -->
+					<Check class="h-4 w-4 {canShare ? 'text-green-500' : 'text-green-300'}" />
 					<span>Copied Link to Clipboard!</span>
 				{:else}
 					<Copy class="h-4 w-4" />

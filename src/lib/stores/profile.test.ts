@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { blobToBase64 } from '$lib/utils/imageBase64';
+import { buildShareUrl } from '$lib/utils/share';
 
 /**
  * `profile.svelte.ts` imports `fetchSharedImage` from `$lib/utils/shareImage`
@@ -30,7 +31,19 @@ import { parseSharePayload, profileStore } from './profile.svelte';
  */
 
 describe('parseSharePayload', () => {
-	it('decodes a #import= share URL and normalizes a friendship bond (months/days default off "major")', () => {
+	it('decodes a real buildShareUrl() link (current gzip #share- format) end-to-end', async () => {
+		// buildShareUrl() (utils/share.ts) is what ShareModal.svelte actually
+		// generates — exercised directly here, not just decodeSharePayloadString
+		// in isolation, so a regression in either function's half of the
+		// round trip would show up in the one path that matters.
+		const data = { isSingleBond: true, bond: { names: 'Real Link', togetherSince: '2024-06-01' } };
+		const url = await buildShareUrl('https://example.com', JSON.stringify(data));
+
+		const result = await parseSharePayload(url);
+		expect(result!.names).toBe('Real Link');
+	});
+
+	it('decodes a #import= share URL and normalizes a friendship bond (months/days default off "major")', async () => {
 		const data = {
 			version: 2,
 			isSingleBond: true,
@@ -45,7 +58,7 @@ describe('parseSharePayload', () => {
 		};
 		const url = `https://example.com/#import=${encodeURIComponent(btoa(JSON.stringify(data)))}`;
 
-		const result = parseSharePayload(url);
+		const result = await parseSharePayload(url);
 
 		expect(result).not.toBeNull();
 		expect(result!.names).toBe('Alex & Sam');
@@ -62,7 +75,7 @@ describe('parseSharePayload', () => {
 		expect(result!.showSeconds).toBe(true);
 	});
 
-	it('lets an explicit partial milestonePrefs override only the fields it sets', () => {
+	it('lets an explicit partial milestonePrefs override only the fields it sets', async () => {
 		const data = {
 			isSingleBond: true,
 			bond: {
@@ -72,43 +85,43 @@ describe('parseSharePayload', () => {
 				milestonePrefs: { years: false }
 			}
 		};
-		const result = parseSharePayload(JSON.stringify(data));
+		const result = await parseSharePayload(JSON.stringify(data));
 		expect(result!.milestonePrefs).toEqual({ years: false, months: true, days: 'all', custom: true });
 	});
 
-	it('decodes a bare base64 sync code (no URL wrapper)', () => {
+	it('decodes a bare base64 sync code (no URL wrapper)', async () => {
 		const data = {
 			isSingleBond: true,
 			bond: { names: 'Bare Code', type: 'romantic', togetherSince: '2021-06-15' }
 		};
-		const result = parseSharePayload(btoa(JSON.stringify(data)));
+		const result = await parseSharePayload(btoa(JSON.stringify(data)));
 		expect(result!.names).toBe('Bare Code');
 	});
 
-	it('decodes raw JSON (V1 legacy shape) and always resolves type to romantic', () => {
+	it('decodes raw JSON (V1 legacy shape) and always resolves type to romantic', async () => {
 		const json = JSON.stringify({
 			names: 'Legacy Two',
 			togetherSince: '2019-05-05',
 			customMilestones: [],
 			type: 'friendship' // a stray field V1 never had — must NOT influence the result.
 		});
-		const result = parseSharePayload(json);
+		const result = await parseSharePayload(json);
 		expect(result!.type).toBe('romantic');
 		expect(result!.names).toBe('Legacy Two');
 		expect(result!.milestonePrefs).toEqual({ years: true, months: true, days: 'all', custom: true });
 	});
 
-	it('returns null for input that decodes but does not match any known shape', () => {
-		expect(parseSharePayload(JSON.stringify({ foo: 'bar' }))).toBeNull();
+	it('returns null for input that decodes but does not match any known shape', async () => {
+		expect(await parseSharePayload(JSON.stringify({ foo: 'bar' }))).toBeNull();
 	});
 
-	it('returns null for garbage input', () => {
-		expect(parseSharePayload('not json and not valid base64 !!!')).toBeNull();
+	it('returns null for garbage input', async () => {
+		expect(await parseSharePayload('not json and not valid base64 !!!')).toBeNull();
 	});
 
-	it('leaves photoBlob/photoUrl unset when the payload has no inline photo', () => {
+	it('leaves photoBlob/photoUrl unset when the payload has no inline photo', async () => {
 		const data = { isSingleBond: true, bond: { names: 'No Photo', togetherSince: '2022-01-01' } };
-		const result = parseSharePayload(JSON.stringify(data));
+		const result = await parseSharePayload(JSON.stringify(data));
 		expect(result!.photoBlob).toBeNull();
 		expect(result!.photoUrl).toBeUndefined();
 	});
@@ -208,9 +221,9 @@ describe('exportJSON sharedImage param / importJSON relay-photo attachment', () 
 		expect(fullBackup.sharedImage).toBeUndefined();
 	});
 
-	it('parseSharePayload never calls fetchSharedImage, even when sharedImage is present (preview must not fetch)', () => {
+	it('parseSharePayload never calls fetchSharedImage, even when sharedImage is present (preview must not fetch)', async () => {
 		const data = { isSingleBond: true, bond: { names: 'Preview Only', togetherSince: '2023-01-01', sharedImage: ref } };
-		const result = parseSharePayload(JSON.stringify(data));
+		const result = await parseSharePayload(JSON.stringify(data));
 
 		expect(result!.names).toBe('Preview Only');
 		expect(fetchSharedImageMock).not.toHaveBeenCalled();

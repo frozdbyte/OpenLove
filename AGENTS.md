@@ -29,7 +29,7 @@ Welcome! This document is the **single source of truth** for human contributors 
 | **Scheduler** | Node Background Cron | Hourly timezone-aware milestone checker initialized in [`src/hooks.server.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/hooks.server.ts). |
 | **PWA & Offline** | `@vite-pwa/sveltekit` (`injectManifest`) + Workbox 7 | **One** service worker doing precaching, navigation fallback, push and sync. Prerendered SPA shell. See Invariant 7. |
 | **Offline Sync** | Hand-rolled IndexedDB outbox | One-directional client→server queue with coalescing, backoff and last-write-wins. See Invariant 8. |
-| **Sharing & Sync** | URL Hash + QR Code | `#import=<base64-json>` + QR camera scanner (`jsqr`) & QR generator (`qrcode`). Single-source decode/detect logic lives in [`src/lib/utils/share.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/share.ts) — see Invariant 9. |
+| **Sharing & Sync** | URL Hash + QR Code | `#share-<base64url(gzip(json))>` (legacy `#import-`, `#import/`, `#import=` all still accepted on import — see the `share-import-safety` skill §6) + QR camera scanner (`jsqr`) & QR generator (`qrcode`). Single-source encode/decode/detect logic lives in [`src/lib/utils/share.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/share.ts) — see Invariant 9. |
 | **Photo Sharing** | Client-side AES-GCM + server relay | Opt-in per share (`ShareModal.svelte`'s toggle). `crypto.subtle` encrypts on-device; the server stores only ciphertext, TTL-swept. See Invariant 11. |
 | **Feature Flags** | Runtime env vars via a config endpoint | `GET /api/share/config`, not `$env/static/public` — see Invariant 12 for why. |
 | **Containerization** | Multi-Arch Docker/Podman | Multi-stage build with `--platform=$BUILDPLATFORM` for native host compilation. |
@@ -398,7 +398,7 @@ OpenLove/
 - Sorted chronologically by target date with exact countdowns (`daysRemaining`).
 
 ### 3. Progressive Partner Sharing & QR Code Import
-- **Share Modal ([`ShareModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/ShareModal.svelte))**: Generates instant QR code and share link encoded with `#import=<base64-json>`.
+- **Share Modal ([`ShareModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/ShareModal.svelte))**: Generates instant QR code and share link encoded with `#share-<base64url(gzip(json))>` (built via `async buildShareUrl()` — never hand-write this string; see the `share-import-safety` skill §6 for why it's gzip-compressed base64url and not `encodeURIComponent(btoa(...))`). Also offers the native OS share sheet as the primary action when `navigator.share` is available (feature-detected, not device-sniffed), with the copy actions as fallbacks.
 - **Partner Invite & Preview Modal ([`PartnerInviteModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/PartnerInviteModal.svelte))**:
   - **Unconfigured Users (A)**: Smart landing options (*Install App pre-synced, Copy Sync Code, Continue in Browser*).
   - **Single-Bond Users (B)**: Displays incoming preview with choices to **➕ Add as New Bond** or **🔄 Replace Current Bond**.
@@ -407,8 +407,9 @@ OpenLove/
     full multi-bond backup — see Invariant 9.
 - **QR Code Scanner ([`ScanImportModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/ScanImportModal.svelte))**: Real-time camera scanner (`jsqr`), image upload, and paste code handler with preview confirmation.
 - **Add Bond Integration**: Top-level action in the Add Bond sheet to directly scan or paste shared partner profiles.
-- **Decode/detect logic** (`#import=` URL parsing, bare base64 sync codes, full-backup detection)
-  is centralized in [`src/lib/utils/share.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/share.ts)
+- **Encode/decode/detect logic** (`buildShareUrl()`, `decodeSharePayloadString()`, legacy `#import-`,
+  `#import/`, and `#import=` URL parsing, bare base64 sync codes, full-backup detection) is centralized in
+  [`src/lib/utils/share.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/share.ts)
   and shared by `ScanImportModal.svelte`, `+page.svelte`'s hash effect, and
   `profileStore.parseSharePayload`. **Do not** reimplement any of it inline at a new call site —
   import from `share.ts`. See the `share-import-safety` skill before touching any of this.

@@ -185,7 +185,7 @@
 	async function handleImportData(raw: string) {
 		errorMessage = '';
 		try {
-			const jsonString = decodeSharePayloadString(raw);
+			const jsonString = await decodeSharePayloadString(raw);
 
 			// A full multi-bond backup needs different handling than a single-bond
 			// invite: it can't be previewed as "one incoming bond", and importing it
@@ -217,7 +217,7 @@
 				return;
 			}
 
-			const parsed = parseSharePayload(raw);
+			const parsed = await parseSharePayload(raw);
 			if (!parsed) {
 				errorMessage = 'Invalid relationship profile format. Please check the code and try again.';
 				return;
