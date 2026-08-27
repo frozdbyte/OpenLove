@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { profileStore } from '$lib/stores/profile.svelte';
 	import { featureFlags } from '$lib/stores/featureFlags.svelte';
+	import { networkStore } from '$lib/stores/network.svelte';
 	import { uploadSharedImage, type SharedImageRef } from '$lib/utils/shareImage';
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
 	import Button from '$lib/components/ui/button';
@@ -160,26 +161,39 @@
 		</p>
 
 		{#if featureFlags.flags.shareImages && profileStore.activeBond.photoBlob}
-			<!-- Photo-sharing toggle (IMAGE_SHARING_PLAN.md, Stage 5) -->
-			<div class="w-full flex items-center justify-between gap-3 p-3 rounded-2xl bg-card border border-border text-left">
+			<!-- Photo-sharing toggle (IMAGE_SHARING_PLAN.md, Stage 5). Disabled
+			     while offline — the toggle would just fail soft to "share without
+			     it" on upload anyway, but greying it out up front is clearer than
+			     letting the user turn it on and only finding out it didn't work
+			     once they've already generated/copied a link. -->
+			<div
+				class="w-full flex items-center justify-between gap-3 p-3 rounded-2xl bg-card border border-border text-left transition-opacity"
+				class:opacity-50={!networkStore.isOnline}
+			>
 				<div class="flex items-center gap-2.5 min-w-0">
 					<div class="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
 						<ImageUp class="h-4 w-4" />
 					</div>
 					<div class="min-w-0">
-						<div class="text-sm font-semibold text-foreground">Share Photo Too</div>
+						<div class="text-sm font-semibold text-foreground">Share Photo</div>
 						<p class="text-[11px] text-muted-foreground">
-							{#if uploadingPhoto}
+							{#if !networkStore.isOnline}
+								Offline — connect to share a photo
+							{:else if uploadingPhoto}
 								Encrypting &amp; uploading...
 							{:else if photoUploadFailed}
 								Couldn't upload — sharing without it
 							{:else}
-								Encrypted before upload; the server never sees it
+								🔒 End-to-End Encrypted
 							{/if}
 						</p>
 					</div>
 				</div>
-				<Switch checked={includePhoto} disabled={uploadingPhoto} onchange={(v) => (includePhoto = v)} />
+				<Switch
+					checked={includePhoto}
+					disabled={uploadingPhoto || !networkStore.isOnline}
+					onchange={(v) => (includePhoto = v)}
+				/>
 			</div>
 		{/if}
 

@@ -430,6 +430,19 @@ import still succeeds, just without a photo (fail-soft).
   the bond still imports successfully with zero console errors, just
   without a photo.
 
+→ **Follow-up refinement**: the toggle is now also disabled (and its row
+  greyed out, `opacity-50`) while offline, using the same `networkStore.isOnline`
+  flag `PushNotificationPanel.svelte` already uses for the identical
+  "action needs the network" pattern. Uploading was already going to fail
+  soft to "share without it" per the design above — this just surfaces that
+  up front instead of letting the user flip the toggle and discover it
+  didn't work only after generating/copying a link. Status text swaps to
+  "Offline — connect to share a photo". Verified live: toggled offline via
+  a real `context.setOffline(true)`, confirmed the row/switch grey out and
+  a click while disabled is a no-op, then confirmed both revert
+  automatically on going back online (`pnpm check`/`pnpm test` 116/116/`pnpm build`
+  unaffected — no logic outside `ShareModal.svelte` changed).
+
 ---
 
 ## Stage 6 — Docs & hardening
