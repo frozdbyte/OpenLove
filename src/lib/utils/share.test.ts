@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decodeSharePayloadString, detectFullBackup, buildShareUrl } from './share';
+import { decodeSharePayloadString, detectFullBackup, buildShareUrl, classifyImportPayload } from './share';
 
 /** Every character a base64url string can contain — nothing outside this
  * set should ever appear in a buildShareUrl() fragment. */
@@ -149,5 +149,61 @@ describe('detectFullBackup', () => {
 
 	it('returns null for invalid JSON without throwing', () => {
 		expect(detectFullBackup('not json at all')).toBeNull();
+	});
+});
+
+describe('classifyImportPayload', () => {
+	it('classifies a full multi-bond backup and lists every bond name', () => {
+		const json = JSON.stringify({
+			version: 2,
+			bonds: [{ names: 'Emma & Paul' }, { names: 'Alex & Sam' }]
+		});
+		expect(classifyImportPayload(json)).toEqual({
+			kind: 'full-backup',
+			bonds: [{ names: 'Emma & Paul' }, { names: 'Alex & Sam' }]
+		});
+	});
+
+	it('falls back to "Unnamed bond" for a full-backup entry missing a name', () => {
+		const json = JSON.stringify({ version: 2, bonds: [{}] });
+		expect(classifyImportPayload(json)).toEqual({
+			kind: 'full-backup',
+			bonds: [{ names: 'Unnamed bond' }]
+		});
+	});
+
+	it('classifies a single-bond invite shape', () => {
+		const json = JSON.stringify({
+			isSingleBond: true,
+			bond: { names: 'Emma & Paul', togetherSince: '2020-01-01' }
+		});
+		expect(classifyImportPayload(json)).toEqual({
+			kind: 'single-bond',
+			bonds: [{ names: 'Emma & Paul' }]
+		});
+	});
+
+	it('does not classify isSingleBond as single-bond when the bond is missing required fields', () => {
+		// Mirrors importJSON()'s own Case 2 condition exactly (requires both
+		// bond.names and bond.togetherSince) — a payload missing either must
+		// fall through to null just like importJSON() would refuse it.
+		const json = JSON.stringify({ isSingleBond: true, bond: { names: 'Emma & Paul' } });
+		expect(classifyImportPayload(json)).toBeNull();
+	});
+
+	it('classifies a V1 legacy single-profile shape', () => {
+		const json = JSON.stringify({ names: 'Emma & Paul', togetherSince: '2020-01-01' });
+		expect(classifyImportPayload(json)).toEqual({
+			kind: 'legacy',
+			bonds: [{ names: 'Emma & Paul' }]
+		});
+	});
+
+	it('returns null for an unrecognized (but validly-formed) JSON object', () => {
+		expect(classifyImportPayload(JSON.stringify({ foo: 'bar' }))).toBeNull();
+	});
+
+	it('returns null for invalid JSON without throwing', () => {
+		expect(classifyImportPayload('not json at all')).toBeNull();
 	});
 });

@@ -178,3 +178,50 @@ export function detectFullBackup(jsonString: string): FullBackupInfo | null {
 	}
 	return null;
 }
+
+export type ImportPayloadKind = 'full-backup' | 'single-bond' | 'legacy';
+
+export interface ImportPreview {
+	kind: ImportPayloadKind;
+	bonds: { names: string }[];
+}
+
+/**
+ * Classify a raw JSON import payload (a selected backup *file*, not a
+ * share code/link) into the shape it will be treated as, plus enough info
+ * (bond names) to render a preview before actually importing anything.
+ *
+ * The three conditions below are a deliberate, exact mirror of
+ * `profileStore.importJSON()`'s Case 1/2/3 detection (`profile.svelte.ts`)
+ * — kept as a second, separately-maintained copy rather than a shared
+ * helper because `importJSON()` needs the full parsed `data` to build real
+ * Bond records via `normalizeIncomingBond()`, not just a names list, so
+ * unifying them would mean refactoring already-tested, data-loss-sensitive
+ * import logic for little benefit. If you ever change what shape counts as
+ * a full backup / single-bond invite / legacy profile here, update
+ * `importJSON()`'s matching condition too (and vice versa) — otherwise the
+ * preview drawer (`JsonImportPreviewDrawer.svelte`) can end up showing
+ * something different from what actually gets imported on confirm.
+ */
+export function classifyImportPayload(jsonString: string): ImportPreview | null {
+	try {
+		const data = JSON.parse(jsonString);
+
+		if (data?.version === 2 && Array.isArray(data.bonds) && data.bonds.length > 0) {
+			return {
+				kind: 'full-backup',
+				bonds: data.bonds.map((b: { names?: string }) => ({ names: b?.names || 'Unnamed bond' }))
+			};
+		}
+		if (data?.isSingleBond && data?.bond?.names && data?.bond?.togetherSince) {
+			return { kind: 'single-bond', bonds: [{ names: data.bond.names }] };
+		}
+		if (data?.togetherSince && data?.names) {
+			return { kind: 'legacy', bonds: [{ names: data.names }] };
+		}
+	} catch {
+		// Not valid JSON — nothing to preview. Let the caller's existing
+		// "invalid file format" error handling take over.
+	}
+	return null;
+}

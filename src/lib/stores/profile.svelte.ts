@@ -639,6 +639,13 @@ class ProfileStore {
 	/**
 	 * Import profile / bond data from JSON.
 	 * Supports mode: 'auto' | 'replace' | 'add'.
+	 *
+	 * The three Cases' detection conditions are deliberately mirrored by
+	 * `classifyImportPayload()` (`$lib/utils/share.ts`), which needs to
+	 * classify a payload the same way *without* actually importing it, for
+	 * the pre-import preview drawer. If you change a condition here, update
+	 * that function's matching branch too — see its doc comment for why
+	 * they're two separately-maintained copies rather than a shared helper.
 	 */
 	async importJSON(jsonStr: string, mode: 'auto' | 'replace' | 'add' = 'auto'): Promise<boolean> {
 		try {

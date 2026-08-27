@@ -7,6 +7,8 @@
 	import Card from '$lib/components/ui/card';
 	import { Heart, ShieldCheck, Calendar, Sparkles, QrCode, UploadCloud } from '@lucide/svelte';
 	import { profileStore } from '$lib/stores/profile.svelte';
+	import { classifyImportPayload, type ImportPreview } from '$lib/utils/share';
+	import JsonImportPreviewDrawer from '$lib/components/share/JsonImportPreviewDrawer.svelte';
 
 	interface Props {
 		onScanQR: () => void;
@@ -16,25 +18,45 @@
 
 	let backupInputRef = $state<HTMLInputElement | null>(null);
 	let restoreError = $state('');
+	let pendingFile = $state<File | null>(null);
+	let pendingPreview = $state<ImportPreview | null>(null);
+	let isPreviewOpen = $state(false);
 
 	/**
-	 * `mode: 'replace'` mirrors `ScanImportModal.svelte`'s own "nothing to
-	 * lose" branch — this button only exists during onboarding, where
-	 * `profileStore.state.isConfigured` is guaranteed false, so there's
-	 * nothing a full-backup replace could overwrite. That's also why this
-	 * skips `detectFullBackup()`/a confirm dialog (AGENTS.md Invariant 9):
-	 * that machinery exists to gate a full-backup import on an
-	 * already-configured device, which this entry point can never be. On
-	 * success, `profileStore.state.isConfigured` flips to true and
-	 * `+page.svelte`'s reactive check swaps away from onboarding on its own.
+	 * Reads and classifies the selected file, then opens the preview drawer
+	 * — the actual import only happens on `handleConfirmImport()`, once the
+	 * user has seen which bond(s) the file contains.
 	 */
-	async function handleRestoreFile(e: Event) {
+	async function handleFileSelected(e: Event) {
 		const target = e.target as HTMLInputElement;
 		const file = target.files?.[0];
 		target.value = ''; // allow re-selecting the same file after an error
 		if (!file) return;
 		restoreError = '';
-		const ok = await profileStore.importJSONFromFile(file, 'replace');
+
+		const text = await file.text();
+		const classification = classifyImportPayload(text);
+		if (!classification) {
+			restoreError = "Couldn't read that file — make sure it's a valid Open Love backup.";
+			return;
+		}
+
+		pendingFile = file;
+		pendingPreview = classification;
+		isPreviewOpen = true;
+	}
+
+	/**
+	 * `mode: 'auto'` — this button only exists during onboarding, where
+	 * `profileStore.state.isConfigured` is guaranteed false, so `'auto'`
+	 * resolves to a full replace regardless (nothing to lose either way).
+	 * On success, `profileStore.state.isConfigured` flips to true and
+	 * `+page.svelte`'s reactive check swaps away from onboarding on its own.
+	 */
+	async function handleConfirmImport() {
+		if (!pendingFile) return;
+		const ok = await profileStore.importJSONFromFile(pendingFile, 'auto');
+		isPreviewOpen = false;
 		if (!ok) restoreError = "Couldn't read that file — make sure it's a valid Open Love backup.";
 	}
 </script>
@@ -112,7 +134,7 @@
 			accept=".json"
 			class="hidden"
 			bind:this={backupInputRef}
-			onchange={handleRestoreFile}
+			onchange={handleFileSelected}
 		/>
 		<button
 			type="button"
@@ -128,3 +150,5 @@
 		{/if}
 	</div>
 </div>
+
+<JsonImportPreviewDrawer bind:open={isPreviewOpen} preview={pendingPreview} onConfirm={handleConfirmImport} />

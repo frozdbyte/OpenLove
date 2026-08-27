@@ -26,6 +26,8 @@
 		Code
 	} from '@lucide/svelte';
 	import { APP_VERSION } from '$lib/version';
+	import { classifyImportPayload, type ImportPreview } from '$lib/utils/share';
+	import JsonImportPreviewDrawer from '$lib/components/share/JsonImportPreviewDrawer.svelte';
 
 	interface Props {
 		open: boolean;
@@ -37,6 +39,9 @@
 
 	let backupInputRef = $state<HTMLInputElement | null>(null);
 	let storage = $state<StorageEstimate | null>(null);
+	let pendingFile = $state<File | null>(null);
+	let pendingPreview = $state<ImportPreview | null>(null);
+	let isPreviewOpen = $state(false);
 
 	$effect(() => {
 		if (open) {
@@ -58,11 +63,28 @@
 		URL.revokeObjectURL(url);
 	}
 
-	async function handleBackupImport(e: Event) {
+	async function handleFileSelected(e: Event) {
 		const target = e.target as HTMLInputElement;
 		const file = target.files?.[0];
+		target.value = ''; // allow re-selecting the same file after an error
 		if (!file) return;
-		const ok = await profileStore.importJSONFromFile(file);
+
+		const text = await file.text();
+		const classification = classifyImportPayload(text);
+		if (!classification) {
+			alert('Failed to restore backup. Invalid file format.');
+			return;
+		}
+
+		pendingFile = file;
+		pendingPreview = classification;
+		isPreviewOpen = true;
+	}
+
+	async function handleConfirmImport() {
+		if (!pendingFile) return;
+		const ok = await profileStore.importJSONFromFile(pendingFile);
+		isPreviewOpen = false;
 		if (ok) {
 			alert('Data restored successfully!');
 		} else {
@@ -141,7 +163,7 @@
 		accept=".json"
 		class="hidden"
 		bind:this={backupInputRef}
-		onchange={handleBackupImport}
+		onchange={handleFileSelected}
 	/>
 	<Button variant="outline" class="w-full" onclick={() => backupInputRef?.click()}>
 		<UploadCloud class="h-4 w-4 mr-1.5" />
@@ -153,6 +175,8 @@
 		<span>Reset All Data</span>
 	</Button>
 </section>
+
+<JsonImportPreviewDrawer bind:open={isPreviewOpen} preview={pendingPreview} onConfirm={handleConfirmImport} />
 
 <!-- App Version Indicator -->
 <div class="pt-2 pb-1 text-center space-y-1">
