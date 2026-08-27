@@ -493,12 +493,33 @@ ones, not on each other.
       (`svelte-kit sync && svelte-check`) → 0 errors, 0 warnings across 4,268 files.
 *(Resolves M1; gives every later phase a regression check.)*
 
-### Phase 1 — Isolated bug fix
-- [ ] Fix C1: replace the `toISOString()` comparison in
+### Phase 1 — Isolated bug fix — ✅ DONE (2026-08-27)
+- [x] Fix C1: replace the `toISOString()` comparison in
       `checkAndDispatchMilestones` (`scheduler.ts:78-81`) with a local-component date
       string, per the sketch in C1. Add the regression test from Phase 0 if not already
       covering it.
-*(Ship independently — zero dependency on any other phase.)*
+      → Added a `toLocalDateString()` helper in `scheduler.ts` (Y/M/D getters, no UTC
+      conversion) and swapped it in at the one comparison site
+      (`checkAndDispatchMilestones`'s `todayMilestones` filter). No other logic in the
+      file changed.
+      → Phase 0's `time.test.ts` pinned the *expected* comparison behavior but didn't
+      exercise `scheduler.ts` itself, so a dedicated regression suite was added:
+      `src/lib/server/scheduler.test.ts` (3 tests), mocking `./db` and `./push` with
+      an in-memory fake (same `vi.hoisted` pattern as `sync.test.ts`) and using
+      `vi.setSystemTime` to fix "now". Covers: (1) a milestone due "today" in UTC is
+      correctly detected as due when the server process runs with `TZ=Asia/Tokyo`
+      (UTC+9 — the exact offset class C1 breaks), (2) the same scenario still works
+      under `TZ=UTC` (no regression for the common Docker default), (3) a bond whose
+      `lastNotified` already records today's key is not re-notified (fix doesn't
+      break idempotency).
+      → **Verified the regression test actually catches the bug**: temporarily
+      reverted the one-line fix, confirmed `detects a same-UTC-day milestone as due
+      even when the server process runs in a positive-UTC-offset timezone` fails
+      (`expected +0 to be 1`) against the old code, then restored the fix and
+      confirmed all tests pass again.
+      → Verification: `pnpm test` → 4 files, 42/42 passing. `pnpm check` → 0 errors,
+      0 warnings across 4,269 files.
+*(Shipped independently — zero dependency on any other phase.)*
 
 ### Phase 2 — Shared core utilities (no visual change)
 - [ ] Extract `decodeSharePayloadString()` into `src/lib/utils/share.ts`; update

@@ -6,6 +6,24 @@ import type { MilestoneCategoryPrefs } from '$lib/types/bonds';
 let isSchedulerRunning = false;
 let intervalHandle: NodeJS.Timeout | null = null;
 
+/**
+ * Render a Date's own local calendar components as `YYYY-MM-DD`.
+ *
+ * Deliberately *not* `date.toISOString().split('T')[0]`: `toISOString()` always
+ * renders in UTC, while `calculateMilestones()`'s `targetDate`s (and the
+ * subscriber-local `now` they're computed against, below) are built with
+ * `new Date(year, month, day)` — local-timezone constructors. Comparing one via
+ * UTC and the other via local components disagrees whenever the server process's
+ * timezone has a non-zero offset, e.g. a self-hosted container run with a `TZ` env
+ * var set for correct log timestamps — silently shifting milestone notifications
+ * to the wrong day. See REFACTOR_PLAN.md, Critical C1.
+ */
+function toLocalDateString(date: Date): string {
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const day = String(date.getDate()).padStart(2, '0');
+	return `${date.getFullYear()}-${month}-${day}`;
+}
+
 function parseBondCategoryPrefs(categoriesStr?: string): MilestoneCategoryPrefs {
 	if (!categoriesStr) {
 		return { years: true, months: true, days: 'all', custom: true };
@@ -76,7 +94,7 @@ export async function checkAndDispatchMilestones(): Promise<{ processed: number;
 					const { milestones } = calculateMilestones(bond.togetherSince, [], localDate, prefs);
 
 					const todayMilestones = milestones.filter((m) => {
-						const mTargetStr = m.targetDate.toISOString().split('T')[0];
+						const mTargetStr = toLocalDateString(m.targetDate);
 						return mTargetStr === subscriberDateStr;
 					});
 
