@@ -7,13 +7,16 @@ import {
 	saveBondPhoto,
 	clearAllStorage
 } from '$lib/storage/db';
-import type { CoupleProfile, ColorMode, ColorPalette, UIThemeId } from '$lib/types/profile';
+import type { CoupleProfile, ColorMode, ColorPalette, CustomMilestone, UIThemeId } from '$lib/types/profile';
 import {
 	DEFAULT_MILESTONE_PREFS_FRIENDSHIP,
 	DEFAULT_MILESTONE_PREFS_ROMANTIC,
 	type AppState,
-	type Bond
+	type Bond,
+	type BondType,
+	type MilestoneCategoryPrefs
 } from '$lib/types/bonds';
+import { decodeSharePayloadString } from '$lib/utils/share';
 
 export type ProfileMutationHook = (
 	next: AppState,
@@ -34,6 +37,78 @@ const PALETTE_PRIMARY_HEX: Record<ColorPalette, { light: string; dark: string }>
 	sage: { light: '#059669', dark: '#34d399' },
 	midnight: { light: '#2563eb', dark: '#60a5fa' }
 };
+
+/** Shape every incoming bond payload (V2 full backup, V2 single-bond invite, V1
+ * legacy) exposes for the fields `normalizeIncomingBond` fills in. `milestonePrefs`
+ * is itself partial here — every source may be missing individual categories. */
+interface RawBondLike {
+	names?: string;
+	togetherSince?: string;
+	customMilestones?: unknown;
+	milestonePrefs?: Partial<MilestoneCategoryPrefs>;
+	uiTheme?: UIThemeId;
+	colorPalette?: ColorPalette;
+	colorMode?: ColorMode;
+	showSeconds?: boolean;
+}
+
+type NormalizedBondCore = Pick<
+	Bond,
+	| 'type'
+	| 'names'
+	| 'togetherSince'
+	| 'photoBlob'
+	| 'photoUrl'
+	| 'customMilestones'
+	| 'milestonePrefs'
+	| 'uiTheme'
+	| 'colorPalette'
+	| 'colorMode'
+	| 'showSeconds'
+>;
+
+/**
+ * Normalize an incoming bond payload into everything a `Bond` needs *except*
+ * `id` and `notificationsEnabled` — those two vary by call site in ways that
+ * aren't safely derivable (an invite always forces `notificationsEnabled: true`
+ * regardless of what the payload says; a full backup preserves the id it was
+ * exported with, an invite always mints a fresh one) — so callers set them
+ * explicitly. `bondType` is likewise a parameter rather than read off `raw.type`
+ * here, since V1-legacy payloads must always resolve to `'romantic'` even if a
+ * stray `type` field is present.
+ *
+ * Was independently reimplemented across `importJSON`'s three branches and
+ * `parseSharePayload`'s two — see REFACTOR_PLAN.md, Medium M2. `envelope`
+ * defaults to `raw` itself, which reduces the `raw.x || envelope.x || default`
+ * chain to `raw.x || default` for legacy payloads that have no separate outer
+ * envelope object, matching their pre-extraction behavior exactly.
+ */
+function normalizeIncomingBond(
+	bondType: BondType,
+	raw: RawBondLike,
+	envelope: RawBondLike = raw
+): NormalizedBondCore {
+	return {
+		type: bondType,
+		names: raw.names || 'Emma & Paul',
+		togetherSince: raw.togetherSince || new Date().toISOString().split('T')[0],
+		photoBlob: null,
+		photoUrl: undefined,
+		customMilestones: Array.isArray(raw.customMilestones)
+			? (raw.customMilestones as CustomMilestone[])
+			: [],
+		milestonePrefs: {
+			years: raw.milestonePrefs?.years ?? true,
+			months: raw.milestonePrefs?.months ?? (bondType === 'friendship' ? false : true),
+			days: raw.milestonePrefs?.days ?? (bondType === 'friendship' ? 'major' : 'all'),
+			custom: raw.milestonePrefs?.custom ?? true
+		},
+		uiTheme: raw.uiTheme || envelope.uiTheme || 'modern',
+		colorPalette: raw.colorPalette || envelope.colorPalette || 'rose',
+		colorMode: raw.colorMode || envelope.colorMode || 'system',
+		showSeconds: raw.showSeconds ?? envelope.showSeconds ?? true
+	};
+}
 
 class ProfileStore {
 	state = $state<AppState>({ ...DEFAULT_APP_STATE });
@@ -425,23 +500,8 @@ class ProfileStore {
 					activeBondId: data.activeBondId || data.bonds[0].id,
 					bonds: data.bonds.map((b: Partial<Bond>) => ({
 						id: b.id || `bond_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-						type: b.type || 'romantic',
-						names: b.names || 'Emma & Paul',
-						togetherSince: b.togetherSince || new Date().toISOString().split('T')[0],
-						photoBlob: null,
-						photoUrl: undefined,
-						customMilestones: Array.isArray(b.customMilestones) ? b.customMilestones : [],
 						notificationsEnabled: b.notificationsEnabled ?? true,
-						milestonePrefs: {
-							years: b.milestonePrefs?.years ?? true,
-							months: b.milestonePrefs?.months ?? (b.type === 'friendship' ? false : true),
-							days: b.milestonePrefs?.days ?? (b.type === 'friendship' ? 'major' : 'all'),
-							custom: b.milestonePrefs?.custom ?? true
-						},
-						uiTheme: b.uiTheme || data.uiTheme || 'modern',
-						colorPalette: b.colorPalette || data.colorPalette || 'rose',
-						colorMode: b.colorMode || data.colorMode || 'system',
-						showSeconds: b.showSeconds ?? data.showSeconds ?? true
+						...normalizeIncomingBond(b.type || 'romantic', b, data)
 					})),
 					uiTheme: data.uiTheme || 'modern',
 					colorMode: data.colorMode || 'system',
@@ -462,23 +522,8 @@ class ProfileStore {
 				const b = data.bond;
 				const newBond: Bond = {
 					id: `bond_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-					type: b.type || 'romantic',
-					names: b.names,
-					togetherSince: b.togetherSince,
-					photoBlob: null,
-					photoUrl: undefined,
-					customMilestones: Array.isArray(b.customMilestones) ? b.customMilestones : [],
 					notificationsEnabled: true,
-					milestonePrefs: {
-						years: b.milestonePrefs?.years ?? true,
-						months: b.milestonePrefs?.months ?? (b.type === 'friendship' ? false : true),
-						days: b.milestonePrefs?.days ?? (b.type === 'friendship' ? 'major' : 'all'),
-						custom: b.milestonePrefs?.custom ?? true
-					},
-					uiTheme: b.uiTheme || data.uiTheme || 'modern',
-					colorPalette: b.colorPalette || data.colorPalette || 'rose',
-					colorMode: b.colorMode || data.colorMode || 'system',
-					showSeconds: b.showSeconds ?? data.showSeconds ?? true
+					...normalizeIncomingBond(b.type || 'romantic', b, data)
 				};
 
 				if (mode === 'replace') {
@@ -516,18 +561,8 @@ class ProfileStore {
 			if (data.togetherSince && data.names) {
 				const migratedBond: Bond = {
 					id: `bond_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-					type: 'romantic',
-					names: data.names,
-					togetherSince: data.togetherSince,
-					photoBlob: null,
-					photoUrl: undefined,
-					customMilestones: Array.isArray(data.customMilestones) ? data.customMilestones : [],
 					notificationsEnabled: true,
-					milestonePrefs: { ...DEFAULT_MILESTONE_PREFS_ROMANTIC },
-					uiTheme: data.uiTheme || 'modern',
-					colorPalette: data.colorPalette || 'rose',
-					colorMode: data.colorMode || 'system',
-					showSeconds: data.showSeconds ?? true
+					...normalizeIncomingBond('romantic', data)
 				};
 
 				if (mode === 'replace' || (mode === 'auto' && (!this.state.isConfigured || this.state.bonds.length <= 1))) {
@@ -552,45 +587,14 @@ class ProfileStore {
  */
 export function parseSharePayload(rawOrJson: string): Partial<Bond> | null {
 	try {
-		let jsonString = '';
-		if (rawOrJson.includes('#import=')) {
-			const encoded = rawOrJson.split('#import=')[1];
-			jsonString = atob(decodeURIComponent(encoded));
-		} else if (rawOrJson.startsWith('{')) {
-			jsonString = rawOrJson;
-		} else {
-			try {
-				jsonString = atob(rawOrJson);
-			} catch {
-				jsonString = rawOrJson;
-			}
-		}
-
+		const jsonString = decodeSharePayloadString(rawOrJson);
 		const data = JSON.parse(jsonString);
+
 		if (data.isSingleBond && data.bond?.names && data.bond?.togetherSince) {
 			const b = data.bond;
-			return {
-				names: b.names,
-				type: b.type || 'romantic',
-				togetherSince: b.togetherSince,
-				customMilestones: Array.isArray(b.customMilestones) ? b.customMilestones : [],
-				milestonePrefs: b.milestonePrefs,
-				uiTheme: b.uiTheme || data.uiTheme || 'modern',
-				colorPalette: b.colorPalette || data.colorPalette || 'rose',
-				colorMode: b.colorMode || data.colorMode || 'system',
-				showSeconds: b.showSeconds ?? data.showSeconds ?? true
-			};
+			return normalizeIncomingBond(b.type || 'romantic', b, data);
 		} else if (data.togetherSince && data.names) {
-			return {
-				names: data.names,
-				type: 'romantic',
-				togetherSince: data.togetherSince,
-				customMilestones: Array.isArray(data.customMilestones) ? data.customMilestones : [],
-				uiTheme: data.uiTheme || 'modern',
-				colorPalette: data.colorPalette || 'rose',
-				colorMode: data.colorMode || 'system',
-				showSeconds: data.showSeconds ?? true
-			};
+			return normalizeIncomingBond('romantic', data);
 		}
 	} catch (err) {
 		console.error('Failed to parse share payload:', err);

@@ -73,35 +73,36 @@ export async function loadAppStateFromStorage(): Promise<AppState> {
 		const rawState = await get<Partial<AppState>>(BONDS_V2_KEY);
 
 		if (rawState && Array.isArray(rawState.bonds) && rawState.bonds.length > 0) {
-			const bonds: Bond[] = [];
-			for (const rawBond of rawState.bonds) {
-				const photoBlob = (await get<Blob>(`${PHOTO_KEY_PREFIX}${rawBond.id}`)) ?? null;
-				let photoUrl: string | undefined = undefined;
-				if (photoBlob && typeof URL !== 'undefined') {
-					photoUrl = URL.createObjectURL(photoBlob);
-				}
+			const bonds: Bond[] = await Promise.all(
+				rawState.bonds.map(async (rawBond) => {
+					const photoBlob = (await get<Blob>(`${PHOTO_KEY_PREFIX}${rawBond.id}`)) ?? null;
+					let photoUrl: string | undefined = undefined;
+					if (photoBlob && typeof URL !== 'undefined') {
+						photoUrl = URL.createObjectURL(photoBlob);
+					}
 
-				bonds.push({
-					id: rawBond.id || `bond_${Date.now()}`,
-					type: rawBond.type || 'romantic',
-					names: rawBond.names || 'Emma & Paul',
-					togetherSince: rawBond.togetherSince || new Date().toISOString().split('T')[0],
-					photoBlob,
-					photoUrl,
-					customMilestones: Array.isArray(rawBond.customMilestones) ? rawBond.customMilestones : [],
-					notificationsEnabled: rawBond.notificationsEnabled ?? true,
-					milestonePrefs: {
-						years: rawBond.milestonePrefs?.years ?? true,
-						months: rawBond.milestonePrefs?.months ?? (rawBond.type === 'friendship' ? false : true),
-						days: rawBond.milestonePrefs?.days ?? (rawBond.type === 'friendship' ? 'major' : 'all'),
-						custom: rawBond.milestonePrefs?.custom ?? true
-					},
-					uiTheme: rawBond.uiTheme || rawState.uiTheme || 'modern',
-					colorPalette: rawBond.colorPalette || rawState.colorPalette || 'rose',
-					colorMode: rawBond.colorMode || rawState.colorMode || 'system',
-					showSeconds: rawBond.showSeconds ?? rawState.showSeconds ?? true
-				});
-			}
+					return {
+						id: rawBond.id || `bond_${Date.now()}`,
+						type: rawBond.type || 'romantic',
+						names: rawBond.names || 'Emma & Paul',
+						togetherSince: rawBond.togetherSince || new Date().toISOString().split('T')[0],
+						photoBlob,
+						photoUrl,
+						customMilestones: Array.isArray(rawBond.customMilestones) ? rawBond.customMilestones : [],
+						notificationsEnabled: rawBond.notificationsEnabled ?? true,
+						milestonePrefs: {
+							years: rawBond.milestonePrefs?.years ?? true,
+							months: rawBond.milestonePrefs?.months ?? (rawBond.type === 'friendship' ? false : true),
+							days: rawBond.milestonePrefs?.days ?? (rawBond.type === 'friendship' ? 'major' : 'all'),
+							custom: rawBond.milestonePrefs?.custom ?? true
+						},
+						uiTheme: rawBond.uiTheme || rawState.uiTheme || 'modern',
+						colorPalette: rawBond.colorPalette || rawState.colorPalette || 'rose',
+						colorMode: rawBond.colorMode || rawState.colorMode || 'system',
+						showSeconds: rawBond.showSeconds ?? rawState.showSeconds ?? true
+					};
+				})
+			);
 
 			const activeBondId = bonds.some((b) => b.id === rawState.activeBondId)
 				? rawState.activeBondId!
@@ -295,56 +296,6 @@ export async function clearAllStorage(photoUrls: string[] = []): Promise<void> {
 		localStorage.removeItem('openlove_theme_palette');
 		localStorage.removeItem('openlove_theme_ui');
 	} catch {}
-}
-
-/**
- * Legacy compatibility wrappers
- */
-export async function loadProfileFromStorage(): Promise<CoupleProfile> {
-	const state = await loadAppStateFromStorage();
-	const active = state.bonds.find((b) => b.id === state.activeBondId) || state.bonds[0] || DEFAULT_PRIMARY_BOND;
-	return {
-		names: active.names,
-		togetherSince: active.togetherSince,
-		photoBlob: active.photoBlob,
-		photoUrl: active.photoUrl,
-		uiTheme: state.uiTheme,
-		colorMode: state.colorMode,
-		colorPalette: active.colorPalette || state.colorPalette,
-		showSeconds: state.showSeconds,
-		isConfigured: state.isConfigured,
-		pushSubscribed: state.pushSubscribed,
-		pushIntent: state.pushIntent,
-		customMilestones: active.customMilestones
-	};
-}
-
-export async function saveProfileToStorage(profile: CoupleProfile): Promise<void> {
-	const state = await loadAppStateFromStorage();
-	const active = state.bonds.find((b) => b.id === state.activeBondId);
-	if (active) {
-		active.names = profile.names;
-		active.togetherSince = profile.togetherSince;
-		active.customMilestones = profile.customMilestones;
-		active.photoBlob = profile.photoBlob;
-		active.photoUrl = profile.photoUrl;
-	}
-	state.uiTheme = profile.uiTheme;
-	state.colorMode = profile.colorMode;
-	state.colorPalette = profile.colorPalette;
-	state.showSeconds = profile.showSeconds;
-	state.isConfigured = profile.isConfigured;
-	state.pushSubscribed = profile.pushSubscribed;
-	state.pushIntent = profile.pushIntent;
-	await saveAppStateToStorage(state);
-}
-
-export async function savePhotoBlob(blob: Blob | null, oldUrl?: string) {
-	return saveBondPhoto(DEFAULT_PRIMARY_BOND_ID, blob, oldUrl);
-}
-
-export async function clearProfileStorage(currentPhotoUrl?: string): Promise<void> {
-	return clearAllStorage(currentPhotoUrl ? [currentPhotoUrl] : []);
 }
 
 export async function getStoredPushSubId(): Promise<string | undefined> {

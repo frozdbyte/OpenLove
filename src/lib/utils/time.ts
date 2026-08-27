@@ -248,7 +248,8 @@ export function calculateMilestones(
 				isAchieved: daysRemaining <= 0,
 				daysRemaining: Math.max(0, daysRemaining),
 				type: 'custom',
-				iconName: 'HeartHandshake'
+				iconName: 'HeartHandshake',
+				sourceId: custom.id
 			});
 		}
 	}

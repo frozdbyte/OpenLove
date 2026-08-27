@@ -8,6 +8,7 @@
 	import confetti from 'canvas-confetti';
 	import PartnerInviteModal from './PartnerInviteModal.svelte';
 	import type { Bond } from '$lib/types/bonds';
+	import { decodeSharePayloadString } from '$lib/utils/share';
 
 	interface Props {
 		open?: boolean;
@@ -169,24 +170,7 @@
 	async function handleImportData(raw: string) {
 		errorMessage = '';
 		try {
-			let jsonString = '';
-
-			// 1. Check if it's a full URL with #import=...
-			if (raw.includes('#import=')) {
-				const encoded = raw.split('#import=')[1];
-				jsonString = atob(decodeURIComponent(encoded));
-			} else if (raw.startsWith('{')) {
-				// 2. Check if raw JSON
-				jsonString = raw;
-			} else {
-				// 3. Check if raw Base64 string
-				try {
-					jsonString = atob(raw);
-				} catch {
-					jsonString = raw;
-				}
-			}
-
+			const jsonString = decodeSharePayloadString(raw);
 			const parsed = parseSharePayload(raw);
 			if (!parsed) {
 				errorMessage = 'Invalid relationship profile format. Please check the code and try again.';

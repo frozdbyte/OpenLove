@@ -141,6 +141,9 @@ describe('calculateMilestones', () => {
 		expect(milestones).toHaveLength(1);
 		expect(milestones[0].id).toBe('custom_custom_123');
 		expect(milestones[0].title).toBe('First Date');
+		// sourceId carries the original Bond.customMilestones id undecorated, so callers
+		// can delete by it instead of string-stripping the display id (REFACTOR_PLAN.md L2).
+		expect(milestones[0].sourceId).toBe('custom_123');
 	});
 
 	it('omits custom milestones entirely when the custom preference is disabled', () => {

@@ -521,17 +521,57 @@ ones, not on each other.
       0 warnings across 4,269 files.
 *(Shipped independently — zero dependency on any other phase.)*
 
-### Phase 2 — Shared core utilities (no visual change)
-- [ ] Extract `decodeSharePayloadString()` into `src/lib/utils/share.ts`; update
+### Phase 2 — Shared core utilities (no visual change) — ✅ DONE (2026-08-27)
+- [x] Extract `decodeSharePayloadString()` into `src/lib/utils/share.ts`; update
       `parseSharePayload`, `ScanImportModal.handleImportData`, and the `+page.svelte` hash
       effect to call it. *(H4)*
-- [ ] Extract `normalizeIncomingBond()` in `profile.svelte.ts`; update `importJSON`'s three
+      → New `src/lib/utils/share.ts` with the single three-branch decode. All three
+      call sites now import it instead of re-deriving the same logic; `+page.svelte`'s
+      copy (which used to inline just the "already-URI-decoded, try atob else raw"
+      half) now calls the identical function the other two use — the double-decode
+      redundancy noted in the audit is gone, not just the duplication.
+- [x] Extract `normalizeIncomingBond()` in `profile.svelte.ts`; update `importJSON`'s three
       branches and `parseSharePayload` to use it. *(M2)*
-- [ ] Parallelize the photo-blob fetch loop in `loadAppStateFromStorage`. *(M3)*
-- [ ] Delete the four dead legacy wrapper functions in `storage/db.ts`, after a final grep
+      → Added as a module-private helper taking `(bondType, raw, envelope = raw)` and
+      returning everything a `Bond` needs except `id`/`notificationsEnabled` — the two
+      fields that genuinely vary per call site (an invite always forces
+      `notificationsEnabled: true` and mints a fresh `id`; a full backup preserves
+      both). `bondType` is an explicit parameter rather than read off `raw.type`, so a
+      V1-legacy payload with a stray `type` field still can't leak through. Verified
+      field-by-field against all 5 original call sites before editing — every current
+      fallback value is reproduced exactly, including cases where a fallback the
+      shared function computes is provably unreachable at that call site (e.g.
+      V1-legacy's `names`/`togetherSince` are guarded truthy upstream, so the shared
+      function's generic default never fires there). Added `src/lib/stores/profile.test.ts`
+      (6 tests) as empirical proof of this, exercising `parseSharePayload` — the one
+      already-exported function that routes through the new helper — across the
+      `#import=` URL, bare-JSON, base64-sync-code, and V1-legacy input shapes,
+      including a test that a stray `type` field on a V1 payload does NOT change the
+      resolved bond type.
+- [x] Parallelize the photo-blob fetch loop in `loadAppStateFromStorage`. *(M3)*
+      → `for` loop replaced with `Promise.all(rawState.bonds.map(async (rawBond) => ...))`
+      in `storage/db.ts`. `Promise.all` preserves input order in its results regardless
+      of resolution timing, so `bonds[0]`'s use as an `activeBondId` fallback is unaffected.
+- [x] Delete the four dead legacy wrapper functions in `storage/db.ts`, after a final grep
       confirms no importers. *(L1)*
-- [ ] Give `MilestoneItem` a `sourceId` field; fix `deleteCustomMilestone` to use it instead
+      → Re-ran the grep immediately before deleting (still zero importers outside their
+      own declarations) and removed `loadProfileFromStorage`, `saveProfileToStorage`,
+      `savePhotoBlob`, `clearProfileStorage`.
+- [x] Give `MilestoneItem` a `sourceId` field; fix `deleteCustomMilestone` to use it instead
       of string-stripping. *(L2)*
+      → `MilestoneItem.sourceId?: string` added in `types/time.ts`; `calculateMilestones`'s
+      custom-milestone branch sets it to the original `CustomMilestone.id` (undecorated);
+      `SettingsSheet.svelte`'s delete button now calls `deleteCustomMilestone(m.sourceId!)`
+      instead of `m.id.replace('custom_', '')`. Extended the existing Phase-0 custom-milestone
+      test in `time.test.ts` to assert `sourceId` directly.
+- [x] Added `src/lib/utils/share.test.ts` (4 tests) for the new `decodeSharePayloadString`
+      — not on the original checklist, but cheap, low-risk, and directly de-risks H4 the
+      same way the M2 tests de-risk that extraction.
+- [x] Verification: `pnpm test` → 6 files, 52/52 passing. `pnpm check` → 0 errors,
+      0 warnings across 4,272 files. `pnpm build` → succeeds end-to-end, including
+      `verify-precache.js`'s assertion that the service worker is still DOM-free
+      (39 precache entries; Invariant 7 unaffected — none of this phase's changes are
+      imported by `service-worker.ts`).
 
 ### Phase 3 — Shared selector components (Settings + Onboarding)
 - [ ] Build `ThemeSelector.svelte`, `ColorModeSelector.svelte`, `ColorPaletteSelector.svelte`,

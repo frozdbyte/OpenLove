@@ -1004,7 +1004,7 @@
 									<button
 										type="button"
 										class="text-muted-foreground hover:text-destructive p-1 rounded transition-colors cursor-pointer"
-										onclick={() => deleteCustomMilestone(m.id.replace('custom_', ''))}
+										onclick={() => deleteCustomMilestone(m.sourceId!)}
 										title="Delete"
 										aria-label="Delete milestone"
 									>

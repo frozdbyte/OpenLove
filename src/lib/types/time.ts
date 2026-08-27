@@ -28,6 +28,13 @@ export interface MilestoneItem {
 	daysRemaining: number;
 	type: 'days' | 'months' | 'years' | 'custom';
 	iconName?: string;
+	/**
+	 * For `type: 'custom'` only: the milestone's own id as stored in
+	 * `Bond.customMilestones`, distinct from `id` above (which is `custom_`-prefixed
+	 * for display/list-key purposes). Lets callers delete a custom milestone without
+	 * string-stripping `id` — see REFACTOR_PLAN.md, Low L2.
+	 */
+	sourceId?: string;
 }
 
 export interface NextMilestoneInfo {

@@ -11,6 +11,7 @@
 	import type { Bond } from '$lib/types/bonds';
 	import { Heart } from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
+	import { decodeSharePayloadString } from '$lib/utils/share';
 
 	let isSettingsOpen = $state(false);
 	let isShareOpen = $state(false);
@@ -58,13 +59,7 @@
 				const encoded = window.location.hash.replace('#import=', '');
 				const raw = decodeURIComponent(encoded);
 				const parsed = parseSharePayload(raw);
-
-				let json = '';
-				try {
-					json = atob(raw);
-				} catch {
-					json = raw;
-				}
+				const json = decodeSharePayloadString(raw);
 
 				pendingInviteJson = json;
 				pendingInviteRaw = raw;
