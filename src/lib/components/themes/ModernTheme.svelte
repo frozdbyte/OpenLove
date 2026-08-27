@@ -74,7 +74,7 @@
 							class="h-full w-full object-cover"
 						/>
 					{:else if isFriendship}
-						<div class="h-full w-full bg-gradient-to-br from-emerald-100 to-teal-200 dark:from-emerald-950/60 dark:to-zinc-900 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+						<div class="h-full w-full bg-gradient-to-br from-emerald-100 to-teal-200 dark:from-emerald-950/60 dark:to-zinc-900 flex items-center justify-center text-primary">
 							<Sparkles class="h-12 w-12" />
 						</div>
 					{:else}

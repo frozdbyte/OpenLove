@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { profileStore } from '$lib/stores/profile.svelte';
 	import { pwaStore } from '$lib/stores/pwa.svelte';
-	import type { UIThemeId, ColorMode } from '$lib/types/profile';
+	import type { UIThemeId, ColorMode, ColorPalette } from '$lib/types/profile';
 	import Button from '$lib/components/ui/button';
 	import { Sparkles, ArrowRight, ArrowLeft } from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
@@ -42,6 +42,7 @@
 	let dateInput = $state(profileStore.profile.togetherSince || new Date().toISOString().split('T')[0]);
 	let selectedTheme = $state<UIThemeId>(profileStore.profile.uiTheme || 'modern');
 	let selectedColorMode = $state<ColorMode>(profileStore.profile.colorMode || 'system');
+	let selectedColorPalette = $state<ColorPalette>(profileStore.profile.colorPalette || 'rose');
 
 	function handleBondTypeChange(newType: BondType) {
 		bondType = newType;
@@ -50,6 +51,13 @@
 		} else if (newType === 'friendship' && namesInput === 'Emma & Paul') {
 			namesInput = 'Alex & Sam';
 		}
+
+		// Friendship bonds default the whole app to the emerald ("sage") accent so
+		// buttons and other primary-colored UI don't stay rose-tinted throughout
+		// onboarding — mirrors handleThemeChange/handleColorModeChange's live-apply.
+		const palette: ColorPalette = newType === 'friendship' ? 'sage' : 'rose';
+		selectedColorPalette = palette;
+		profileStore.setColorPalette(palette);
 	}
 
 	function handleThemeChange(theme: UIThemeId) {
@@ -88,7 +96,8 @@
 		} else if (currentStepKey === 'style') {
 			await profileStore.update({
 				uiTheme: selectedTheme,
-				colorMode: selectedColorMode
+				colorMode: selectedColorMode,
+				colorPalette: selectedColorPalette
 			});
 		}
 
@@ -115,7 +124,8 @@
 					? DEFAULT_MILESTONE_PREFS_FRIENDSHIP
 					: DEFAULT_MILESTONE_PREFS_ROMANTIC,
 			uiTheme: selectedTheme,
-			colorMode: selectedColorMode
+			colorMode: selectedColorMode,
+			colorPalette: selectedColorPalette
 		});
 
 		await profileStore.update({
@@ -123,6 +133,7 @@
 			togetherSince: dateInput,
 			uiTheme: selectedTheme,
 			colorMode: selectedColorMode,
+			colorPalette: selectedColorPalette,
 			isConfigured: true
 		});
 

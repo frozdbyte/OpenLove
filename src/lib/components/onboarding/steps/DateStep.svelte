@@ -17,8 +17,10 @@
 </script>
 
 <div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
-	<div class="h-12 w-12 sm:h-16 sm:w-16 mx-auto rounded-full bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center text-primary shadow-md shadow-rose-500/10 shrink-0">
-		<Calendar class="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+	<div class="h-12 w-12 sm:h-16 sm:w-16 mx-auto rounded-full {bondType === 'friendship'
+		? 'bg-emerald-100 dark:bg-emerald-950/60 shadow-emerald-500/10'
+		: 'bg-rose-100 dark:bg-rose-950/60 shadow-rose-500/10'} flex items-center justify-center shadow-md shrink-0">
+		<Calendar class="h-6 w-6 sm:h-8 sm:w-8 {bondType === 'friendship' ? 'text-emerald-500' : 'text-primary'}" />
 	</div>
 
 	<div class="space-y-1">

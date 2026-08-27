@@ -20,7 +20,9 @@
 </script>
 
 <div class="space-y-3 sm:space-y-4 text-center animate-in fade-in duration-300">
-	<div class="h-12 w-12 sm:h-16 sm:w-16 mx-auto rounded-full bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center text-primary shadow-md shadow-rose-500/10 shrink-0">
+	<div class="h-12 w-12 sm:h-16 sm:w-16 mx-auto rounded-full {bondType === 'friendship'
+		? 'bg-emerald-100 dark:bg-emerald-950/60 shadow-emerald-500/10'
+		: 'bg-rose-100 dark:bg-rose-950/60 shadow-rose-500/10'} flex items-center justify-center text-primary shadow-md shrink-0">
 		{#if bondType === 'friendship'}
 			<Sparkles class="h-6 w-6 sm:h-8 sm:w-8 text-emerald-500" />
 		{:else}
@@ -33,7 +35,7 @@
 			{bondType === 'friendship' ? 'Friend Names' : 'Your Names'}
 		</h1>
 		<p class="text-xs sm:text-sm text-muted-foreground">
-			{bondType === 'friendship' ? 'Who are the best friends?' : 'What are your names or nicknames?'}
+			What are your names or nicknames?
 		</p>
 	</div>
 

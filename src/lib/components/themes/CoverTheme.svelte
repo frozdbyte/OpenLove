@@ -21,7 +21,7 @@
 				class="w-full h-full object-cover object-center"
 			/>
 		{:else if isFriendship}
-			<div class="w-full h-full bg-gradient-to-br from-emerald-200/50 via-primary/20 to-teal-300/40 dark:from-emerald-950/50 dark:via-zinc-900 dark:to-zinc-950 flex flex-col items-center justify-center text-emerald-600 dark:text-emerald-400">
+			<div class="w-full h-full bg-gradient-to-br from-emerald-200/50 via-primary/20 to-teal-300/40 dark:from-emerald-950/50 dark:via-zinc-900 dark:to-zinc-950 flex flex-col items-center justify-center text-primary">
 				<Sparkles class="h-16 w-16 animate-gentle-pulse" />
 				<span class="text-xs font-medium text-muted-foreground mt-2">Add friend photo in settings</span>
 			</div>
