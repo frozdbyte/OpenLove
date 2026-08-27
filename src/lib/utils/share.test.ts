@@ -153,33 +153,48 @@ describe('detectFullBackup', () => {
 });
 
 describe('classifyImportPayload', () => {
-	it('classifies a full multi-bond backup and lists every bond name', () => {
+	it('classifies a full multi-bond backup, listing every bond name/type/palette/photo', () => {
 		const json = JSON.stringify({
 			version: 2,
-			bonds: [{ names: 'Emma & Paul' }, { names: 'Alex & Sam' }]
+			bonds: [
+				{ names: 'Emma & Paul', type: 'romantic', colorPalette: 'midnight', photo: { dataBase64: 'AAAA', mimeType: 'image/png' } },
+				{ names: 'Alex & Sam', type: 'friendship' }
+			]
 		});
 		expect(classifyImportPayload(json)).toEqual({
 			kind: 'full-backup',
-			bonds: [{ names: 'Emma & Paul' }, { names: 'Alex & Sam' }]
+			bonds: [
+				{ names: 'Emma & Paul', type: 'romantic', colorPalette: 'midnight', photoDataUrl: 'data:image/png;base64,AAAA' },
+				{ names: 'Alex & Sam', type: 'friendship', colorPalette: 'rose', photoDataUrl: null }
+			]
 		});
 	});
 
-	it('falls back to "Unnamed bond" for a full-backup entry missing a name', () => {
+	it("falls back to the envelope's colorPalette when a bond doesn't specify its own", () => {
+		const json = JSON.stringify({
+			version: 2,
+			colorPalette: 'sage',
+			bonds: [{ names: 'Emma & Paul' }]
+		});
+		expect(classifyImportPayload(json)?.bonds[0].colorPalette).toBe('sage');
+	});
+
+	it('falls back to "Unnamed bond", "romantic", and "rose" for a full-backup entry missing fields', () => {
 		const json = JSON.stringify({ version: 2, bonds: [{}] });
 		expect(classifyImportPayload(json)).toEqual({
 			kind: 'full-backup',
-			bonds: [{ names: 'Unnamed bond' }]
+			bonds: [{ names: 'Unnamed bond', type: 'romantic', colorPalette: 'rose', photoDataUrl: null }]
 		});
 	});
 
 	it('classifies a single-bond invite shape', () => {
 		const json = JSON.stringify({
 			isSingleBond: true,
-			bond: { names: 'Emma & Paul', togetherSince: '2020-01-01' }
+			bond: { names: 'Emma & Paul', type: 'friendship', colorPalette: 'terracotta', togetherSince: '2020-01-01' }
 		});
 		expect(classifyImportPayload(json)).toEqual({
 			kind: 'single-bond',
-			bonds: [{ names: 'Emma & Paul' }]
+			bonds: [{ names: 'Emma & Paul', type: 'friendship', colorPalette: 'terracotta', photoDataUrl: null }]
 		});
 	});
 
@@ -195,8 +210,13 @@ describe('classifyImportPayload', () => {
 		const json = JSON.stringify({ names: 'Emma & Paul', togetherSince: '2020-01-01' });
 		expect(classifyImportPayload(json)).toEqual({
 			kind: 'legacy',
-			bonds: [{ names: 'Emma & Paul' }]
+			bonds: [{ names: 'Emma & Paul', type: 'romantic', colorPalette: 'rose', photoDataUrl: null }]
 		});
+	});
+
+	it('ignores an invalid colorPalette value rather than passing it through', () => {
+		const json = JSON.stringify({ version: 2, bonds: [{ names: 'Emma & Paul', colorPalette: 'not-a-real-palette' }] });
+		expect(classifyImportPayload(json)?.bonds[0].colorPalette).toBe('rose');
 	});
 
 	it('returns null for an unrecognized (but validly-formed) JSON object', () => {

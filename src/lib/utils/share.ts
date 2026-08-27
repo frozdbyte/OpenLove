@@ -1,4 +1,6 @@
 import { bytesToBase64, base64ToBytes } from './imageBase64';
+import type { BondType } from '$lib/types/bonds';
+import type { ColorPalette } from '$lib/types/profile';
 
 /**
  * Standard base64 (RFC 4648 §4) -> base64url (RFC 4648 §5): swap the two
@@ -181,15 +183,60 @@ export function detectFullBackup(jsonString: string): FullBackupInfo | null {
 
 export type ImportPayloadKind = 'full-backup' | 'single-bond' | 'legacy';
 
+export interface ImportPreviewBond {
+	names: string;
+	type: BondType;
+	/** Mirrors `normalizeIncomingBond()`'s own `raw.colorPalette ||
+	 * envelope.colorPalette || 'rose'` fallback exactly, so the preview's
+	 * per-bond accent color matches what the bond will actually be
+	 * imported with. */
+	colorPalette: ColorPalette;
+	/** `data:<mimeType>;base64,<...>` if the record has an inline backup
+	 * photo (`{ photo: { dataBase64, mimeType } }`, produced by
+	 * `exportBackupJSON()`), directly usable as an `<img src>` — else
+	 * `null`. Never a `sharedImage` relay reference: JSON *file* backups
+	 * (the only payloads this function ever sees) always use the inline
+	 * `photo` shape, never the compact QR/link path's relay reference, so
+	 * there's no network-fetch-during-preview concern here (Invariant 11). */
+	photoDataUrl: string | null;
+}
+
 export interface ImportPreview {
 	kind: ImportPayloadKind;
-	bonds: { names: string }[];
+	bonds: ImportPreviewBond[];
+}
+
+type PreviewBondLike = {
+	names?: string;
+	type?: string;
+	colorPalette?: string;
+	photo?: { dataBase64?: string; mimeType?: string };
+};
+
+/** Shared by all three shapes below — a bond-like record's preview fields
+ * (`import(...).bond`, one entry of `import(...).bonds`, or a flat V1
+ * record) always live in the same place relative to that record.
+ * `envelope` is the top-level parsed payload, for `colorPalette`'s
+ * per-bond-then-app-wide fallback (V1 legacy passes itself as both). */
+function toPreviewBond(b: PreviewBondLike, envelope: PreviewBondLike = b): ImportPreviewBond {
+	const validPalettes: ColorPalette[] = ['rose', 'lavender', 'terracotta', 'sage', 'midnight'];
+	const rawPalette = b?.colorPalette || envelope?.colorPalette;
+	return {
+		names: b?.names || 'Unnamed bond',
+		type: b?.type === 'friendship' ? 'friendship' : 'romantic',
+		colorPalette: validPalettes.includes(rawPalette as ColorPalette) ? (rawPalette as ColorPalette) : 'rose',
+		photoDataUrl:
+			b?.photo?.dataBase64 && b?.photo?.mimeType
+				? `data:${b.photo.mimeType};base64,${b.photo.dataBase64}`
+				: null
+	};
 }
 
 /**
  * Classify a raw JSON import payload (a selected backup *file*, not a
  * share code/link) into the shape it will be treated as, plus enough info
- * (bond names) to render a preview before actually importing anything.
+ * (bond names, type, photo) to render a preview before actually importing
+ * anything.
  *
  * The three conditions below are a deliberate, exact mirror of
  * `profileStore.importJSON()`'s Case 1/2/3 detection (`profile.svelte.ts`)
@@ -208,16 +255,13 @@ export function classifyImportPayload(jsonString: string): ImportPreview | null 
 		const data = JSON.parse(jsonString);
 
 		if (data?.version === 2 && Array.isArray(data.bonds) && data.bonds.length > 0) {
-			return {
-				kind: 'full-backup',
-				bonds: data.bonds.map((b: { names?: string }) => ({ names: b?.names || 'Unnamed bond' }))
-			};
+			return { kind: 'full-backup', bonds: data.bonds.map((b: PreviewBondLike) => toPreviewBond(b, data)) };
 		}
 		if (data?.isSingleBond && data?.bond?.names && data?.bond?.togetherSince) {
-			return { kind: 'single-bond', bonds: [{ names: data.bond.names }] };
+			return { kind: 'single-bond', bonds: [toPreviewBond(data.bond, data)] };
 		}
 		if (data?.togetherSince && data?.names) {
-			return { kind: 'legacy', bonds: [{ names: data.names }] };
+			return { kind: 'legacy', bonds: [toPreviewBond(data)] };
 		}
 	} catch {
 		// Not valid JSON — nothing to preview. Let the caller's existing
