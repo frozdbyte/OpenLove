@@ -213,28 +213,33 @@ OpenLove/
 
 ## 🧩 Key Subsystems Breakdown
 
-### 1. Extensible Theme System (SOLID Open/Closed Principle)
+### 1. Extensible Theme & Multi-Bond Architecture
 - Located in [`src/lib/components/themes/`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/themes/).
 - Registered in [`registry.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/themes/registry.ts).
-- Themes implement `ThemeProps` (`profile`, `timeBreakdown`, `nextMilestone`, `milestones`, `onOpenSettings`, `onOpenShare`).
+- Themes implement `ThemeProps` (`profile`, `bond`, `timeBreakdown`, `nextMilestone`, `milestones`, `onOpenSettings`, `onOpenShare`, `onOpenSwitcher`).
 - Current themes:
   - **`modern`**: Glassmorphic cards, glowing avatar, accent color palettes (*Rose, Lavender, Terracotta, Sage, Midnight*).
+  - **`cover`**: Full-bleed cover photo with clean top header and floating metric cards.
   - **`traditional`**: Authentic replica of classic "My Love" design with deep crimson header and serif typography.
+- **Per-Bond Customization**: Each `Bond` independently configures its own `uiTheme`, `colorPalette`, `colorMode`, `showSeconds`, `milestonePrefs`, and `notificationsEnabled`.
+- **Unified Settings**: [`SettingsSheet.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/settings/SettingsSheet.svelte) provides scoped bond editing and applies progressive disclosure (omits the Active Bond header when only 1 bond exists).
 
 ### 2. Multi-Category Milestone Engine ([`src/lib/utils/time.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/time.ts))
 - **Months**: 1st through 11th months, 18 months, 30 months, 42 months, etc.
 - **Years**: 1st anniversary, 2nd, 5th, 10th, 25th silver, 50th golden, etc.
-- **Days**: 50, 100, 150, 200, 500, 1000, 2500, 5000, 10000 days.
+- **Days**: 50, 100, 150, 200, 500, 1000, 2500, 5000, 10000 days (supports 'all', 'major', or 'off' filters).
 - **Custom**: User-created custom relationship events (*First Date, Moved In, Proposal*).
 - Sorted chronologically by target date with exact countdowns (`daysRemaining`).
 
-### 3. Partner Sharing & QR Code Sync
+### 3. Progressive Partner Sharing & QR Code Import
 - **Share Modal ([`ShareModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/ShareModal.svelte))**: Generates instant QR code and share link encoded with `#import=<base64-json>`.
-- **Partner Invite Modal ([`PartnerInviteModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/PartnerInviteModal.svelte))**: When partner opens a share link in a browser, offers 3 options:
-  1. Add to Home Screen (installs PWA pre-configured).
-  2. Copy Sync Code (for existing PWA installations).
-  3. Continue in browser.
-- **QR Code Scanner ([`ScanImportModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/ScanImportModal.svelte))**: Real-time camera scanner using `jsqr` to scan partner QR codes with paste code fallback.
+- **Partner Invite & Preview Modal ([`PartnerInviteModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/PartnerInviteModal.svelte))**:
+  - **Unconfigured Users (A)**: Smart landing options (*Install App pre-synced, Copy Sync Code, Continue in Browser*).
+  - **Single-Bond Users (B)**: Displays incoming preview with choices to **➕ Add as New Bond** or **🔄 Replace Current Bond**.
+  - **Multi-Bond Users (C)**: Displays incoming preview with choice to **➕ Add to My Bonds**.
+- **QR Code Scanner ([`ScanImportModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/ScanImportModal.svelte))**: Real-time camera scanner (`jsqr`), image upload, and paste code handler with preview confirmation.
+- **Add Bond Integration**: Top-level action in the Add Bond sheet to directly scan or paste shared partner profiles.
+
 
 ---
 

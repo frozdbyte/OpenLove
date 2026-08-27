@@ -10,26 +10,28 @@ OpenLove allows couples to track how long they have been together with live coun
 
 ## ✨ Features
 
-- 🔒 **Zero-Knowledge Privacy**: Couple names, anniversary dates, and high-resolution photos are stored locally on your device via **IndexedDB**. The server never stores your private memories or names.
-- 🎨 **Dual UI Themes & Extensible Architecture**:
+- 🔒 **Zero-Knowledge Privacy**: Names, anniversary dates, and high-resolution photos are stored locally on your device via **IndexedDB**. The server never stores your private memories or names.
+- 💖 **Multiple Bonds Support**: Track romantic relationships (💖) and friendships (🌿) with custom milestone preferences and separate profiles.
+- 🎨 **Multiple UI Themes & Extensible Architecture**:
   - **Modern UI** *(Default)*: Clean, glassmorphic cards, glowing couple avatar, accent color palettes (*Rose, Lavender, Terracotta, Sage, Midnight*).
+  - **Cover Image**: Full-bleed cover photo with clean top header and floating metric cards.
   - **Traditional UI**: Authentic, nostalgic replica of the classic "My Love" design with deep crimson header and stacked time breakdown.
-- 🌙 **Dark Mode Support**: Light, Dark, or System mode with crisp high contrast across all views.
+  - *Per-Bond Customization*: Each bond can independently set its own UI theme, color palette, dark mode, and seconds display.
+- 🌙 **Dark Mode Support**: Light, Dark, or System mode with crisp contrast across all views.
 - 🏆 **Comprehensive Milestone Engine**:
   - **Months**: 1st through 11th month, 18 months, 30 months, etc.
   - **Years**: 1st anniversary, 5-year, 10-year, 25-year silver, 50-year golden, etc.
-  - **Days**: 50, 100, 500, 1,000, 2,000, 5,000, 10,000 days.
+  - **Days**: 50, 100, 500, 1,000, 2,000, 5,000, 10,000 days (configurable: All, Major, or Off).
   - **Custom**: Add custom relationship memories (*First Date, Moved In, Proposal*).
-- 📲 **Genuinely Offline-First PWA**: Installable to the Home Screen on iOS Safari, Android Chrome and Desktop.
-  The app shell, all JavaScript and CSS, and the self-hosted fonts are precached, so it cold-starts
+- 📲 **Genuinely Offline-First PWA**: Installable to the Home Screen on iOS Safari, Android Chrome, and Desktop.
+  The app shell, all JavaScript and CSS, and self-hosted fonts are precached, so it cold-starts
   with **no network at all** — airplane mode, force-quit, reopen, and the counter is still ticking.
 - 🔄 **Offline Edits That Actually Sync**: Change your anniversary date with no connection and it is
-  queued on-device, then delivered exactly once when you are back online — coalesced into a single
-  request, retried with backoff, and safe across multiple devices (newest change wins).
-- 🔒 **No Third-Party Requests**: Fonts are self-hosted, so a cold load talks to your server and
-  nothing else — no IP leak to Google Fonts.
-- 🔔 **Anonymous Web Push Notifications**: Scheduled background cron alerts you on your exact milestone day in your local timezone.
-- 💾 **Portable JSON Backup & QR Share**: 1-tap backup/restore and quick couple sharing via QR codes.
+  queued on-device, then delivered safely when back online.
+- 🔒 **No Third-Party Requests**: Fonts are self-hosted — no IP leaks to external font CDNs.
+- 🔔 **Anonymous Web Push Notifications**: Scheduled background cron alerts you on your exact milestone day in your local timezone (with generic single-bond and scoped multi-bond notices).
+- 💾 **Progressive QR Share & Backup**: 1-tap backup/restore, instant QR code sharing with smart import previews and Add / Replace conflict resolution.
+
 
 ---
 
