@@ -1,10 +1,11 @@
 <script lang="ts">
 	import type { ThemeProps } from '$lib/types/profile';
-	import { Heart, Settings, Share2, Sparkles, Trophy, Calendar, Clock, Hourglass, ChevronDown } from '@lucide/svelte';
-	import Card from '$lib/components/ui/card';
-	import Badge from '$lib/components/ui/badge';
-	import Progress from '$lib/components/ui/progress';
+	import { Heart, Settings, Share2, Sparkles, ChevronDown } from '@lucide/svelte';
 	import SyncStatusPill from '$lib/components/offline/SyncStatusPill.svelte';
+	import ThemeIconButton from '$lib/components/themes/shared/ThemeIconButton.svelte';
+	import HeroCounterCard from '$lib/components/themes/shared/HeroCounterCard.svelte';
+	import StatBreakdownGrid from '$lib/components/themes/shared/StatBreakdownGrid.svelte';
+	import NextMilestoneCard from '$lib/components/themes/shared/NextMilestoneCard.svelte';
 
 	let { profile, bond, timeBreakdown, nextMilestone, onOpenSettings, onOpenShare, onOpenSwitcher }: ThemeProps = $props();
 
@@ -14,14 +15,7 @@
 <div class="relative min-h-svh w-full max-w-md mx-auto px-4 py-6 flex flex-col justify-between pb-12">
 	<!-- Top Bar -->
 	<header class="flex items-center justify-between py-2">
-		<button
-			type="button"
-			class="h-10 w-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card/80 transition-all border border-border/40 backdrop-blur-md cursor-pointer"
-			onclick={onOpenSettings}
-			aria-label="Settings"
-		>
-			<Settings class="h-5 w-5" />
-		</button>
+		<ThemeIconButton icon={Settings} onclick={onOpenSettings} ariaLabel="Settings" />
 
 		<button
 			type="button"
@@ -39,14 +33,7 @@
 			<ChevronDown class="h-3 w-3 opacity-60 ml-0.5" />
 		</button>
 
-		<button
-			type="button"
-			class="h-10 w-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card/80 transition-all border border-border/40 backdrop-blur-md cursor-pointer"
-			onclick={onOpenShare}
-			aria-label="Share with Partner"
-		>
-			<Share2 class="h-5 w-5" />
-		</button>
+		<ThemeIconButton icon={Share2} onclick={onOpenShare} ariaLabel="Share with Partner" />
 	</header>
 
 	<!-- Offline / pending-sync indicator -->
@@ -111,84 +98,25 @@
 		</div>
 
 		<!-- Big Hero Counter Card -->
-		<Card class="border-primary/20 bg-gradient-to-b from-card/90 to-card/60 shadow-lg text-center p-6 space-y-2">
-			<Badge variant={isFriendship ? 'outline' : 'romantic'} class="mx-auto uppercase tracking-widest text-[10px]">
-				{isFriendship ? 'Friends for' : 'Together for'}
-			</Badge>
-			<h2 class="text-3xl font-black text-primary tracking-tight py-1">
-				{timeBreakdown.primaryFormatted}
-			</h2>
-			{#if profile.showSeconds}
-				<div class="inline-flex items-center gap-1.5 text-xs text-muted-foreground font-mono bg-muted/60 px-3 py-1 rounded-full border border-border/40">
-					<Clock class="h-3 w-3 text-primary animate-spin" style="animation-duration: 10s;" />
-					<span>{timeBreakdown.totalSeconds.toLocaleString()} seconds</span>
-				</div>
-			{/if}
-		</Card>
+		<HeroCounterCard
+			{isFriendship}
+			primaryFormatted={timeBreakdown.primaryFormatted}
+			totalSeconds={timeBreakdown.totalSeconds}
+			showSeconds={profile.showSeconds}
+			variant="default"
+		/>
 
 		<!-- Stacked Breakdown Cards -->
-		<div class="grid grid-cols-2 gap-3">
-			<Card class="p-4 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm">
-				<div class="p-2.5 rounded-2xl bg-primary/10 text-primary">
-					<Calendar class="h-5 w-5" />
-				</div>
-				<div class="text-left">
-					<div class="text-xl font-bold leading-none">{timeBreakdown.totalMonths.toLocaleString()}</div>
-					<div class="text-[11px] text-muted-foreground font-medium mt-1">Months</div>
-				</div>
-			</Card>
-
-			<Card class="p-4 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm">
-				<div class="p-2.5 rounded-2xl bg-primary/10 text-primary">
-					<Sparkles class="h-5 w-5" />
-				</div>
-				<div class="text-left">
-					<div class="text-xl font-bold leading-none">{timeBreakdown.totalWeeks.toLocaleString()}</div>
-					<div class="text-[11px] text-muted-foreground font-medium mt-1">Weeks</div>
-				</div>
-			</Card>
-
-			<Card class="p-4 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm">
-				<div class="p-2.5 rounded-2xl bg-primary/10 text-primary">
-					{#if isFriendship}
-						<Sparkles class="h-5 w-5" />
-					{:else}
-						<Heart class="h-5 w-5" />
-					{/if}
-				</div>
-				<div class="text-left">
-					<div class="text-xl font-bold leading-none">{timeBreakdown.totalDays.toLocaleString()}</div>
-					<div class="text-[11px] text-muted-foreground font-medium mt-1">Days</div>
-				</div>
-			</Card>
-
-			<Card class="p-4 flex items-center gap-3 bg-card/75 border-border/50 shadow-sm">
-				<div class="p-2.5 rounded-2xl bg-primary/10 text-primary">
-					<Hourglass class="h-5 w-5" />
-				</div>
-				<div class="text-left">
-					<div class="text-xl font-bold leading-none">{timeBreakdown.totalHours.toLocaleString()}</div>
-					<div class="text-[11px] text-muted-foreground font-medium mt-1">Hours</div>
-				</div>
-			</Card>
-		</div>
+		<StatBreakdownGrid
+			{isFriendship}
+			totalMonths={timeBreakdown.totalMonths}
+			totalWeeks={timeBreakdown.totalWeeks}
+			totalDays={timeBreakdown.totalDays}
+			totalHours={timeBreakdown.totalHours}
+			variant="default"
+		/>
 
 		<!-- Next Milestone Progress Bar -->
-		{#if nextMilestone}
-			<Card class="p-5 bg-card/85 border-border/60 shadow-sm space-y-3">
-				<div class="flex items-center justify-between text-xs">
-					<div class="flex items-center gap-1.5 font-semibold text-foreground">
-						<Trophy class="h-4 w-4 text-primary" />
-						<span>Next Milestone: {nextMilestone.milestone.title}</span>
-					</div>
-					<span class="text-muted-foreground font-medium">in {nextMilestone.daysLeft} {nextMilestone.daysLeft === 1 ? 'day' : 'days'}</span>
-				</div>
-				<Progress value={nextMilestone.progressPercentage} max={100} />
-				<div class="flex justify-between text-[11px] text-muted-foreground">
-					<span>Progress</span>
-					<span class="font-semibold text-foreground">{nextMilestone.progressPercentage}%</span>
-				</div>
-			</Card>
-		{/if}
+		<NextMilestoneCard {nextMilestone} variant="default" />
 	</main>
 </div>

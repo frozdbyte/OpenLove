@@ -725,13 +725,48 @@ ones, not on each other.
       service worker confirmed still DOM-free.
 *(M5; depended on Phase 3 since the `style` step consumes the shared selectors.)*
 
-### Phase 6 — Theme component unification (requires visual sign-off per §4)
-- [ ] Extract `ThemeIconButton.svelte` (confirmed byte-identical; lowest risk in this phase).
-- [ ] Extract `HeroCounterCard.svelte`, `StatBreakdownGrid.svelte`, `NextMilestoneCard.svelte`
+### Phase 6 — Theme component unification (requires visual sign-off per §4) — ✅ DONE (2026-08-27)
+- [x] Extract `ThemeIconButton.svelte` (confirmed byte-identical; lowest risk in this phase).
+      → Takes an `icon: LucideIcon` prop (the `LucideIcon` type alias already
+      exported by `@lucide/svelte`, so no new type had to be hand-rolled) and a
+      `shrink?: boolean` for the one genuine difference: Cover's copies carry
+      `shrink-0` (needed because Cover's header has a `flex-1 min-w-0` name
+      button between them, which would otherwise compress them under
+      flexbox's default `flex-shrink: 1`); Modern's don't.
+- [x] Extract `HeroCounterCard.svelte`, `StatBreakdownGrid.svelte`, `NextMilestoneCard.svelte`
       with an explicit `variant` prop; screenshot-diff `ModernTheme` and `CoverTheme` before
       and after against a fixed test bond/date.
-*(H5; independent of all other phases — can be done any time, sequenced last only because
-it carries the highest visual-regression risk in this plan.)*
+      → `ModernTheme.svelte`: 194 → 122 lines. `CoverTheme.svelte`: 170 → 98 lines.
+      Every Tailwind token difference documented in the plan's UI Impact Log
+      (padding, text size, icon size, `backdrop-blur-md`, `min-w-0`, `truncate`,
+      `shrink-0` on the days-left label) was carried through as a `variant:
+      'default' | 'compact'`-keyed value — none were unified.
+      → **Screenshot-diff, done as an actual pixel-level quantitative comparison,
+      not a visual eyeball check**: captured full-page screenshots of both
+      themes × both bond types × both `showSeconds` states (5 states total)
+      against a fixed test bond/date, both before and after the extraction, using
+      Playwright's `clock.setFixedTime()` (not `clock.install()+pauseAt()`,
+      which was tried first and broke `Modal.svelte`'s entrance transition by
+      also freezing the `requestAnimationFrame` it depends on — caught via a
+      "element outside of viewport" failure, switched to the lighter API that
+      only stubs `Date.now()`/`new Date()` and leaves real timers running) plus
+      an injected `animation-duration: 0s !important` stylesheet to kill the
+      Clock icon's continuous spin (its rotation angle at capture time is
+      otherwise wall-clock-dependent and would never match between two separate
+      page loads). `canvas-confetti`'s decay was the one source of noise CSS
+      freezing couldn't touch (it's a canvas/JS particle sim, not
+      CSS-animation-driven) — waited 5s for it to fully clear before any
+      capture, since its particle positions are randomized per burst and would
+      never diff-match between runs. Diffed all 5 before/after pairs with
+      `pixelmatch`: **0 of 378,000 pixels differed, in every one of the 5
+      states** — true pixel-perfect parity, the exact bar the plan set.
+*(H5; was independent of all other phases — done last because it carried the
+highest visual-regression risk in this plan.)*
+
+- [x] Verification: `pnpm check` → 0 errors, 0 warnings across 4,291 files.
+      `pnpm test` → 6 files, 52/52 passing (unaffected, as expected — no tested
+      logic files touched). `pnpm build` → succeeds end-to-end, service worker
+      confirmed still DOM-free.
 
 ### Phase 7 — Explicitly product-facing change (separate from the refactor)
 - [ ] Broaden `parseSharePayload`/`ScanImportModal` to accept full V2 backups, after M2's
