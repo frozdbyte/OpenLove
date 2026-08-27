@@ -1,0 +1,515 @@
+# OpenLove — Architectural Audit & Refactor Plan
+
+**Scope:** Full read-only audit of `src/` (SvelteKit 2 / Svelte 5 app). Generated code
+(`src/lib/generated/prisma/**`) and third-party UI atoms (`src/lib/components/ui/**`) were
+scanned but excluded from findings — they are not hand-maintained.
+
+**Mode:** Analysis only. No source files were modified while producing this document.
+
+---
+
+## 1. Executive Summary
+
+The codebase is in good shape for its size: `AGENTS.md`'s eight invariants are honestly
+upheld everywhere I checked (single service worker, one-directional sync, DOM-free SW-safe
+modules, VAPID host validation), and the sync/outbox layer (`src/lib/sync/`,
+`src/lib/storage/outbox.ts`, `src/lib/server/sync.ts`) is genuinely careful, well-commented
+engineering — coalescing, idempotency, and last-write-wins are all correctly reasoned about.
+
+The problems are concentrated in two places:
+
+1. **One 1,212-line God Component** (`SettingsSheet.svelte`) that owns eight unrelated
+   concerns and internally repeats the same 10-line update block six times.
+2. **The same logic reimplemented independently in 2–3 places** rather than shared — most
+   notably the share-payload decode routine (three copies) and the two "Modern" theme
+   components (~90% identical markup).
+
+There is also one genuine, non-obvious **correctness bug** in the milestone scheduler: a
+timezone mismatch between how target dates are constructed and how they're compared can
+cause the server to notify subscribers a day early or late, depending on the *server's*
+system timezone — independent of the subscriber's own timezone, which the code otherwise
+handles carefully.
+
+Finally: **there are zero automated tests** in the repository. For a codebase whose hardest
+problems are precisely the kind unit tests are best at (date/milestone math, outbox
+coalescing, last-write-wins conflict resolution), this is the biggest structural risk here,
+worse than any single bug below.
+
+None of the findings below require schema changes, API contract changes, or touch the
+Privacy Invariant's server-side column allowlist.
+
+---
+
+## 2. Issue Matrix
+
+### 🔴 Critical
+
+#### C1. Timezone-dependent off-by-one-day bug in the milestone scheduler
+**File:** [`src/lib/server/scheduler.ts:52-81`](src/lib/server/scheduler.ts#L52-L81), root cause shared with [`src/lib/utils/time.ts:168,198,218,239`](src/lib/utils/time.ts#L168)
+
+`checkAndDispatchMilestones()` resolves the subscriber's local calendar date correctly via
+`Intl.DateTimeFormat` (line 41-50), then builds `localDate = new Date(sYear, sMonth-1, sDay)`
+(line 53) — a `Date` interpreted in the **server process's** system timezone, not the
+subscriber's. That's passed as `now` into `calculateMilestones()`, whose milestone
+`targetDate`s are likewise built with `new Date(year, month, day)` (local-timezone
+constructors, `time.ts:168/198/218/239`).
+
+The bug surfaces at the comparison step:
+
+```ts
+// scheduler.ts:78-81
+const todayMilestones = milestones.filter((m) => {
+    const mTargetStr = m.targetDate.toISOString().split('T')[0]; // ← forces UTC
+    return mTargetStr === subscriberDateStr;                     // ← subscriber-local string
+});
+```
+
+`toISOString()` always renders in UTC. If the server's system/container timezone is UTC
+(the common Docker default), local-Date-construction and UTC-rendering agree and this is
+invisible. But self-hosters routinely set a `TZ` env var on their container for correct log
+timestamps (a normal Docker practice this project doesn't warn against). The moment the
+server's `TZ` has a non-zero offset, midnight-local gets rendered by `toISOString()` as the
+*previous or next* UTC date, and `mTargetStr` silently stops matching `subscriberDateStr` —
+or matches a day early. Net effect: milestone push notifications fire a day late, a day
+early, or not at all, for every subscriber, and the failure mode is silent (no error, no
+log) because `applied`/no-match looks identical to "not yet due."
+
+**Failure scenario:** Deploy with `environment: TZ=Asia/Tokyo` (a real, common self-host
+config) → every subscriber's "50 Days" / anniversary notification either never fires or
+fires on the wrong calendar day, regardless of what timezone the subscriber themselves is in.
+
+**Proposed resolution:** Compare using the same locale-formatting approach already used for
+`subscriberDateStr`, not `toISOString()`:
+
+```ts
+// before (scheduler.ts:78-81)
+const todayMilestones = milestones.filter((m) => {
+    const mTargetStr = m.targetDate.toISOString().split('T')[0];
+    return mTargetStr === subscriberDateStr;
+});
+
+// after
+const todayMilestones = milestones.filter((m) => {
+    const mTargetStr = `${m.targetDate.getFullYear()}-${pad(m.targetDate.getMonth() + 1)}-${pad(m.targetDate.getDate())}`;
+    return mTargetStr === subscriberDateStr;
+});
+```
+Since `m.targetDate` was itself built with local `Y/M/D` components from the same
+process, reading it back via `getFullYear()/getMonth()/getDate()` (not `toISOString()`)
+round-trips exactly regardless of server `TZ`. This is a one-line-shape fix, not a rewrite.
+
+---
+
+### 🟠 High
+
+#### H1. `SettingsSheet.svelte` is a 1,212-line component with eight unrelated responsibilities
+**File:** [`src/lib/components/settings/SettingsSheet.svelte`](src/lib/components/settings/SettingsSheet.svelte) (entire file)
+
+One component currently owns: bond identity form (names/date/type), photo upload, UI theme
+selection, color mode + palette selection, per-bond milestone-category preferences, the
+milestone list + custom-milestone CRUD, device push-notification management (subscribe/test/
+scheduler-trigger), storage-durability diagnostics, JSON backup/restore, full data reset,
+and the app-version footer. It is reachable in four different modes (`isNewBond`,
+`showAppWideSettings`, edit-existing, app-wide) controlled by prop combinations, which is
+itself why the milestone-preference duplication in H2 exists — every write path needs an
+`isNewBond` branch.
+
+**Proposed resolution:** Split into an orchestrator + subcomponents, keeping `SettingsSheet`
+as thin composition:
+
+```
+SettingsSheet.svelte (orchestrator: mode resolution + <Modal> wiring only)
+├─ BondIdentityForm.svelte      (type, names, date, photo)
+├─ ThemeSelector.svelte         (shared with OnboardingFlow — see H3)
+├─ ColorModeSelector.svelte     (shared with OnboardingFlow — see H3)
+├─ ColorPaletteSelector.svelte  (already array-driven at line 704; just extract)
+├─ MilestonePrefsEditor.svelte  (fixes H2 as a side effect)
+├─ MilestonesList.svelte        (filter tabs + list + custom-milestone add/delete)
+├─ PushNotificationPanel.svelte (device push section, showAppWideSettings only)
+├─ StorageBackupPanel.svelte    (storage estimate, persist request, backup/restore/reset)
+```
+Each subcomponent takes the bond/state it needs as props and emits changes via callback
+props (`onchange`), matching the existing codebase convention (`ThemeProps.onOpenSettings`
+etc.) — no new state-management pattern required.
+
+---
+
+#### H2. The same 10-line milestone-preference update block is repeated six times, verbatim except for one field
+**File:** [`src/lib/components/settings/SettingsSheet.svelte`](src/lib/components/settings/SettingsSheet.svelte) — years block `:776-789`, months `:799-816`, "All Days" `:842-855`, "Major Only" `:866-879`, "Off" `:890-904`, custom `:919-936`
+
+Each `onchange` handler re-derives all four `MilestoneCategoryPrefs` fields from
+`currentBond.milestonePrefs` with the same fallback chain, changing only one field:
+
+```ts
+// repeated 6x, e.g. lines 779-788
+handleLiveUpdate({
+    milestonePrefs: {
+        ...(currentBond.milestonePrefs || {}),
+        years: v,                                                      // ← varies
+        months: currentBond.milestonePrefs?.months ?? true,
+        days: currentBond.milestonePrefs?.days ?? 'all',
+        custom: currentBond.milestonePrefs?.custom ?? true
+    }
+});
+```
+This is a maintenance hazard, not just noise: the six copies already disagree on defaults
+in a subtle way (the years/months/custom handlers default `months`/`days` to `true`/`'all'`
+unconditionally, while the days-filter handlers default `months` to `true` but the *years*
+default differs contextually) — they happen to be consistent today only because no one has
+edited one copy without the other five since it was written.
+
+**Proposed resolution:**
+```ts
+// before: 6 duplicated ~10-line blocks
+// after:
+function updateMilestonePrefs(patch: Partial<MilestoneCategoryPrefs>) {
+    if (isNewBond) return;
+    const base = currentBond.milestonePrefs ?? DEFAULT_MILESTONE_PREFS_ROMANTIC;
+    void handleLiveUpdate({ milestonePrefs: { ...base, ...patch } });
+}
+// call sites become one-liners: updateMilestonePrefs({ years: v })
+```
+This becomes trivial once extracted into `MilestonePrefsEditor.svelte` per H1.
+
+---
+
+#### H3. Theme / color-mode / bond-type selector UI is duplicated verbatim between `SettingsSheet.svelte` and `OnboardingFlow.svelte`
+**Files:** [`SettingsSheet.svelte:594-650`](src/lib/components/settings/SettingsSheet.svelte#L594) (theme) & `:657-697` (mode) & `:485-513` (bond type); [`OnboardingFlow.svelte:530-602`](src/lib/components/onboarding/OnboardingFlow.svelte#L530) (theme) & `:607-649` (mode) & `:386-419` (bond type)
+
+Three independent UI blocks — the Modern/Cover/Traditional theme cards, the
+System/Light/Dark mode buttons, and the Relationship/Friendship type cards — are
+hand-written out three times each (once per option) in *both* files, with near-identical
+Tailwind class strings. The codebase already demonstrates the right pattern twice over:
+the accent-palette picker at `SettingsSheet.svelte:704` maps over a `palettes` array, and
+`THEME_REGISTRY` in [`registry.ts`](src/lib/components/themes/registry.ts) already carries
+`id`/`name`/`description` for exactly this purpose but isn't used to *drive* either selector
+— both files hand-roll the same three cards it already describes.
+
+**Proposed resolution:** Extract three small, array-driven components and have both
+`SettingsSheet` and `OnboardingFlow` render them:
+
+```svelte
+<!-- ThemeSelector.svelte — sketch -->
+<script lang="ts">
+  import { THEME_REGISTRY } from '$lib/components/themes/registry';
+  let { value, onchange }: { value: UIThemeId; onchange: (v: UIThemeId) => void } = $props();
+</script>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+  {#each THEME_REGISTRY as t}
+    <button type="button" class={value === t.id ? SELECTED_CLASS : UNSELECTED_CLASS}
+      onclick={() => onchange(t.id)}>
+      <span>{t.name}</span>{#if value === t.id}<Check class="h-4 w-4" />{/if}
+    </button>
+  {/each}
+</div>
+```
+`ColorModeSelector` and `BondTypeSelector` follow the same shape against small local
+option arrays. This directly eliminates H2-style drift risk for these three pickers too.
+
+---
+
+#### H4. Share-payload decoding is independently reimplemented in three files
+**Files:** [`src/lib/stores/profile.svelte.ts:555-567`](src/lib/stores/profile.svelte.ts#L555) (`parseSharePayload`), [`src/lib/components/share/ScanImportModal.svelte:172-188`](src/lib/components/share/ScanImportModal.svelte#L172) (`handleImportData`), [`src/routes/+page.svelte:56-67`](src/routes/+page.svelte#L56) (hash-import `$effect`)
+
+All three independently implement the identical three-branch decision: "does the string
+contain `#import=`? does it start with `{`? otherwise try `atob()`." This is exactly the
+kind of parsing logic — untrusted input from a URL, camera scan, or pasted text — that
+should have exactly one implementation, so a correctness or security fix (e.g. tightening
+what counts as valid base64, or adding a size cap) has to be remembered in three places or
+it silently doesn't apply everywhere. It has already drifted once: `+page.svelte` calls
+`decodeURIComponent` before invoking `parseSharePayload`, while `ScanImportModal` lets
+`parseSharePayload`'s own internal branch do it — both happen to produce the same result
+today only because of how the two branches interact, not because it's guaranteed.
+
+**Proposed resolution:** Extract a single function, e.g. `$lib/utils/share.ts`:
+```ts
+export function decodeSharePayloadString(raw: string): string {
+    if (raw.includes('#import=')) return atob(decodeURIComponent(raw.split('#import=')[1]));
+    if (raw.startsWith('{')) return raw;
+    try { return atob(raw); } catch { return raw; }
+}
+```
+`parseSharePayload` becomes `JSON.parse(decodeSharePayloadString(rawOrJson))` wrapped in its
+existing try/catch; `ScanImportModal.handleImportData` and the `+page.svelte` hash effect
+call the same function instead of re-deriving `jsonString` locally.
+
+---
+
+#### H5. `ModernTheme.svelte` and `CoverTheme.svelte` duplicate ~90% of their structure
+**Files:** [`src/lib/components/themes/ModernTheme.svelte`](src/lib/components/themes/ModernTheme.svelte) (194 lines), [`src/lib/components/themes/CoverTheme.svelte`](src/lib/components/themes/CoverTheme.svelte) (170 lines)
+
+Both themes render, in the same order: a settings/name-switcher/share header, a
+`SyncStatusPill`, a hero counter `Card` (badge + `primaryFormatted` + optional seconds),
+a 4-cell stat grid (Months/Weeks/Days/Hours — same icons, same order), and a next-milestone
+progress card. The settings/share icon buttons (`ModernTheme.svelte:17-24,42-49` vs.
+`CoverTheme.svelte:45-52,71-78`) are byte-identical. The stat grid and milestone card are
+structurally identical but use different spacing/text-size tokens (`p-4`/`text-xl` vs.
+`p-3.5`/`text-lg`) to fit Cover's more compact bottom-anchored layout — see the UI Impact
+Log (§4) before touching these.
+
+**Proposed resolution:**
+```
+ThemeIconButton.svelte      — settings/share circular buttons (byte-identical today)
+StatBreakdownGrid.svelte    — 4-cell grid, variant="default" | "compact" prop for the
+                               p-4/text-xl vs p-3.5/text-lg difference
+NextMilestoneCard.svelte    — variant prop for the same reason
+HeroCounterCard.svelte      — badge + primaryFormatted + optional seconds row
+```
+`ModernTheme`/`CoverTheme`/`TraditionalTheme` keep their own header layout and photo
+treatment (these are genuinely different per theme and should stay theme-specific) but
+compose the four pieces above instead of hand-rolling each one.
+
+---
+
+### 🟡 Medium
+
+#### M1. Zero automated tests in the repository
+No `*.test.ts`, `*.spec.ts`, or test runner (`vitest`, `playwright`, etc.) exists in
+`package.json` or the tree. The highest-value, easiest-to-test units in the codebase are
+exactly the ones this audit is most confident are currently correct *by careful reading*
+rather than by verification: `coalesce()` in [`outbox.ts:94-129`](src/lib/storage/outbox.ts#L94),
+`calculateMilestones()`/`getCalendarDifference()` in [`time.ts`](src/lib/utils/time.ts), and
+`applySyncOps`'s last-write-wins branching in [`server/sync.ts:128-190`](src/lib/server/sync.ts#L128).
+C1 above is the kind of bug a single `calculateMilestones` + timezone-mocked test would have
+caught immediately.
+
+**Proposed resolution:** Add `vitest` and start with pure-function coverage only (no DOM,
+no IndexedDB mocking needed) for `time.ts` and `outbox.ts`'s `coalesce()` — both are already
+side-effect-free. This is additive and carries zero risk to existing behavior.
+
+#### M2. `importJSON()`'s three branches duplicate bond-normalization logic already duplicated a fourth time in `parseSharePayload`
+**File:** [`src/lib/stores/profile.svelte.ts:417-547`](src/lib/stores/profile.svelte.ts#L417) (`importJSON`), `:553-599` (`parseSharePayload`)
+
+The V2-full-backup branch (`:426-445`), the V2-single-bond branch (`:463-482`), and the
+V1-legacy branch (`:517-531`) each rebuild a `Bond`-shaped object with the same
+`milestonePrefs` fallback chain (`b.milestonePrefs?.years ?? true`, etc., repeated four
+times counting `parseSharePayload`). A bug in one fallback (e.g. friendship defaults) has to
+be fixed in up to four places.
+
+**Proposed resolution:** Extract `normalizeIncomingBond(raw, fallbackContext): Bond` (or
+`Partial<Bond>` for the preview-only `parseSharePayload` use) and call it from all four
+sites. Pure refactor — no behavior change, since the fallback chains are (currently)
+consistent across the four copies.
+
+#### M3. `loadAppStateFromStorage()` fetches per-bond photo blobs sequentially
+**File:** [`src/lib/storage/db.ts:76-104`](src/lib/storage/db.ts#L76-L104)
+
+The `for (const rawBond of rawState.bonds)` loop does `await get<Blob>(...)` once per bond,
+serially. For a user with several bonds this adds one IndexedDB round-trip's latency per
+bond to every app cold start. Not a correctness issue — flagged as a straightforward
+`Promise.all` opportunity:
+```ts
+// before: sequential await inside the loop
+// after:
+const bonds = await Promise.all(rawState.bonds.map(async (rawBond) => { ...same body... }));
+```
+
+#### M4. `ScanImportModal` rejects valid full multi-bond backups with a misleading error
+**Files:** [`src/lib/components/share/ScanImportModal.svelte:190-194`](src/lib/components/share/ScanImportModal.svelte#L190), [`src/lib/stores/profile.svelte.ts:553-599`](src/lib/stores/profile.svelte.ts#L553)
+
+`ScanImportModal` gates on `parseSharePayload(raw)` returning non-null before proceeding,
+but `parseSharePayload` only recognizes the single-bond-invite and V1-legacy shapes — it has
+no branch for the full V2 `{ version: 2, bonds: [...] }` backup format that
+`profileStore.importJSON()` (called two lines later, and used directly by the "Restore from
+JSON Backup" flow in `SettingsSheet.svelte:390-402`) fully supports. A user who pastes their
+own "Download JSON Backup (All Bonds)" file into the "Paste Link / Code" tab gets
+`"Invalid relationship profile format"` for objectively valid, well-formed JSON this same
+codebase can import elsewhere.
+
+**Proposed resolution:** Once M2's `normalizeIncomingBond` extraction exists, give
+`parseSharePayload` (or a renamed, broadened equivalent) a branch for `data.version === 2 &&
+Array.isArray(data.bonds)`, mirroring `importJSON`'s own first branch, so both entry points
+accept the same set of formats.
+
+#### M5. `OnboardingFlow.svelte` is a 696-line monolithic step switch
+**File:** [`src/lib/components/onboarding/OnboardingFlow.svelte`](src/lib/components/onboarding/OnboardingFlow.svelte)
+
+All six wizard steps (`overview`, `pwa_install`, `names`, `date`, `photo`, `style`) are
+inline `{#if currentStepKey === '...'}` blocks in one template, each 50-150 lines. Once H3
+extracts the shared selector components used in the `style` step, splitting each step into
+its own `OnboardingStep*.svelte` (taking the relevant `$state` as bindable props) becomes
+straightforward and reduces this file to a thin stepper shell, matching the pattern already
+proposed for `SettingsSheet` in H1.
+
+---
+
+### 🟢 Low
+
+#### L1. Dead code: four unused legacy storage wrapper functions
+**File:** [`src/lib/storage/db.ts:303-348`](src/lib/storage/db.ts#L303-L348)
+
+`loadProfileFromStorage`, `saveProfileToStorage`, `savePhotoBlob`, and
+`clearProfileStorage` are exported but have no importers anywhere in `src/` (verified via
+project-wide grep). They appear to be pre-multi-bond (V1) compatibility shims that were
+superseded by `loadAppStateFromStorage`/`saveAppStateToStorage`/`saveBondPhoto`/
+`clearAllStorage` but never removed.
+
+**Proposed resolution:** Delete all four functions and their JSDoc block once confirmed
+unused by a final `grep -r` immediately before removal (safe — no external package consumes
+this app's internals).
+
+#### L2. Fragile custom-milestone ID round-trip via string prefix stripping
+**Files:** [`SettingsSheet.svelte:282`](src/lib/components/settings/SettingsSheet.svelte#L282) (creation), [`time.ts:244`](src/lib/utils/time.ts#L244) (display wrapping), [`SettingsSheet.svelte:1007`](src/lib/components/settings/SettingsSheet.svelte#L1007) (deletion)
+
+`addCustomMilestone` creates milestones with `id: custom_${Date.now()}`. `calculateMilestones`
+re-wraps every custom milestone's display ID as `` `custom_${custom.id}` `` (double-prefixing
+it, e.g. `custom_custom_1735000000000`), and the delete handler strips it back with
+`m.id.replace('custom_', '')` — which removes only the *first* occurrence, coincidentally
+landing back on the original ID. This currently works only because both prefixing sites
+independently agree on the literal string `'custom_'` and the delete handler relies on
+`.replace()`'s single-match behavior rather than an explicit unwrap. Any future change to
+either prefix (e.g. namespacing IDs per-bond) breaks deletion silently.
+
+**Proposed resolution:** Give `MilestoneItem` an explicit `sourceId` field distinct from its
+display `id`, so `deleteCustomMilestone` matches on `sourceId` directly instead of
+string-mangling the display ID. Small, contained change to `time.ts`'s custom-milestone
+branch (`:236-254`) and the one call site.
+
+#### L3. `checkAndDispatchMilestones` recomputes the full ~63-entry milestone list every hour for every subscription × bond
+**File:** [`src/lib/server/scheduler.ts:76`](src/lib/server/scheduler.ts#L76)
+
+`calculateMilestones()` is called with the full milestone catalog every run, then filtered
+down to "today only." At self-hosted scale (a handful to low hundreds of couples) this is
+not a measurable bottleneck, but it's worth noting alongside C1 since both live in the same
+function — a targeted "does date X land today" check would be both cheaper and immune to
+C1's UTC-conversion trap by construction. Low priority; consider only if C1 is being fixed
+anyway.
+
+---
+
+## 3. Refactoring & Extraction Plan
+
+| New module | Extracted from | Resolves |
+|---|---|---|
+| `src/lib/components/settings/BondIdentityForm.svelte` | `SettingsSheet.svelte` | H1 |
+| `src/lib/components/settings/MilestonePrefsEditor.svelte` | `SettingsSheet.svelte` | H1, H2 |
+| `src/lib/components/settings/MilestonesList.svelte` | `SettingsSheet.svelte` | H1 |
+| `src/lib/components/settings/PushNotificationPanel.svelte` | `SettingsSheet.svelte` | H1 |
+| `src/lib/components/settings/StorageBackupPanel.svelte` | `SettingsSheet.svelte` | H1 |
+| `src/lib/components/shared/ThemeSelector.svelte` | `SettingsSheet.svelte` + `OnboardingFlow.svelte` | H3 |
+| `src/lib/components/shared/ColorModeSelector.svelte` | `SettingsSheet.svelte` + `OnboardingFlow.svelte` | H3 |
+| `src/lib/components/shared/ColorPaletteSelector.svelte` | `SettingsSheet.svelte` (already array-driven, just move) | H3 |
+| `src/lib/components/shared/BondTypeSelector.svelte` | `SettingsSheet.svelte` + `OnboardingFlow.svelte` | H3 |
+| `src/lib/utils/share.ts` (`decodeSharePayloadString`) | `profile.svelte.ts` + `ScanImportModal.svelte` + `+page.svelte` | H4 |
+| `src/lib/components/themes/shared/ThemeIconButton.svelte` | `ModernTheme.svelte` + `CoverTheme.svelte` | H5 |
+| `src/lib/components/themes/shared/StatBreakdownGrid.svelte` | `ModernTheme.svelte` + `CoverTheme.svelte` | H5 |
+| `src/lib/components/themes/shared/NextMilestoneCard.svelte` | `ModernTheme.svelte` + `CoverTheme.svelte` | H5 |
+| `src/lib/components/themes/shared/HeroCounterCard.svelte` | `ModernTheme.svelte` + `CoverTheme.svelte` | H5 |
+| `normalizeIncomingBond()` in `profile.svelte.ts` | inline in `importJSON` + `parseSharePayload` | M2, M4 |
+| `updateMilestonePrefs()` helper | inline in `SettingsSheet.svelte` | H2 (folds into `MilestonePrefsEditor.svelte`) |
+| `src/lib/components/onboarding/steps/*.svelte` (6 files) | `OnboardingFlow.svelte` | M5 |
+
+**Unifying interfaces:**
+- `ThemeSelector` / `ColorModeSelector` / `BondTypeSelector` all take `{ value, onchange,
+  disabled? }` — matching the existing `onchange`-callback-prop convention already used by
+  `Switch` (`$lib/components/ui/switch`) throughout the codebase, not a new pattern.
+- `StatBreakdownGrid` / `NextMilestoneCard` take `{ timeBreakdown, nextMilestone?, variant:
+  'default' | 'compact' }` so `ModernTheme` and `CoverTheme` pass their existing exact class
+  tokens through the variant rather than the component guessing spacing.
+
+No change to `ThemeProps`, `AppState`, `Bond`, `SyncOp`, or any Prisma model is required for
+any item above.
+
+---
+
+## 4. UI & State Impact Log
+
+- **H1 (`SettingsSheet` split), H3 (selectors), M2 (`normalizeIncomingBond`), M5 (onboarding
+  steps), H4 (`decodeSharePayloadString`), L1 (dead code), M3 (`Promise.all`), L2 (milestone
+  ID field):** **Zero UI Impact.** These are pure structural/logic extractions with no
+  intended change to rendered markup, CSS classes, or user-facing behavior.
+
+- **H2 (`updateMilestonePrefs` helper):** **Zero UI Impact** if the six call sites' current
+  fallback values are preserved exactly as-is during extraction (they are consistent across
+  all six copies today — verified during this audit).
+
+- **H5 (`StatBreakdownGrid` / `NextMilestoneCard` / `HeroCounterCard` shared components):**
+  **Requires visual parity verification, not zero-impact-by-default.** `ModernTheme` and
+  `CoverTheme` use different Tailwind tokens for the "same" cards (`p-4`/`text-xl`/`gap-3`
+  vs. `p-3.5`/`text-lg`/`gap-2.5`, icon sizing `h-5 w-5` vs `h-4 w-4`, added
+  `backdrop-blur-md` and `min-w-0` on Cover's cards). The extraction must carry both sets of
+  classes through as an explicit `variant` prop and be screenshot-diffed against both themes
+  before/after — an agent executing this phase should treat "pixel-identical to current
+  output" as the acceptance bar, not "looks similar." `ThemeIconButton` (the settings/share
+  buttons) is the one piece in H5 confirmed byte-identical between the two files today.
+
+- **M4 (`ScanImportModal` accepting full V2 backups):** **Intentional, user-visible behavior
+  change** (a previously-rejected input now succeeds) — flagged for product sign-off, not
+  purely a refactor. Recommend shipping as a separate, explicitly-labeled change rather than
+  folding it into the H4/M2 refactor commits.
+
+- **C1 (scheduler timezone fix):** **No UI impact**, but is a **behavior change for
+  self-hosted deployments running with a non-UTC container `TZ`** — some subscribers on such
+  deployments may receive a milestone notification "for the first time" on a date they
+  previously silently missed. Recommend calling this out in the release notes for whichever
+  version ships the fix.
+
+---
+
+## 5. Implementation Roadmap
+
+Ordered so each phase is independently shippable and later phases depend only on earlier
+ones, not on each other.
+
+### Phase 0 — Safety net (do first, before any structural change)
+- [ ] Add `vitest` as a dev dependency and a `test` script.
+- [ ] Write unit tests for `calculateMilestones()` / `getCalendarDifference()`
+      (`src/lib/utils/time.ts`), including a case that pins down C1's expected fixed
+      behavior under a mocked non-UTC server timezone.
+- [ ] Write unit tests for `coalesce()` (`src/lib/storage/outbox.ts`).
+- [ ] Write unit tests for `applySyncOps`'s LWW branching (`src/lib/server/sync.ts`),
+      mockable since it only depends on the injected `prisma` client.
+*(Resolves M1; gives every later phase a regression check.)*
+
+### Phase 1 — Isolated bug fix
+- [ ] Fix C1: replace the `toISOString()` comparison in
+      `checkAndDispatchMilestones` (`scheduler.ts:78-81`) with a local-component date
+      string, per the sketch in C1. Add the regression test from Phase 0 if not already
+      covering it.
+*(Ship independently — zero dependency on any other phase.)*
+
+### Phase 2 — Shared core utilities (no visual change)
+- [ ] Extract `decodeSharePayloadString()` into `src/lib/utils/share.ts`; update
+      `parseSharePayload`, `ScanImportModal.handleImportData`, and the `+page.svelte` hash
+      effect to call it. *(H4)*
+- [ ] Extract `normalizeIncomingBond()` in `profile.svelte.ts`; update `importJSON`'s three
+      branches and `parseSharePayload` to use it. *(M2)*
+- [ ] Parallelize the photo-blob fetch loop in `loadAppStateFromStorage`. *(M3)*
+- [ ] Delete the four dead legacy wrapper functions in `storage/db.ts`, after a final grep
+      confirms no importers. *(L1)*
+- [ ] Give `MilestoneItem` a `sourceId` field; fix `deleteCustomMilestone` to use it instead
+      of string-stripping. *(L2)*
+
+### Phase 3 — Shared selector components (Settings + Onboarding)
+- [ ] Build `ThemeSelector.svelte`, `ColorModeSelector.svelte`, `ColorPaletteSelector.svelte`,
+      `BondTypeSelector.svelte` in `src/lib/components/shared/`.
+- [ ] Wire them into `OnboardingFlow.svelte`'s `style`/`names` steps first (lower risk,
+      fewer call sites) and verify visually.
+- [ ] Wire them into `SettingsSheet.svelte`, verify visually in all four modes
+      (`isNewBond` × `showAppWideSettings`).
+*(H3; depends on nothing from Phase 2, can run in parallel with it.)*
+
+### Phase 4 — `SettingsSheet` decomposition
+- [ ] Extract `MilestonePrefsEditor.svelte` with the `updateMilestonePrefs()` helper. *(H2)*
+- [ ] Extract `BondIdentityForm.svelte`, `MilestonesList.svelte`,
+      `PushNotificationPanel.svelte`, `StorageBackupPanel.svelte`.
+- [ ] Reduce `SettingsSheet.svelte` to mode resolution + composition of the above. *(H1)*
+*(Depends on Phase 3's selectors existing so `BondIdentityForm`/composition can consume
+them directly instead of re-extracting mid-phase.)*
+
+### Phase 5 — Onboarding decomposition
+- [ ] Split `OnboardingFlow.svelte`'s six steps into `src/lib/components/onboarding/steps/`.
+*(M5; depends on Phase 3 since the `style` step consumes the shared selectors.)*
+
+### Phase 6 — Theme component unification (requires visual sign-off per §4)
+- [ ] Extract `ThemeIconButton.svelte` (confirmed byte-identical; lowest risk in this phase).
+- [ ] Extract `HeroCounterCard.svelte`, `StatBreakdownGrid.svelte`, `NextMilestoneCard.svelte`
+      with an explicit `variant` prop; screenshot-diff `ModernTheme` and `CoverTheme` before
+      and after against a fixed test bond/date.
+*(H5; independent of all other phases — can be done any time, sequenced last only because
+it carries the highest visual-regression risk in this plan.)*
+
+### Phase 7 — Explicitly product-facing change (separate from the refactor)
+- [ ] Broaden `parseSharePayload`/`ScanImportModal` to accept full V2 backups, after M2's
+      `normalizeIncomingBond` exists to share the logic. *(M4 — ship as its own change, not
+      bundled into a "refactor" commit, per the UI Impact Log.)*
