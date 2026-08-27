@@ -119,7 +119,7 @@ reset app → restore from that file → photo reappears.
 
 ---
 
-## Stage 2 — Shared feature-flag infrastructure
+## Stage 2 — Shared feature-flag infrastructure ✅ Done
 
 Reusable for `FEATURE_SHARE_IMAGES` now and `FEATURE_MULTI_BOND` later.
 Necessary because the root route is prerendered with `ssr = false`
@@ -154,6 +154,45 @@ stage generalizes it.
 
 **Manual verification:** hit `/api/share/config` in dev with the var unset
 (expect `true`) and set to `false` (expect `false`, no rebuild needed).
+
+→ Shipped as planned, with two deviations and one real bug caught by
+  actually running it rather than just type-checking:
+- **`featureFlags.svelte.ts` init trigger**: the plan said "called from
+  `profileStore.init()`". Built it instead as an explicit `init()` method
+  called from `+layout.svelte`'s `onMount` — the same convention
+  `pwaStore`/`networkStore` already use, and more consistent than
+  `profileStore`'s self-initializing constructor (which is special-cased
+  because routing decisions depend on it before the layout even mounts; no
+  such urgency for feature flags). Also fixes a real problem the "self-init
+  on import" version would have had: with nothing importing the module yet
+  (Stage 5 is the first real consumer), its constructor would never run at
+  all in the shipped bundle — confirmed by writing a Playwright check
+  against it before wiring in the layout import, which found exactly this.
+- **Cache mechanism**: used a dedicated `openlove_feature_flags_v1` key via
+  plain `idb-keyval` `get`/`set` (same default store `db.ts` already uses),
+  not `outbox.ts`'s `setSyncMeta()`. `SyncMeta`'s own doc comment scopes it
+  to "everything the service worker needs to rebuild a subscription" —
+  feature flags are unrelated to that and the service worker never needs
+  them, so folding them in would have stretched that type's purpose rather
+  than reused it.
+- **Bug found via the Playwright check, not `pnpm check`**: the first
+  working version threw `DataCloneError: ... could not be cloned` on every
+  `set(CACHE_KEY, this.flags)` call, silently swallowed by the `catch {}`
+  around it (visible only by removing the catch temporarily and re-running).
+  Root cause: AGENTS.md Invariant 3 — `this.flags` is a Svelte 5 `$state`
+  Proxy, and IndexedDB's structured clone can't serialize a Proxy directly.
+  Fixed with the same `JSON.parse(JSON.stringify(...))` unwrap `db.ts`
+  already uses everywhere else. A good reminder that this invariant applies
+  to *any* new store that persists `$state` to IndexedDB, not just the
+  original two files it was written against.
+- **Verified**: `pnpm check` (0 errors), `pnpm test` (79/79, +14 new for
+  `getFeatureFlags()`'s parse table), `pnpm build` (precache still
+  DOM-free). Live in a real browser: restarted the dev server with
+  `FEATURE_SHARE_IMAGES` unset (endpoint returns `true`) and then `=false`
+  (endpoint returns `false`, no rebuild) — confirmed the *client* correctly
+  fetches and caches each value in IndexedDB, and confirmed the cached
+  value survives and the app still boots cleanly when the config endpoint
+  is unreachable (simulating offline).
 
 ---
 

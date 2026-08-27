@@ -4,6 +4,7 @@
 	import { onMount } from "svelte";
 	import { pwaStore } from "$lib/stores/pwa.svelte";
 	import { networkStore } from "$lib/stores/network.svelte";
+	import { featureFlags } from "$lib/stores/featureFlags.svelte";
 	import { initSync } from "$lib/sync";
 	import { initPushRetry } from "$lib/push/client";
 	import PWAToast from "$lib/components/pwa/PWAToast.svelte";
@@ -18,6 +19,7 @@
 	onMount(() => {
 		pwaStore.init();
 		networkStore.init();
+		void featureFlags.init();
 		// Order matters: the push-intent retry has to be registered before the first
 		// flush that initSync() kicks off on app start.
 		initPushRetry();
