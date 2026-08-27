@@ -10,7 +10,7 @@ OpenLove allows couples to track how long they have been together with live coun
 
 ## ✨ Features
 
-- 🔒 **Zero-Knowledge Privacy**: Names, anniversary dates, and high-resolution photos are stored locally on your device via **IndexedDB**. The server never stores your private memories or names.
+- 🔒 **Zero-Knowledge Privacy**: Names, anniversary dates, and high-resolution photos are stored locally on your device via **IndexedDB**. The server never stores your private memories or names — even if you opt in to sharing a photo with a partner (below), it's encrypted on your device first, so the server only ever holds unreadable ciphertext, briefly.
 - 💖 **Multiple Bonds Support**: Track romantic relationships (💖) and friendships (🌿) with custom milestone preferences and separate profiles.
 - 🎨 **Multiple UI Themes & Extensible Architecture**:
   - **Modern UI** *(Default)*: Clean, glassmorphic cards, glowing couple avatar, accent color palettes (*Rose, Lavender, Terracotta, Sage, Midnight*).
@@ -30,7 +30,8 @@ OpenLove allows couples to track how long they have been together with live coun
   queued on-device, then delivered safely when back online.
 - 🔒 **No Third-Party Requests**: Fonts are self-hosted — no IP leaks to external font CDNs.
 - 🔔 **Anonymous Web Push Notifications**: Scheduled background cron alerts you on your exact milestone day in your local timezone (with generic single-bond and scoped multi-bond notices).
-- 💾 **Progressive QR Share & Backup**: 1-tap backup/restore, instant QR code sharing with smart import previews and Add / Replace conflict resolution.
+- 💾 **Progressive QR Share & Backup**: 1-tap backup/restore, instant QR code sharing with smart import previews and Add / Replace conflict resolution. JSON backup files (single-bond or full multi-bond) include your photo(s) too, so a restore brings everything back — this never touches the server, it's baked straight into the file you download.
+- 🖼️ **Optional End-to-End Encrypted Photo Sharing**: Toggle "Share Photo" in the Share sheet to include your photo in a QR code or link too (it's normally left out to keep those small). Your photo is encrypted *on your device* before upload — the server only ever stores unreadable ciphertext, automatically deleted after a configurable TTL (default 24h). Self-hosters can disable the upload endpoint entirely with `FEATURE_SHARE_IMAGES=false` if they'd rather not accept any file upload on their server; JSON backups keep including photos either way, since those never touch the server.
 
 
 ---
@@ -96,6 +97,10 @@ The dev server will run at [http://localhost:5173](http://localhost:5173).
 | `PUBLIC_VAPID_KEY` | *(Auto-generated)* | Public VAPID key for Web Push |
 | `PRIVATE_VAPID_KEY` | *(Auto-generated)* | Private VAPID key for Web Push |
 | `VAPID_SUBJECT` | *(auto)* | Contact address in push tokens. Must be a **public** domain — Apple rejects `.local`, `.lan`, `localhost` and bare IPs with `403 BadJwtToken`, delivering nothing to iOS. Leave unset for a safe fallback. |
+| `FEATURE_SHARE_IMAGES` | `true` | Enables the optional encrypted photo-sharing relay (see Features above). Set to `false` to disable the public upload endpoint entirely; JSON backups still include photos regardless, since those never touch the server. |
+| `SHARED_IMAGE_TTL_HOURS` | `24` | How long an uploaded encrypted photo stays available for a partner to fetch, in hours. Unlimited fetches within this window, not one-time-use. |
+
+All feature toggles are read fresh on every request — flipping one and restarting the container takes effect immediately, no rebuild needed.
 
 ---
 
@@ -118,6 +123,15 @@ OpenLove uses a **zero-knowledge, multi-couple architecture**:
 |  - NO names, NO photos, NO personal credentials on server   |
 +-------------------------------------------------------------+
 ```
+
+**One opt-in exception**: if you tap "Share Photo" when sending a QR code or link, your photo
+is encrypted *on your device* first (AES-GCM, a fresh key every time) and only the unreadable
+ciphertext is uploaded — the decryption key travels solely inside that same QR code/link,
+never to the server. The server briefly holds ciphertext it cannot read, auto-deleted after
+`SHARED_IMAGE_TTL_HOURS` (default 24h). This is off by default for every share; you turn it on
+per-share, and it can be disabled server-wide with `FEATURE_SHARE_IMAGES=false`. JSON file
+backups are unaffected either way — those embed your photo(s) directly in the file you
+download, with no server involved at all.
 
 ---
 

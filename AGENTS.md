@@ -10,7 +10,7 @@ Welcome! This document is the **single source of truth** for human contributors 
 
 ### Core Values
 1. **Zero-Knowledge Privacy**: Couple names, anniversary start dates, high-resolution photo blobs, and personal notes are stored **strictly on the user's client device in IndexedDB**.
-2. **Anonymous Minimalist Backend**: The server SQLite database stores **only** anonymous Web Push tokens, together-since dates (for milestone computation), and subscriber timezones.
+2. **Anonymous Minimalist Backend**: The server SQLite database stores **only** anonymous Web Push tokens, together-since dates (for milestone computation), and subscriber timezones — plus, only when a user opts in to sharing a photo via QR/link, opaque client-encrypted ciphertext the server has no key to read, auto-deleted after a short TTL (see Invariant 11).
 3. **Aesthetic & Delightful UX**: Dual UI themes (**Modern** glassmorphic and nostalgic **Traditional** replica of classic "My Love"), dark mode, custom color accents, and full PWA installation support.
 4. **Frictionless Self-Hosting**: 1-command Docker/Podman deployment (`docker compose up -d`), genuine offline-first PWA (precached shell, self-hosted fonts, offline mutations), and Coolify/Homelab ready.
 
@@ -30,20 +30,26 @@ Welcome! This document is the **single source of truth** for human contributors 
 | **PWA & Offline** | `@vite-pwa/sveltekit` (`injectManifest`) + Workbox 7 | **One** service worker doing precaching, navigation fallback, push and sync. Prerendered SPA shell. See Invariant 7. |
 | **Offline Sync** | Hand-rolled IndexedDB outbox | One-directional client→server queue with coalescing, backoff and last-write-wins. See Invariant 8. |
 | **Sharing & Sync** | URL Hash + QR Code | `#import=<base64-json>` + QR camera scanner (`jsqr`) & QR generator (`qrcode`). Single-source decode/detect logic lives in [`src/lib/utils/share.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/share.ts) — see Invariant 9. |
+| **Photo Sharing** | Client-side AES-GCM + server relay | Opt-in per share (`ShareModal.svelte`'s toggle). `crypto.subtle` encrypts on-device; the server stores only ciphertext, TTL-swept. See Invariant 11. |
+| **Feature Flags** | Runtime env vars via a config endpoint | `GET /api/share/config`, not `$env/static/public` — see Invariant 12 for why. |
 | **Containerization** | Multi-Arch Docker/Podman | Multi-stage build with `--platform=$BUILDPLATFORM` for native host compilation. |
-| **Testing** | Vitest | Pure-function unit tests only (no DOM) — date/milestone math, outbox coalescing, server sync conflict resolution, share-payload parsing. Run via `pnpm test`. See "Testing" under Common Commands. |
+| **Testing** | Vitest | Pure-function unit tests only (no DOM) — date/milestone math, outbox coalescing, server sync conflict resolution, share-payload parsing, image crypto round trips. Run via `pnpm test`. See "Testing" under Common Commands. |
 
 ---
 
 ## 🚨 Strict Invariants & Agent Rules (Must Follow)
 
 ### 1. Privacy Invariant (CRITICAL)
-- **NEVER** create database columns, server endpoints, or logs that accept couple names, messages, or photo files.
-- The server SQLite DB (`data/openlove.db`) must strictly hold:
+- **NEVER** create database columns, server endpoints, or logs that accept couple names, messages, or **plaintext** photo files.
+- The `PushSubscription`/`SubscriptionBond` tables must strictly hold:
   `{ id, endpoint, p256dh, auth, togetherSince, timezone, lastNotified, clientUpdatedAt, createdAt, updatedAt }`.
 - `clientUpdatedAt` is an ISO-8601 timestamp on the **client** clock, added in v1.4.0 for
   last-write-wins sync (see Invariant 7). It is a timestamp, not personal data — the privacy
   invariant is intact — but this allowlist must be kept accurate.
+- One deliberate, narrow exception: the `SharedImage` table stores **opaque AES-GCM
+  ciphertext** for the opt-in photo-sharing relay — the server never holds a decryption key
+  or plaintext, and rows are TTL-swept. This does not weaken the invariant above; it has its
+  own rules — see Invariant 11 before touching it.
 
 ### 2. Svelte 5 Runes Standard
 - **Always** use Svelte 5 runes: `$state()`, `$derived()`, `$effect()`, `$props()`, `$bindable()`.
@@ -177,6 +183,78 @@ handlers. Keep it that way; a pull phase would reintroduce every problem this de
   [`toLocalDateString()`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/server/scheduler.ts)
   for the fixed reference pattern, and the `share-import-safety` skill.
 
+### 11. Encrypted Photo Relay (SharedImage)
+A photo shared via QR/link (`ShareModal.svelte`'s "Share Photo" toggle) is genuinely too big
+to embed in a URL or QR code, unlike every other field in that payload. It's relayed through
+the server instead — client-encrypted, so this stays consistent with Invariant 1 rather than
+carving a hole in it.
+
+- **The server never holds a decryption key.** [`src/lib/utils/imageCrypto.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/imageCrypto.ts)
+  encrypts the photo with a freshly generated, single-use AES-GCM key entirely client-side.
+  [`src/lib/utils/shareImage.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/shareImage.ts)'s
+  `uploadSharedImage()` POSTs only the ciphertext to `POST /api/share/image`; the key and IV
+  travel exclusively inside the share payload itself (the same QR/link everything else in
+  that payload already travels through), never to the server. **Never** add an endpoint or
+  log line that could receive the key alongside the ciphertext — that would silently turn an
+  encrypted relay into a plaintext one.
+- **Unlimited reads within a TTL, not read-once.** [`src/lib/server/sharedImage.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/server/sharedImage.ts)'s
+  `getSharedImage()` never deletes on a successful `GET` — a deliberate choice over the more
+  "obviously secure"-looking read-once design: the real secret is the unguessable
+  `shareId`+`key` pair (same trust level as every other field in the same share payload,
+  which has no expiry at all), and read-once breaks on the first flaky network blip or lets
+  the same QR code only be scanned by one recipient. Deletion is exclusively
+  `cleanupExpiredSharedImages()`'s job, on a TTL controlled by `SHARED_IMAGE_TTL_HOURS`
+  (default 24h). `getSharedImage()` also checks the TTL itself at read time — the cleanup
+  sweep runs hourly, so without that check a row could still serve a technically-expired
+  image for up to an hour.
+- **`SHARED_IMAGE_TTL_HOURS=0` does not mean "expire immediately."** `getSharedImageTtlMs()`
+  treats zero, negative, and non-numeric values as *invalid input* and falls back to the 24h
+  default with a logged warning — the same defensive philosophy `getVapidSubject()` already
+  uses. Don't "fix" this to treat `0` as a real zero-hour TTL; that would silently break the
+  feature for anyone who mistypes the var.
+- **Fetching a relay photo must never happen during an invite *preview*.** The relay's
+  `{shareId,key,iv,mimeType}` reference (`sharedImage` on the wire — see the
+  `share-import-safety` skill for how this differs from the *inline* base64 `photo` field
+  JSON file backups use) is only ever resolved inside `profileStore.importJSON()`'s Case 2,
+  at actual import-commit time — never from `parseSharePayload()`, which builds the
+  Add-as-New/Replace-Current preview UI. Even though reads are unlimited now (not
+  read-once), fetching there would still be a wasted round trip for every share a user ends
+  up declining.
+- **A relay-photo fetch must never fail the whole import.** `fetchSharedImage()` already
+  fails soft (`null`, never throws) on any problem — expired, offline, corrupt key. The
+  attachment code in `importJSON()` wraps it in its *own* try/catch anyway, because
+  `setPhoto()` touches IndexedDB and `importJSON()`'s outer catch would otherwise report an
+  already-successfully-imported bond as a failed import over a photo that just didn't load.
+
+### 12. Runtime-Configurable Feature Flags
+The root route is prerendered with `ssr = false` (Invariant 7) — the whole shell is a static
+SPA build baked at `pnpm build` time, which runs *inside the Docker image build*, before a
+self-hoster's `docker-compose.yml` env vars exist. That rules out both `$env/static/public`
+and a `+layout.server.ts` load function for anything that must reflect an env var set at
+*container start* — both would only ever see the build-time value.
+
+- **The pattern**: resolve the flag from `process.env` server-side (`getFeatureFlags()` in
+  [`src/lib/server/featureFlags.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/server/featureFlags.ts),
+  fresh on every call, no caching), serve it through a small `GET` endpoint
+  (`/api/share/config`, `prerender = false`), and have the client fetch-and-cache it
+  (`src/lib/stores/featureFlags.svelte.ts`) the same way `PUBLIC_VAPID_KEY` already flows
+  through `/api/push/vapid-public-key`. **Adding a new flag never needs a new endpoint** —
+  extend the one `FLAG_REGISTRY` object, the shared `FeatureFlags` type, and the client
+  store's `DEFAULTS` literal; the endpoint and fetch path are already generic.
+- **The client store must never block `profileStore.ready` or the app's loading screen** on
+  the flag fetch — it's a network call, and this app is offline-first. `featureFlags.init()`
+  applies the last IndexedDB-cached value first (works fully offline), then refreshes from
+  the server in the background.
+- **Wire the store's `init()` from `+layout.svelte`'s `onMount`**, the same convention
+  `pwaStore`/`networkStore` already use (an `initialized` guard, not a self-initializing
+  constructor). `profileStore` is the one exception to this pattern, and deliberately so — it
+  self-initializes because routing decisions depend on it before the layout even mounts. A
+  feature-flag store has no such urgency, and nothing else imports it early enough to trigger
+  a constructor-based self-init in the shipped bundle until something actually reads it.
+- **Any `$state` object this store persists to IndexedDB must be unwrapped first** — see
+  Invariant 3. This bit a real `DataCloneError` during development: `featureFlags.flags` is a
+  Svelte 5 `$state` Proxy, and `idb-keyval`'s `set()` can't structured-clone it directly.
+
 ---
 
 ## 📁 Repository Directory Map
@@ -186,7 +264,8 @@ OpenLove/
 ├── .agents/skills/             # Skill instructions (e.g. prisma-upgrade-v7)
 ├── data/                       # Persistent directory for SQLite (openlove.db) & VAPID keys (vapid.json)
 ├── prisma/
-│   └── schema.prisma           # Prisma v7 schema with PushSubscription model
+│   └── schema.prisma           # Prisma v7 schema: PushSubscription/SubscriptionBond
+│                                #   (Invariant 1) + SharedImage (Invariant 11)
 ├── scripts/
 │   ├── build-image.js          # Multi-arch Podman container build script
 │   ├── publish-image.js        # Multi-arch Docker Hub publish script
@@ -230,36 +309,49 @@ OpenLove/
 │   │   │   ├── db.ts           # Prisma 7 client instance with PrismaBetterSqlite3
 │   │   │   ├── push.ts         # Server WebPush sender & VAPID key manager
 │   │   │   ├── scheduler.ts    # Hourly timezone-aware milestone background scheduler (see Invariant 10)
-│   │   │   └── sync.ts         # Idempotent, last-write-wins sync op handlers
+│   │   │   ├── sync.ts         # Idempotent, last-write-wins sync op handlers
+│   │   │   ├── featureFlags.ts # Env-driven flag registry, resolved fresh per call (Invariant 12)
+│   │   │   └── sharedImage.ts  # Encrypted-photo relay storage + TTL cleanup scheduler (Invariant 11)
 │   │   ├── storage/
 │   │   │   ├── db.ts           # IndexedDB profile & photo blob storage (idb-keyval)
 │   │   │   └── outbox.ts       # Sync outbox + coalescing + sync-meta (DOM-free: SW imports it)
 │   │   ├── stores/
+│   │   │   ├── featureFlags.svelte.ts # Client fetch/cache for server-resolved flags (Invariant 12)
 │   │   │   ├── network.svelte.ts # Online state + pending-sync count
 │   │   │   ├── profile.svelte.ts # Reactive profile store + onProfileMutation hook registry
 │   │   │   └── pwa.svelte.ts   # Install prompt, standalone detection, storage persistence
 │   │   ├── sync/
 │   │   │   ├── core.ts         # Outbox delivery, backoff (DOM-free: SW imports it)
 │   │   │   └── index.ts        # Mutation funnel + platform flush triggers (window only)
-│   │   ├── types/              # TypeScript interfaces (profile, time, milestones)
+│   │   ├── types/              # TypeScript interfaces (profile, time, milestones, featureFlags)
 │   │   └── utils/
 │   │       ├── base64.ts       # VAPID key decoding (DOM-free: SW imports it)
 │   │       ├── clipboard.ts    # Robust fallback clipboard copying
+│   │       ├── imageBase64.ts  # Blob<->base64 (backup photos) + shared byte-level primitives
+│   │       ├── imageCrypto.ts  # Client-side AES-GCM encrypt/decrypt for relayed photos (Invariant 11)
 │   │       ├── pwa.ts          # Standalone PWA detection (iOS Safari, Android, Desktop)
 │   │       ├── share.ts        # decodeSharePayloadString + detectFullBackup — single source of
 │   │       │                   #   truth for share-payload parsing (see Invariant 9)
+│   │       ├── shareImage.ts   # uploadSharedImage/fetchSharedImage — fail-soft relay client (Invariant 11)
 │   │       ├── storage.ts      # navigator.storage persist()/estimate() helpers
 │   │       └── time.ts         # Exact calendar time & multi-category milestone calculations
 │   └── routes/
 │       ├── +layout.ts          # prerender = true, ssr = false (the precached SPA shell)
 │       ├── +layout.svelte      # Root layout: store init, sync triggers, PWA toast
 │       ├── +page.svelte        # Main route (switches between Onboarding and Active Theme)
-│       └── api/push/
-│           ├── sync/           # POST: Batch sync ops (upsert/delete), idempotent + LWW
-│           ├── subscribe/      # POST: Legacy wrapper over the sync handler
-│           ├── unsubscribe/    # POST: Legacy wrapper over the sync handler
-│           ├── test/           # POST: Triggers immediate test push notification
-│           └── vapid-public-key/ # GET: Returns public VAPID key
+│       └── api/
+│           ├── push/
+│           │   ├── sync/             # POST: Batch sync ops (upsert/delete), idempotent + LWW
+│           │   ├── subscribe/        # POST: Legacy wrapper over the sync handler
+│           │   ├── unsubscribe/      # POST: Legacy wrapper over the sync handler
+│           │   ├── test/             # POST: dev-only, sends an immediate test push
+│           │   ├── trigger-scheduler/ # POST: dev-only, manually runs the milestone scheduler
+│           │   └── vapid-public-key/ # GET: Returns public VAPID key
+│           └── share/
+│               ├── config/           # GET: Resolved feature flags (Invariant 12)
+│               └── image/
+│                   ├── (+server.ts)  # POST: Store encrypted photo ciphertext (Invariant 11)
+│                   └── [id]/         # GET: Fetch ciphertext by id; repeatable, TTL-checked
 ├── Dockerfile                  # Multi-stage, multi-arch production Dockerfile
 ├── docker-compose.yml          # 1-command deployment setup
 ├── scripts/verify-precache.js  # Post-build assertion that the app is really offline-capable
@@ -320,6 +412,11 @@ OpenLove/
   and shared by `ScanImportModal.svelte`, `+page.svelte`'s hash effect, and
   `profileStore.parseSharePayload`. **Do not** reimplement any of it inline at a new call site —
   import from `share.ts`. See the `share-import-safety` skill before touching any of this.
+- **Optional photo sharing**: `ShareModal.svelte`'s "Share Photo" toggle (shown only when the
+  active bond has a photo and `FEATURE_SHARE_IMAGES` is on) uploads it encrypted to the relay
+  and embeds a small `{shareId,key,iv,mimeType}` reference — not the photo itself — in the same
+  compact payload. Greyed out while offline (`networkStore.isOnline`), matching
+  `PushNotificationPanel.svelte`'s identical pattern for the same reason. See Invariant 11.
 
 ### 4. Onboarding Wizard
 - [`OnboardingFlow.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/onboarding/OnboardingFlow.svelte)
@@ -334,6 +431,26 @@ OpenLove/
 - `StyleStep` composes the same `shared/` `ThemeSelector`/`ColorModeSelector` components
   `SettingsSheet` uses, with `layout="detailed"` (icon + circular check badge) instead of Settings'
   `layout="compact"` (label + inline check) — see subsystem 1 above.
+
+### 5. JSON Backups & Photo Sharing (two different photo mechanisms, on purpose)
+Photos travel through this app two genuinely different ways, chosen per transport — see
+Invariant 11 for the full reasoning, `share-import-safety` for the wire-shape details:
+
+- **JSON *file* backups** (`StorageBackupPanel.svelte`'s "Download JSON Backup (All Bonds)",
+  `ShareModal.svelte`'s "Download Bond JSON File", and both files' restore paths): each bond's
+  photo travels **inline as base64** (`profileStore.exportBackupJSON()` / `importJSON()`'s
+  `photo` field). No server involvement, never expires, works fully offline — matches this
+  being the app's own "keep a backup, this is the only copy" safety net. **Not** gated by
+  `FEATURE_SHARE_IMAGES` — that flag only gates the public upload endpoint, and a user
+  downloading their own file to their own disk isn't a server-relay concern.
+- **QR/link/sync-code shares** (`ShareModal.svelte`'s toggle): the photo is relayed
+  encrypted through the server instead (`sharedImage` field) — see subsystem 3 and
+  Invariant 11.
+- These two field names (`photo` vs `sharedImage`) are deliberately never handled by the same
+  code path — `photo` is decoded synchronously inside `normalizeIncomingBond()` (used by the
+  invite *preview* too); `sharedImage` is only ever resolved inside `importJSON()`'s Case 2,
+  at actual commit time. If a payload somehow carried both, `importJSON()` prefers the
+  already-decoded inline `photo` and never touches the relay.
 
 ---
 
@@ -424,6 +541,20 @@ pnpm image:release
 - **Before adding a dependency the service worker imports**: it must be a *direct* dependency. pnpm's strict layout will not resolve transitive packages from either the SW source or `virtual:pwa-register`.
 - **Run `pnpm test` alongside `pnpm check`/`pnpm build`** before considering a non-trivial logic
   change done. See "Testing" under Common Commands.
+- **When adding a new env-driven feature toggle**: don't reach for `$env/static/public` or a
+  server `load` function — see Invariant 12 for why that only sees the build-time value in this
+  app. Add one entry to `FLAG_REGISTRY` in `src/lib/server/featureFlags.ts`, one field on
+  `FeatureFlags` (`src/lib/types/featureFlags.ts`), and one field in the client store's
+  `DEFAULTS` (`src/lib/stores/featureFlags.svelte.ts`) — the endpoint and fetch/cache path are
+  already generic and need no changes.
+- **Before touching the encrypted photo relay** (`SharedImage`, `sharedImage.ts`,
+  `imageCrypto.ts`, `shareImage.ts`, or `ShareModal.svelte`'s photo toggle): read Invariant 11
+  first — the read-once-vs-TTL design decision and the never-fetch-during-preview rule are both
+  easy to get backwards by "obvious-looking" instinct.
+- **When adding a UI action that needs the network** (uploads, live fetches): check
+  `networkStore.isOnline` and grey it out / disable it while offline, the same pattern
+  `PushNotificationPanel.svelte`'s test buttons and `ShareModal.svelte`'s photo toggle both use
+  — don't rely on the action's own fail-soft handling alone to communicate that to the user.
 
 ## 📚 Skills
 
@@ -432,8 +563,9 @@ areas they cover — they exist because each one documents a real bug found and 
 codebase, not a hypothetical:
 
 - **`share-import-safety`** — `profileStore.importJSON()`'s full-backup branch ignoring `mode`,
-  `profileStore.ready` timing for mount-time effects, reactive-effect re-entrancy, and
-  local-vs-UTC date comparisons (Invariants 8, 9, 10).
+  `profileStore.ready` timing for mount-time effects, reactive-effect re-entrancy,
+  local-vs-UTC date comparisons, and the two photo-arrival wire shapes (inline `photo` vs relay
+  `sharedImage`) and why they're never handled by the same code path (Invariants 8, 9, 10, 11).
 - **`ui-refactor-verification`** — how to safely extract/unify near-duplicate Svelte/Tailwind UI
   in this app and how to actually verify "zero visual impact" with Playwright, including its
   gotchas specific to this codebase (`Modal.svelte`'s rAF-dependent transition, `canvas-confetti`).

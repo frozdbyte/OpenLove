@@ -445,7 +445,7 @@ import still succeeds, just without a photo (fail-soft).
 
 ---
 
-## Stage 6 — Docs & hardening
+## Stage 6 — Docs & hardening ✅ Done
 
 - `AGENTS.md`: new **Invariant 11** documenting `SharedImage` — what it
   stores (opaque ciphertext only, server never holds the key), why that's
@@ -463,6 +463,52 @@ import still succeeds, just without a photo (fail-soft).
 - Full `pnpm check` / `pnpm test` / `pnpm build` pass; a final manual PWA
   offline check (Stage 1's file-backup restore should work fully offline;
   Stage 5's relay fetch should fail soft, not crash, when offline).
+
+→ Shipped as planned, plus one addition beyond the original scope (the user
+  asked to also update `README.md`) and one deviation on invariant count:
+- **Added Invariant 12 (Runtime-Configurable Feature Flags), not just 11.**
+  The plan only named a `SharedImage` invariant, but the *delivery
+  mechanism* for `FEATURE_SHARE_IMAGES` (Stage 2's `ssr=false`-prerendered-shell
+  constraint, why `$env/static/public` silently only sees the build-time
+  value, the `/api/share/config` pattern) is a distinct, independently
+  reusable mechanism future flags (multi-bond, etc.) will reuse — worth its
+  own numbered rule rather than a subsection of the relay-specific one.
+  Also amended Invariant 1's server-DB allowlist and the top-level "Core
+  Values" pitch (both previously described the server DB in absolute terms
+  that were no longer accurate) and filled a pre-existing gap in the
+  Directory Map (`/api/push/trigger-scheduler` was missing from an earlier,
+  unrelated dev-gating change, noticed while touching that exact block).
+- **`share-import-safety` skill**: added §5 covering both the wire-shape
+  distinction (`photo` vs `sharedImage`, never handled by the same code
+  path) and the real Stage 1 bug it's adjacent to (Case 2's `mode:'replace'`
+  branch silently dropping `photoBlob`/`photoUrl` via an explicit field
+  allowlist that went stale) as one combined section, rather than two — the
+  bug is a direct consequence of not respecting the shape distinction, so
+  splitting them apart would have separated cause from effect. Softened the
+  intro's hardcoded bug count ("Three real bugs") to prose, having noticed
+  it already silently drifted out of sync with the actual section count
+  before this edit.
+- **`README.md`** (user-requested, not in the original plan): added the
+  photo-sharing feature and photo-inclusive backups to the Features list,
+  the two new env vars to the Environment Variables table, and — the one
+  correction that mattered rather than just an addition — a new paragraph
+  under Privacy Architecture. The existing diagram and prose stated in
+  absolute terms that the server stores "NO photos" — no longer accurate
+  for the opt-in relay case, and left uncorrected would have been a false
+  privacy claim in the project's own public-facing documentation. Chose to
+  add a clarifying paragraph after the diagram rather than editing the
+  ASCII box itself, since the diagram still correctly describes the
+  *default* (toggle-off) state every share starts in.
+- **Verified**: `pnpm check` (0 errors) and `pnpm test` (116/116) re-run
+  after the AGENTS.md/skill edits as a regression check — this stage
+  touched no application code, so no build/live-browser re-verification
+  was performed; Stage 1's file-backup-restore-offline and Stage 5's
+  relay-fetch-fail-soft-offline claims this stage's checklist asks for were
+  each already independently verified live during their own stages (Stage
+  5 additionally covers the "fails soft when offline" case explicitly via
+  the follow-up offline-toggle-greying work), so re-doing those exact
+  browser walkthroughs here would have been redundant rather than adding
+  new information.
 
 ---
 
