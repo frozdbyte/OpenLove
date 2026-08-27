@@ -9,9 +9,6 @@
 	import Switch from '$lib/components/ui/switch';
 	import Badge from '$lib/components/ui/badge';
 	import {
-		Sun,
-		Moon,
-		Monitor,
 		Upload,
 		Trash2,
 		Trophy,
@@ -21,7 +18,6 @@
 		PartyPopper,
 		HeartHandshake,
 		Plus,
-		Check,
 		BellRing,
 		QrCode,
 		Heart,
@@ -31,7 +27,6 @@
 		HardDrive,
 		Download,
 		Users,
-		Image,
 		Clock
 	} from '@lucide/svelte';
 	import { subscribeToPush, unsubscribeFromPush, sendTestPush, triggerSchedulerNow } from '$lib/push/client';
@@ -40,6 +35,10 @@
 	import { networkStore } from '$lib/stores/network.svelte';
 	import { pwaStore } from '$lib/stores/pwa.svelte';
 	import { getStorageEstimate, type StorageEstimate } from '$lib/utils/storage';
+	import BondTypeSelector from '$lib/components/shared/BondTypeSelector.svelte';
+	import ThemeSelector from '$lib/components/shared/ThemeSelector.svelte';
+	import ColorModeSelector from '$lib/components/shared/ColorModeSelector.svelte';
+	import ColorPaletteSelector from '$lib/components/shared/ColorPaletteSelector.svelte';
 
 	interface Props {
 		open?: boolean;
@@ -409,13 +408,6 @@
 		}
 	}
 
-	const palettes: { id: ColorPalette; name: string; bg: string }[] = [
-		{ id: 'rose', name: 'Rose', bg: 'bg-rose-500' },
-		{ id: 'lavender', name: 'Lavender', bg: 'bg-purple-500' },
-		{ id: 'terracotta', name: 'Terracotta', bg: 'bg-orange-600' },
-		{ id: 'sage', name: 'Sage', bg: 'bg-emerald-600' },
-		{ id: 'midnight', name: 'Midnight', bg: 'bg-blue-600' }
-	];
 </script>
 
 <Modal
@@ -479,38 +471,8 @@
 		{/if}
 
 		<!-- Bond Type Selector -->
-		<section class="space-y-1.5">
-			<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Bond Type</span>
-			<div class="grid grid-cols-2 gap-2.5">
-				<button
-					type="button"
-					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {bondType === 'romantic'
-						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
-						: 'border-border bg-card/60 text-muted-foreground hover:bg-accent'}"
-					onclick={() => handleTypeChange('romantic')}
-				>
-
-					<div class="flex items-center gap-2 font-bold text-sm text-foreground">
-						<Heart class="h-4 w-4 text-rose-500 fill-rose-500/20" />
-						<span>Relationship</span>
-					</div>
-					<p class="text-[11px] text-muted-foreground mt-0.5">Romantic couple & anniversaries</p>
-				</button>
-
-				<button
-					type="button"
-					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {bondType === 'friendship'
-						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
-						: 'border-border bg-card/60 text-muted-foreground hover:bg-accent'}"
-					onclick={() => handleTypeChange('friendship')}
-				>
-					<div class="flex items-center gap-2 font-bold text-sm text-foreground">
-						<Sparkles class="h-4 w-4 text-emerald-500 fill-emerald-500/20" />
-						<span>Friendship</span>
-					</div>
-					<p class="text-[11px] text-muted-foreground mt-0.5">Platonic best friends & bonds</p>
-				</button>
-			</div>
+		<section>
+			<BondTypeSelector value={bondType} onchange={handleTypeChange} />
 		</section>
 
 		<!-- Names & Start Date of this Bond -->
@@ -588,137 +550,35 @@
 		</section>
 
 		<!-- UI Style Theme (Configured Per-Bond) -->
-		<section class="space-y-3">
-			<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">UI Style Theme</span>
-			<div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-				<button
-					type="button"
-					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {activeTheme === 'modern'
-						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
-						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
-					onclick={() => {
-						bondUiTheme = 'modern';
-						if (!isNewBond) void profileStore.setUITheme('modern', currentBond.id);
-					}}
-				>
-					<div class="flex items-center justify-between font-bold text-sm">
-						<span>Modern UI</span>
-						{#if activeTheme === 'modern'}
-							<Check class="h-4 w-4 text-primary" />
-						{/if}
-					</div>
-					<p class="text-[11px] text-muted-foreground mt-1">Cards, glowing avatar & progress metrics</p>
-				</button>
-
-				<button
-					type="button"
-					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {activeTheme === 'cover'
-						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
-						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
-					onclick={() => {
-						bondUiTheme = 'cover';
-						if (!isNewBond) void profileStore.setUITheme('cover', currentBond.id);
-					}}
-				>
-					<div class="flex items-center justify-between font-bold text-sm">
-						<span>Cover Image</span>
-						{#if activeTheme === 'cover'}
-							<Check class="h-4 w-4 text-primary" />
-						{/if}
-					</div>
-					<p class="text-[11px] text-muted-foreground mt-1">Full-bleed photo, top header names & cards</p>
-				</button>
-
-				<button
-					type="button"
-					class="p-3 rounded-2xl border text-left transition-all cursor-pointer {activeTheme === 'traditional'
-						? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
-						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
-					onclick={() => {
-						bondUiTheme = 'traditional';
-						if (!isNewBond) void profileStore.setUITheme('traditional', currentBond.id);
-					}}
-				>
-					<div class="flex items-center justify-between font-bold text-sm">
-						<span>Traditional</span>
-						{#if activeTheme === 'traditional'}
-							<Check class="h-4 w-4 text-primary" />
-						{/if}
-					</div>
-					<p class="text-[11px] text-muted-foreground mt-1">Original My Love crimson top bar layout</p>
-				</button>
-			</div>
+		<section>
+			<ThemeSelector
+				value={activeTheme}
+				onchange={(theme) => {
+					bondUiTheme = theme;
+					if (!isNewBond) void profileStore.setUITheme(theme, currentBond.id);
+				}}
+			/>
 		</section>
 
 		<!-- Color Appearance & Accent Palette (Configured Per-Bond) -->
 		<section class="space-y-3">
 			<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Color Appearance</span>
-			<div class="grid grid-cols-3 gap-2">
-				<button
-					type="button"
-					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {activeMode === 'system'
-						? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
-						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
-					onclick={() => {
-						bondColorMode = 'system';
-						if (!isNewBond) void profileStore.setColorMode('system', currentBond.id);
-					}}
-				>
-					<Monitor class="h-4 w-4 {activeMode === 'system' ? 'text-primary' : 'text-muted-foreground'}" />
-					<span class="text-xs">System</span>
-				</button>
-
-				<button
-					type="button"
-					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {activeMode === 'light'
-						? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
-						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
-					onclick={() => {
-						bondColorMode = 'light';
-						if (!isNewBond) void profileStore.setColorMode('light', currentBond.id);
-					}}
-				>
-					<Sun class="h-4 w-4 {activeMode === 'light' ? 'text-primary' : 'text-muted-foreground'}" />
-					<span class="text-xs">Light</span>
-				</button>
-
-				<button
-					type="button"
-					class="flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all cursor-pointer {activeMode === 'dark'
-						? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
-						: 'border-border bg-card/60 text-foreground hover:bg-accent'}"
-					onclick={() => {
-						bondColorMode = 'dark';
-						if (!isNewBond) void profileStore.setColorMode('dark', currentBond.id);
-					}}
-				>
-					<Moon class="h-4 w-4 {activeMode === 'dark' ? 'text-primary' : 'text-muted-foreground'}" />
-					<span class="text-xs">Dark</span>
-				</button>
-			</div>
+			<ColorModeSelector
+				value={activeMode}
+				onchange={(mode) => {
+					bondColorMode = mode;
+					if (!isNewBond) void profileStore.setColorMode(mode, currentBond.id);
+				}}
+			/>
 
 			<!-- Accent Palette -->
-			<div class="pt-2">
-				<span class="text-[11px] text-muted-foreground font-medium block mb-2">Accent Color Palette</span>
-				<div class="flex items-center gap-3 px-2">
-					{#each palettes as p}
-						<button
-							type="button"
-							class="h-8 w-8 rounded-full {p.bg} transition-transform cursor-pointer flex items-center justify-center {activePalette === p.id ? 'ring-5 ring-primary/30 scale-110' : 'opacity-80 hover:opacity-100'}"
-							onclick={() => {
-								bondColorPalette = p.id;
-								if (!isNewBond) void profileStore.setColorPalette(p.id, currentBond.id);
-							}}
-							title={p.name}
-							aria-label={p.name}
-						>
-							{#if activePalette === p.id}
-								<Check class="h-4 w-4 text-white" />
-							{/if}
-						</button>
-					{/each}
-				</div>
-			</div>
+			<ColorPaletteSelector
+				value={activePalette}
+				onchange={(palette) => {
+					bondColorPalette = palette;
+					if (!isNewBond) void profileStore.setColorPalette(palette, currentBond.id);
+				}}
+			/>
 		</section>
 
 

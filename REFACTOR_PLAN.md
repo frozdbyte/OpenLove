@@ -573,14 +573,56 @@ ones, not on each other.
       (39 precache entries; Invariant 7 unaffected — none of this phase's changes are
       imported by `service-worker.ts`).
 
-### Phase 3 — Shared selector components (Settings + Onboarding)
-- [ ] Build `ThemeSelector.svelte`, `ColorModeSelector.svelte`, `ColorPaletteSelector.svelte`,
+### Phase 3 — Shared selector components (Settings + Onboarding) — ✅ DONE (2026-08-27)
+- [x] Build `ThemeSelector.svelte`, `ColorModeSelector.svelte`, `ColorPaletteSelector.svelte`,
       `BondTypeSelector.svelte` in `src/lib/components/shared/`.
-- [ ] Wire them into `OnboardingFlow.svelte`'s `style`/`names` steps first (lower risk,
+      → Built with explicit `layout`/`variant`/`showLabel` props rather than deriving
+      copy from `THEME_REGISTRY`: side-by-side comparison of the two original files
+      turned up *three* different sets of theme label/description copy (Settings',
+      Onboarding's, and `THEME_REGISTRY`'s own), plus real structural differences
+      (Onboarding's theme cards show a per-theme icon and a circular check badge;
+      Settings' show neither) that a single unstyled array-map would have collapsed
+      to one — silently changing what one or both call sites display. Each component
+      reproduces both call sites' exact prior markup, gated by the layout prop.
+- [x] Wire them into `OnboardingFlow.svelte`'s `style`/`names` steps first (lower risk,
       fewer call sites) and verify visually.
-- [ ] Wire them into `SettingsSheet.svelte`, verify visually in all four modes
+      → Caught one real mistake here before it shipped: `ThemeSelector`'s first draft
+      hardcoded a "UI Style Theme" label that Settings shows but Onboarding's original
+      markup never did (only an HTML comment). Found via side-by-side diff against
+      the original before visual testing, fixed by adding a `showLabel` prop
+      (defaulting to Settings' `true`, passed `false` from Onboarding) — the same
+      pattern already used for `BondTypeSelector`/`ColorModeSelector`.
+      → Also removed 5 now-dead icon imports (`Sun`, `Moon`, `Monitor`, `Image`, plus
+      pre-existing-dead `Lock`) from `OnboardingFlow.svelte` while editing that
+      import block anyway.
+- [x] Wire them into `SettingsSheet.svelte`, verify visually in all four modes
       (`isNewBond` × `showAppWideSettings`).
-*(H3; depends on nothing from Phase 2, can run in parallel with it.)*
+      → Removed the now-dead local `palettes` array (moved into
+      `ColorPaletteSelector`) and 5 now-dead icon imports (`Sun`, `Moon`, `Monitor`,
+      `Check`, `Image`).
+      → **Visual verification**: no project-specific run skill existed, so drove a
+      real headless Chromium session (Playwright, installed fresh into the
+      scratchpad — not added to the project) through the full onboarding wizard
+      (names → date → photo → style, exercising `ThemeSelector`'s `detailed` layout
+      and `ColorModeSelector`'s labeled layout) and then the Settings sheet on the
+      resulting profile (exercising `BondTypeSelector`, `ThemeSelector`'s `compact`
+      layout, `ColorModeSelector`'s unlabeled layout, and `ColorPaletteSelector`).
+      Screenshotted every selection state, read back the actual DOM `className` of
+      the bond-type and palette buttons after clicking to confirm selected-state
+      classes land on the right element (not just "looks right" in a screenshot),
+      and captured `console`/`pageerror` events — zero across the whole flow. One
+      false alarm along the way: an early screenshot appeared to show the wrong
+      bond-type card highlighted after a click, traced to the test script's own
+      fuzzy `text=` selector matching decaying confetti/description text rather
+      than the button (confirmed by reading back element classes directly) — not
+      an application bug. Also confirmed end-to-end that theme/mode/palette
+      selections made during onboarding correctly persist and render in the actual
+      themed view afterward (screenshotted the dark Traditional theme after
+      selecting it in the wizard).
+- [x] Verification: `pnpm check` → 0 errors, 0 warnings across 4,276 files.
+      `pnpm test` → 6 files, 52/52 passing (unaffected, as expected — this phase
+      touched no tested logic files).
+*(H3; depended on nothing from Phase 2, ran after it.)*
 
 ### Phase 4 — `SettingsSheet` decomposition
 - [ ] Extract `MilestonePrefsEditor.svelte` with the `updateMilestonePrefs()` helper. *(H2)*

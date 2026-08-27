@@ -14,19 +14,12 @@
 		Check,
 		ArrowRight,
 		ArrowLeft,
-		Sun,
-		Moon,
-		Monitor,
 		Smartphone,
 		BellRing,
 		Share2,
 		QrCode,
 		ShieldCheck,
-		Lock,
-		Download,
-
-		Image
-
+		Download
 	} from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
 	import { subscribeToPush } from '$lib/push/client';
@@ -36,6 +29,9 @@
 		DEFAULT_MILESTONE_PREFS_FRIENDSHIP,
 		DEFAULT_MILESTONE_PREFS_ROMANTIC
 	} from '$lib/types/bonds';
+	import BondTypeSelector from '$lib/components/shared/BondTypeSelector.svelte';
+	import ThemeSelector from '$lib/components/shared/ThemeSelector.svelte';
+	import ColorModeSelector from '$lib/components/shared/ColorModeSelector.svelte';
 
 
 	type OnboardingStepKey = 'overview' | 'pwa_install' | 'names' | 'date' | 'photo' | 'style';
@@ -88,6 +84,25 @@
 		if (target.files && target.files[0]) {
 			await profileStore.setPhoto(target.files[0]);
 		}
+	}
+
+	function handleBondTypeChange(newType: BondType) {
+		bondType = newType;
+		if (newType === 'romantic' && namesInput === 'Alex & Sam') {
+			namesInput = 'Emma & Paul';
+		} else if (newType === 'friendship' && namesInput === 'Emma & Paul') {
+			namesInput = 'Alex & Sam';
+		}
+	}
+
+	function handleThemeChange(theme: UIThemeId) {
+		selectedTheme = theme;
+		profileStore.setUITheme(theme);
+	}
+
+	function handleColorModeChange(mode: ColorMode) {
+		selectedColorMode = mode;
+		profileStore.setColorMode(mode);
 	}
 
 	let showAddressBarTip = $state(false);
@@ -382,41 +397,7 @@
 				</div>
 
 				<!-- Bond Type Selector -->
-				<div class="grid grid-cols-2 gap-2.5 text-left">
-					<button
-						type="button"
-						class="p-2.5 sm:p-3 rounded-2xl border transition-all cursor-pointer {bondType === 'romantic'
-							? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
-							: 'border-border bg-card/60 text-muted-foreground hover:bg-accent'}"
-						onclick={() => {
-							bondType = 'romantic';
-							if (namesInput === 'Alex & Sam') namesInput = 'Emma & Paul';
-						}}
-					>
-						<div class="flex items-center gap-1.5 font-bold text-xs sm:text-sm text-foreground">
-							<Heart class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-rose-500 fill-rose-500/20" />
-							<span>Relationship</span>
-						</div>
-						<p class="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">Couple & anniversaries</p>
-					</button>
-
-					<button
-						type="button"
-						class="p-2.5 sm:p-3 rounded-2xl border transition-all cursor-pointer {bondType === 'friendship'
-							? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
-							: 'border-border bg-card/60 text-muted-foreground hover:bg-accent'}"
-						onclick={() => {
-							bondType = 'friendship';
-							if (namesInput === 'Emma & Paul') namesInput = 'Alex & Sam';
-						}}
-					>
-						<div class="flex items-center gap-1.5 font-bold text-xs sm:text-sm text-foreground">
-							<Sparkles class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500 fill-emerald-500/20" />
-							<span>Friendship</span>
-						</div>
-						<p class="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">Best friends & bonds</p>
-					</button>
-				</div>
+				<BondTypeSelector value={bondType} onchange={handleBondTypeChange} variant="onboarding" showLabel={false} />
 
 				<Card class="p-4 sm:p-5 bg-card border-border shadow-sm rounded-2xl">
 					<div class="space-y-2 text-left">
@@ -527,127 +508,10 @@
 
 				<div class="space-y-3 text-left">
 					<!-- Theme selector cards -->
-					<div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
-						<button
-							type="button"
-							class="p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between {selectedTheme === 'modern'
-								? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
-								: 'border-border bg-card text-foreground hover:bg-accent'}"
-							onclick={() => {
-								selectedTheme = 'modern';
-								profileStore.setUITheme('modern');
-							}}
-						>
-							<div class="flex items-center justify-between w-full">
-								<div class="flex items-center gap-1.5 font-bold text-sm text-foreground">
-									<Sparkles class="h-4 w-4 text-primary shrink-0" />
-									<span>Modern</span>
-								</div>
-								{#if selectedTheme === 'modern'}
-									<div class="h-5 w-5 rounded-full bg-primary text-white flex items-center justify-center shrink-0">
-										<Check class="h-3 w-3 stroke-[3]" />
-									</div>
-								{/if}
-							</div>
-							<p class="text-xs text-muted-foreground mt-2 leading-snug">Avatar card layout with metrics</p>
-						</button>
-
-						<button
-							type="button"
-							class="p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between {selectedTheme === 'cover'
-								? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
-								: 'border-border bg-card text-foreground hover:bg-accent'}"
-							onclick={() => {
-								selectedTheme = 'cover';
-								profileStore.setUITheme('cover');
-							}}
-						>
-							<div class="flex items-center justify-between w-full">
-								<div class="flex items-center gap-1.5 font-bold text-sm text-foreground">
-									<Image class="h-4 w-4 text-primary shrink-0" />
-									<span>Cover</span>
-								</div>
-								{#if selectedTheme === 'cover'}
-									<div class="h-5 w-5 rounded-full bg-primary text-white flex items-center justify-center shrink-0">
-										<Check class="h-3 w-3 stroke-[3]" />
-									</div>
-								{/if}
-							</div>
-							<p class="text-xs text-muted-foreground mt-2 leading-snug">Full-bleed photo with top names</p>
-						</button>
-
-						<button
-							type="button"
-							class="p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between {selectedTheme === 'traditional'
-								? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
-								: 'border-border bg-card text-foreground hover:bg-accent'}"
-							onclick={() => {
-								selectedTheme = 'traditional';
-								profileStore.setUITheme('traditional');
-							}}
-						>
-							<div class="flex items-center justify-between w-full">
-								<div class="flex items-center gap-1.5 font-bold text-sm text-foreground">
-									<Heart class="h-4 w-4 text-rose-600 shrink-0" />
-									<span>Classic</span>
-								</div>
-								{#if selectedTheme === 'traditional'}
-									<div class="h-5 w-5 rounded-full bg-primary text-white flex items-center justify-center shrink-0">
-										<Check class="h-3 w-3 stroke-[3]" />
-									</div>
-								{/if}
-							</div>
-							<p class="text-xs text-muted-foreground mt-2 leading-snug">My Love crimson bar layout</p>
-						</button>
-					</div>
+					<ThemeSelector value={selectedTheme} layout="detailed" showLabel={false} onchange={handleThemeChange} />
 
 					<!-- Dark mode selector -->
-					<div>
-						<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">Color Appearance</span>
-						<div class="grid grid-cols-3 gap-2">
-							<button
-								type="button"
-								class="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-2xl border transition-all cursor-pointer {selectedColorMode === 'system'
-									? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
-									: 'border-border bg-card text-foreground hover:bg-accent'}"
-								onclick={() => {
-									selectedColorMode = 'system';
-									profileStore.setColorMode('system');
-								}}
-							>
-								<Monitor class="h-4 w-4 sm:h-5 sm:w-5 {selectedColorMode === 'system' ? 'text-primary' : 'text-muted-foreground'}" />
-								<span class="text-xs font-medium">System</span>
-							</button>
-
-							<button
-								type="button"
-								class="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-2xl border transition-all cursor-pointer {selectedColorMode === 'light'
-									? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
-									: 'border-border bg-card text-foreground hover:bg-accent'}"
-								onclick={() => {
-									selectedColorMode = 'light';
-									profileStore.setColorMode('light');
-								}}
-							>
-								<Sun class="h-4 w-4 sm:h-5 sm:w-5 {selectedColorMode === 'light' ? 'text-primary' : 'text-muted-foreground'}" />
-								<span class="text-xs font-medium">Light</span>
-							</button>
-
-							<button
-								type="button"
-								class="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-2xl border transition-all cursor-pointer {selectedColorMode === 'dark'
-									? 'border-primary bg-primary/15 font-bold shadow-xs ring-2 ring-primary/25 text-primary'
-									: 'border-border bg-card text-foreground hover:bg-accent'}"
-								onclick={() => {
-									selectedColorMode = 'dark';
-									profileStore.setColorMode('dark');
-								}}
-							>
-								<Moon class="h-4 w-4 sm:h-5 sm:w-5 {selectedColorMode === 'dark' ? 'text-primary' : 'text-muted-foreground'}" />
-								<span class="text-xs font-medium">Dark</span>
-							</button>
-						</div>
-					</div>
+					<ColorModeSelector value={selectedColorMode} layout="detailed" showLabel onchange={handleColorModeChange} />
 
 					<!-- Push Notification Opt-in -->
 					<Card class="p-3.5 sm:p-4 bg-card border-border flex items-center justify-between gap-3 text-left rounded-2xl">
