@@ -5,23 +5,16 @@
 	import BondFallbackIcon from '$lib/components/themes/shared/BondFallbackIcon.svelte';
 	import ThemeIconButton from '$lib/components/themes/shared/ThemeIconButton.svelte';
 	import { createPhotoRetryGuard } from '$lib/stores/photoRetryGuard.svelte';
+	import { statValueSizeClass } from '$lib/components/themes/shared/statValueSizeClass';
 
 	let { profile, bond, timeBreakdown, nextMilestone, onOpenSettings, onOpenShare, onOpenSwitcher }: ThemeProps = $props();
 
 	let isFriendship = $derived(bond?.type === 'friendship');
 
 	const photoGuard = createPhotoRetryGuard(() => bond?.id, () => bond?.photoBlob);
-
-	function getStatValueSize(val: number): string {
-		const len = val.toLocaleString().length;
-		if (len > 9) return 'text-xs';
-		if (len > 7) return 'text-xs sm:text-sm';
-		if (len > 5) return 'text-sm sm:text-base';
-		return 'text-base sm:text-lg font-extrabold';
-	}
 </script>
 
-<div class="relative min-h-svh w-full max-w-md mx-auto px-4 py-6 flex flex-col justify-between pb-12 select-none">
+<div class="relative min-h-svh w-full max-w-md mx-auto px-4 py-6 flex flex-col justify-between pb-12">
 	<!-- Top Bar -->
 	<header class="flex items-center justify-between py-2">
 		<ThemeIconButton icon={Settings} onclick={onOpenSettings} ariaLabel="Settings" />
@@ -32,8 +25,13 @@
 			onclick={onOpenSwitcher}
 			aria-label="Switch Relationship or Friendship"
 		>
-			<Leaf class="h-3.5 w-3.5 fill-primary/40 text-primary" />
-			<span>{isFriendship ? 'Friendship' : 'Growing Together'}</span>
+			{#if isFriendship}
+				<Sprout class="h-3.5 w-3.5 fill-primary/40 text-primary" />
+				<span>Friendship</span>
+			{:else}
+				<Leaf class="h-3.5 w-3.5 fill-primary/40 text-primary" />
+				<span>Growing Together</span>
+			{/if}
 			<ChevronDown class="h-3 w-3 opacity-60 ml-0.5" />
 		</button>
 
@@ -42,7 +40,7 @@
 
 	<!-- Offline / pending-sync indicator -->
 	<div class="flex justify-center">
-		<SyncStatusPill variant="modern" />
+		<SyncStatusPill variant="modern" class="border-primary/20" />
 	</div>
 
 	<!-- Main Organic Content -->
@@ -121,62 +119,66 @@
 		<div class="grid grid-cols-3 gap-2">
 			<div class="bg-card/70 dark:bg-card/40 border border-border/70 rounded-2xl p-2.5 text-center shadow-2xs min-w-0 overflow-hidden flex flex-col justify-between">
 				<span class="text-[10px] uppercase font-bold text-muted-foreground block truncate">Years</span>
-				<span class="{getStatValueSize(timeBreakdown.years)} text-foreground truncate tabular-nums block mt-1">{timeBreakdown.years}</span>
+				<span class="{statValueSizeClass(timeBreakdown.years)} font-extrabold text-foreground truncate tabular-nums block mt-1">{timeBreakdown.years}</span>
 			</div>
 			<div class="bg-card/70 dark:bg-card/40 border border-border/70 rounded-2xl p-2.5 text-center shadow-2xs min-w-0 overflow-hidden flex flex-col justify-between">
 				<span class="text-[10px] uppercase font-bold text-muted-foreground block truncate">Months</span>
-				<span class="{getStatValueSize(timeBreakdown.totalMonths)} text-foreground truncate tabular-nums block mt-1">{timeBreakdown.totalMonths.toLocaleString()}</span>
+				<span class="{statValueSizeClass(timeBreakdown.totalMonths)} font-extrabold text-foreground truncate tabular-nums block mt-1">{timeBreakdown.totalMonths.toLocaleString()}</span>
 			</div>
 			<div class="bg-card/70 dark:bg-card/40 border border-border/70 rounded-2xl p-2.5 text-center shadow-2xs min-w-0 overflow-hidden flex flex-col justify-between">
 				<span class="text-[10px] uppercase font-bold text-muted-foreground block truncate">Weeks</span>
-				<span class="{getStatValueSize(timeBreakdown.totalWeeks)} text-foreground truncate tabular-nums block mt-1">{timeBreakdown.totalWeeks.toLocaleString()}</span>
+				<span class="{statValueSizeClass(timeBreakdown.totalWeeks)} font-extrabold text-foreground truncate tabular-nums block mt-1">{timeBreakdown.totalWeeks.toLocaleString()}</span>
 			</div>
 			<div class="bg-card/70 dark:bg-card/40 border border-border/70 rounded-2xl p-2.5 text-center shadow-2xs min-w-0 overflow-hidden flex flex-col justify-between">
 				<span class="text-[10px] uppercase font-bold text-muted-foreground block truncate">Days</span>
-				<span class="{getStatValueSize(timeBreakdown.totalDays)} text-foreground truncate tabular-nums block mt-1">{timeBreakdown.totalDays.toLocaleString()}</span>
+				<span class="{statValueSizeClass(timeBreakdown.totalDays)} font-extrabold text-foreground truncate tabular-nums block mt-1">{timeBreakdown.totalDays.toLocaleString()}</span>
 			</div>
 			<div class="bg-card/70 dark:bg-card/40 border border-border/70 rounded-2xl p-2.5 text-center shadow-2xs min-w-0 overflow-hidden flex flex-col justify-between">
 				<span class="text-[10px] uppercase font-bold text-muted-foreground block truncate">Hours</span>
-				<span class="{getStatValueSize(timeBreakdown.totalHours)} text-foreground truncate tabular-nums block mt-1">{timeBreakdown.totalHours.toLocaleString()}</span>
+				<span class="{statValueSizeClass(timeBreakdown.totalHours)} font-extrabold text-foreground truncate tabular-nums block mt-1">{timeBreakdown.totalHours.toLocaleString()}</span>
 			</div>
 			<div class="bg-card/70 dark:bg-card/40 border border-border/70 rounded-2xl p-2.5 text-center shadow-2xs min-w-0 overflow-hidden flex flex-col justify-between">
 				<span class="text-[10px] uppercase font-bold text-muted-foreground block truncate">Minutes</span>
-				<span class="{getStatValueSize(timeBreakdown.totalMinutes)} text-foreground truncate tabular-nums block mt-1">{timeBreakdown.totalMinutes.toLocaleString()}</span>
+				<span class="{statValueSizeClass(timeBreakdown.totalMinutes)} font-extrabold text-foreground truncate tabular-nums block mt-1">{timeBreakdown.totalMinutes.toLocaleString()}</span>
 			</div>
 		</div>
 
-		<!-- Next Bloom Milestone -->
-		{#if nextMilestone}
-			<div class="rounded-3xl bg-card/80 dark:bg-card/50 border border-primary/20 p-4 shadow-xs">
-				<div class="flex items-center justify-between mb-2">
-					<div class="flex items-center gap-1.5 min-w-0 mr-2">
-						<Leaf class="h-3.5 w-3.5 text-primary fill-primary/30 shrink-0" />
-						<span class="text-xs font-bold text-foreground truncate">
-							{nextMilestone.milestone.title}
+		<!-- Next Bloom Milestone. Keyed on bond id so switching bonds remounts
+		     the bar instead of CSS-transitioning its width from the previous bond's
+		     unrelated percentage — see Progress.svelte's `transition-all`. -->
+		{#key bond?.id}
+			{#if nextMilestone}
+				<div class="rounded-3xl bg-card/80 dark:bg-card/50 border border-primary/20 p-4 shadow-xs">
+					<div class="flex items-center justify-between mb-2">
+						<div class="flex items-center gap-1.5 min-w-0 mr-2">
+							<Leaf class="h-3.5 w-3.5 text-primary fill-primary/30 shrink-0" />
+							<span class="text-xs font-bold text-foreground truncate">
+								{nextMilestone.milestone.title}
+							</span>
+						</div>
+						<span class="text-[11px] font-semibold text-primary px-2 py-0.5 bg-primary/10 rounded-full shrink-0">
+							{#if nextMilestone.daysLeft === 0}
+								Blooming today! 🌸
+							{:else}
+								in {nextMilestone.daysLeft} {nextMilestone.daysLeft === 1 ? 'day' : 'days'}
+							{/if}
 						</span>
 					</div>
-					<span class="text-[11px] font-semibold text-primary px-2 py-0.5 bg-primary/10 rounded-full shrink-0">
-						{#if nextMilestone.daysLeft === 0}
-							Blooming today! 🌸
-						{:else}
-							in {nextMilestone.daysLeft} {nextMilestone.daysLeft === 1 ? 'day' : 'days'}
-						{/if}
-					</span>
-				</div>
 
-				<!-- Progress bar -->
-				<div class="w-full bg-secondary rounded-full h-2 overflow-hidden">
-					<div
-						class="bg-primary h-full rounded-full transition-all duration-500"
-						style="width: {nextMilestone.progressPercentage}%"
-					></div>
-				</div>
+					<!-- Progress bar -->
+					<div class="w-full bg-secondary rounded-full h-2 overflow-hidden">
+						<div
+							class="bg-primary h-full rounded-full transition-all duration-500"
+							style="width: {nextMilestone.progressPercentage}%"
+						></div>
+					</div>
 
-				<div class="flex justify-between items-center text-[10px] text-muted-foreground mt-1.5 font-medium">
-					<span>Target: {nextMilestone.daysLeft}d left</span>
-					<span>{nextMilestone.progressPercentage}%</span>
+					<div class="flex justify-between items-center text-[10px] text-muted-foreground mt-1.5 font-medium">
+						<span>Target: {nextMilestone.daysLeft}d left</span>
+						<span>{nextMilestone.progressPercentage}%</span>
+					</div>
 				</div>
-			</div>
-		{/if}
+			{/if}
+		{/key}
 	</main>
 </div>

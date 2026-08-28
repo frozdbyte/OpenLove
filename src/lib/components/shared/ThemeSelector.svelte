@@ -43,10 +43,10 @@
 		modern: { label: 'Modern', description: 'Avatar card layout with metrics', icon: Sparkles, iconColor: 'text-primary' },
 		cover: { label: 'Cover', description: 'Full-bleed photo with top names', icon: Image, iconColor: 'text-primary' },
 		traditional: { label: 'Classic', description: 'My Love crimson bar layout', icon: Heart, iconColor: 'text-rose-600' },
-		polaroid: { label: 'Polaroid', description: 'Analog scrapbook & tilted photo', icon: Camera, iconColor: 'text-amber-600 dark:text-amber-400' },
-		monograph: { label: 'Monograph', description: 'Editorial typography & serif accents', icon: BookOpen, iconColor: 'text-zinc-600 dark:text-zinc-300' },
-		botanical: { label: 'Botanical', description: 'Organic curves & earthy serenity', icon: Leaf, iconColor: 'text-emerald-600 dark:text-emerald-400' },
-		constellation: { label: 'Constellation', description: 'Starlit sky & celestial glowing orb', icon: Star, iconColor: 'text-indigo-500 dark:text-indigo-400' }
+		polaroid: { label: 'Polaroid', description: 'Analog scrapbook & tilted photo', icon: Camera, iconColor: 'text-primary' },
+		monograph: { label: 'Monograph', description: 'Editorial typography & serif accents', icon: BookOpen, iconColor: 'text-primary' },
+		botanical: { label: 'Botanical', description: 'Organic curves & earthy serenity', icon: Leaf, iconColor: 'text-primary' },
+		constellation: { label: 'Constellation', description: 'Starlit sky & celestial glowing orb', icon: Star, iconColor: 'text-primary' }
 	} satisfies Record<UIThemeId, { label: string; description: string; icon: unknown; iconColor: string }>;
 
 	let displayedThemes = $derived.by(() => {
@@ -77,14 +77,15 @@
 		<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">UI Style Theme</span>
 	{/if}
 	<div class="grid grid-cols-1 sm:grid-cols-3 {gridGapClass}">
-		{#each displayedThemes as theme (theme.id)}
+		{#each displayedThemes as theme, i (theme.id)}
 			{@const selected = value === theme.id}
 			{@const meta = layout === 'detailed' ? DETAILED_META[theme.id] : COMPACT_META[theme.id]}
+			{@const isOrphanLast = i === displayedThemes.length - 1 && displayedThemes.length % 3 === 1}
 			<button
 				type="button"
 				class="{cardPadding} rounded-2xl border text-left transition-all cursor-pointer{cardExtra} {selected
 					? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-foreground shadow-xs'
-					: `border-border ${unselectedBg} text-foreground hover:bg-accent`}"
+					: `border-border ${unselectedBg} text-foreground hover:bg-accent`}{isOrphanLast ? ' sm:col-span-3 sm:w-1/3 sm:mx-auto' : ''}"
 				onclick={() => onchange(theme.id)}
 			>
 				{#if layout === 'detailed'}

@@ -5,23 +5,16 @@
 	import BondFallbackIcon from '$lib/components/themes/shared/BondFallbackIcon.svelte';
 	import ThemeIconButton from '$lib/components/themes/shared/ThemeIconButton.svelte';
 	import { createPhotoRetryGuard } from '$lib/stores/photoRetryGuard.svelte';
+	import { statValueSizeClass } from '$lib/components/themes/shared/statValueSizeClass';
 
 	let { profile, bond, timeBreakdown, nextMilestone, onOpenSettings, onOpenShare, onOpenSwitcher }: ThemeProps = $props();
 
 	let isFriendship = $derived(bond?.type === 'friendship');
 
 	const photoGuard = createPhotoRetryGuard(() => bond?.id, () => bond?.photoBlob);
-
-	function getStatValueSize(val: number): string {
-		const len = val.toLocaleString().length;
-		if (len > 9) return 'text-xs';
-		if (len > 7) return 'text-xs sm:text-sm';
-		if (len > 5) return 'text-sm sm:text-base';
-		return 'text-base font-semibold';
-	}
 </script>
 
-<div class="relative min-h-svh w-full max-w-md mx-auto px-5 py-6 flex flex-col justify-between pb-12 font-serif select-none">
+<div class="relative min-h-svh w-full max-w-md mx-auto px-5 py-6 flex flex-col justify-between pb-12 font-serif">
 	<!-- Top Bar -->
 	<header class="flex items-center justify-between py-2 border-b border-foreground/10 pb-3">
 		<ThemeIconButton icon={Settings} onclick={onOpenSettings} ariaLabel="Settings" />
@@ -43,7 +36,7 @@
 
 	<!-- Offline / pending-sync indicator -->
 	<div class="flex justify-center mt-2">
-		<SyncStatusPill variant="modern" />
+		<SyncStatusPill variant="modern" class="rounded-none border-foreground/15 font-mono tracking-widest text-[10px]" />
 	</div>
 
 	<!-- Main Editorial Content -->
@@ -51,7 +44,7 @@
 		<!-- Issue Dateline -->
 		<div class="text-center">
 			<p class="text-[10px] font-mono uppercase tracking-[0.25em] text-primary font-medium">
-				ISSUE NO. {timeBreakdown.totalDays.toLocaleString()} — VOL. {timeBreakdown.years || 1}
+				ISSUE NO. {timeBreakdown.totalDays.toLocaleString()} — VOL. {timeBreakdown.years + 1}
 			</p>
 		</div>
 
@@ -118,59 +111,63 @@
 			<div class="grid grid-cols-3 divide-x divide-foreground/10 text-center">
 				<div class="px-1 min-w-0 overflow-hidden">
 					<span class="text-[9px] font-mono uppercase tracking-widest text-muted-foreground block truncate">Years</span>
-					<span class="{getStatValueSize(timeBreakdown.years)} font-serif italic text-foreground mt-0.5 block truncate tabular-nums">{timeBreakdown.years}</span>
+					<span class="{statValueSizeClass(timeBreakdown.years)} font-serif italic font-semibold text-foreground mt-0.5 block truncate tabular-nums">{timeBreakdown.years}</span>
 				</div>
 				<div class="px-1 min-w-0 overflow-hidden">
 					<span class="text-[9px] font-mono uppercase tracking-widest text-muted-foreground block truncate">Months</span>
-					<span class="{getStatValueSize(timeBreakdown.totalMonths)} font-serif italic text-foreground mt-0.5 block truncate tabular-nums">{timeBreakdown.totalMonths.toLocaleString()}</span>
+					<span class="{statValueSizeClass(timeBreakdown.totalMonths)} font-serif italic font-semibold text-foreground mt-0.5 block truncate tabular-nums">{timeBreakdown.totalMonths.toLocaleString()}</span>
 				</div>
 				<div class="px-1 min-w-0 overflow-hidden">
 					<span class="text-[9px] font-mono uppercase tracking-widest text-muted-foreground block truncate">Weeks</span>
-					<span class="{getStatValueSize(timeBreakdown.totalWeeks)} font-serif italic text-foreground mt-0.5 block truncate tabular-nums">{timeBreakdown.totalWeeks.toLocaleString()}</span>
+					<span class="{statValueSizeClass(timeBreakdown.totalWeeks)} font-serif italic font-semibold text-foreground mt-0.5 block truncate tabular-nums">{timeBreakdown.totalWeeks.toLocaleString()}</span>
 				</div>
 			</div>
 			<div class="grid grid-cols-3 divide-x divide-foreground/10 text-center mt-3 pt-3 border-t border-foreground/5">
 				<div class="px-1 min-w-0 overflow-hidden">
 					<span class="text-[9px] font-mono uppercase tracking-widest text-muted-foreground block truncate">Days</span>
-					<span class="{getStatValueSize(timeBreakdown.totalDays)} font-serif italic text-foreground mt-0.5 block truncate tabular-nums">{timeBreakdown.totalDays.toLocaleString()}</span>
+					<span class="{statValueSizeClass(timeBreakdown.totalDays)} font-serif italic font-semibold text-foreground mt-0.5 block truncate tabular-nums">{timeBreakdown.totalDays.toLocaleString()}</span>
 				</div>
 				<div class="px-1 min-w-0 overflow-hidden">
 					<span class="text-[9px] font-mono uppercase tracking-widest text-muted-foreground block truncate">Hours</span>
-					<span class="{getStatValueSize(timeBreakdown.totalHours)} font-serif italic text-foreground mt-0.5 block truncate tabular-nums">{timeBreakdown.totalHours.toLocaleString()}</span>
+					<span class="{statValueSizeClass(timeBreakdown.totalHours)} font-serif italic font-semibold text-foreground mt-0.5 block truncate tabular-nums">{timeBreakdown.totalHours.toLocaleString()}</span>
 				</div>
 				<div class="px-1 min-w-0 overflow-hidden">
 					<span class="text-[9px] font-mono uppercase tracking-widest text-muted-foreground block truncate">Minutes</span>
-					<span class="{getStatValueSize(timeBreakdown.totalMinutes)} font-serif italic text-foreground mt-0.5 block truncate tabular-nums">{timeBreakdown.totalMinutes.toLocaleString()}</span>
+					<span class="{statValueSizeClass(timeBreakdown.totalMinutes)} font-serif italic font-semibold text-foreground mt-0.5 block truncate tabular-nums">{timeBreakdown.totalMinutes.toLocaleString()}</span>
 				</div>
 			</div>
 		</div>
 
-		<!-- Editorial Milestone Line -->
-		{#if nextMilestone}
-			<div class="border border-primary/20 bg-card/60 p-4 text-center">
-				<div class="flex items-center justify-between text-xs font-mono uppercase tracking-wider mb-2 text-foreground">
-					<span class="truncate font-semibold max-w-[200px]">{nextMilestone.milestone.title}</span>
-					<span class="text-primary font-bold shrink-0">
-						{#if nextMilestone.daysLeft === 0}
-							Today
-						{:else}
-							in {nextMilestone.daysLeft}d
-						{/if}
-					</span>
-				</div>
+		<!-- Editorial Milestone Line. Keyed on bond id so switching bonds remounts
+		     the bar instead of CSS-transitioning its width from the previous bond's
+		     unrelated percentage — see Progress.svelte's `transition-all`. -->
+		{#key bond?.id}
+			{#if nextMilestone}
+				<div class="border border-primary/20 bg-card/60 p-4 text-center">
+					<div class="flex items-center justify-between text-xs font-mono uppercase tracking-wider mb-2 text-foreground">
+						<span class="truncate font-semibold max-w-[200px]">{nextMilestone.milestone.title}</span>
+						<span class="text-primary font-bold shrink-0">
+							{#if nextMilestone.daysLeft === 0}
+								Today
+							{:else}
+								in {nextMilestone.daysLeft}d
+							{/if}
+						</span>
+					</div>
 
-				<div class="w-full bg-foreground/10 h-1 overflow-hidden">
-					<div
-						class="bg-primary h-full transition-all duration-500"
-						style="width: {nextMilestone.progressPercentage}%"
-					></div>
-				</div>
+					<div class="w-full bg-foreground/10 h-1 overflow-hidden">
+						<div
+							class="bg-primary h-full transition-all duration-500"
+							style="width: {nextMilestone.progressPercentage}%"
+						></div>
+					</div>
 
-				<div class="flex justify-between items-center text-[10px] font-mono text-muted-foreground mt-1.5">
-					<span>Target: {nextMilestone.daysLeft}d left</span>
-					<span>{nextMilestone.progressPercentage}%</span>
+					<div class="flex justify-between items-center text-[10px] font-mono text-muted-foreground mt-1.5">
+						<span>Target: {nextMilestone.daysLeft}d left</span>
+						<span>{nextMilestone.progressPercentage}%</span>
+					</div>
 				</div>
-			</div>
-		{/if}
+			{/if}
+		{/key}
 	</main>
 </div>
