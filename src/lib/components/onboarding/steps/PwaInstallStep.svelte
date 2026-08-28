@@ -13,16 +13,17 @@
 	import { pwaStore } from '$lib/stores/pwa.svelte';
 	import Card from '$lib/components/ui/card';
 	import Button from '$lib/components/ui/button';
-	import { Smartphone, Check, Share2, QrCode, Download } from '@lucide/svelte';
+	import { Smartphone, Check, Share2, QrCode, Download, Loader2 } from '@lucide/svelte';
 
 	interface Props {
 		installSuccess: boolean;
+		installing: boolean;
 		showAddressBarTip: boolean;
 		onInstall: () => void;
 		onScanQR: () => void;
 	}
 
-	let { installSuccess, showAddressBarTip, onInstall, onScanQR }: Props = $props();
+	let { installSuccess, installing, showAddressBarTip, onInstall, onScanQR }: Props = $props();
 
 	let userOS = $derived(pwaStore.userOS);
 </script>
@@ -47,6 +48,16 @@
 			<p class="text-xs text-muted-foreground">
 				You can now launch Open Love directly from your home screen or continue setting up right here.
 			</p>
+		</Card>
+	{:else if installing}
+		<!-- Awaiting `appinstalled` — the user accepted, but the WebAPK is still
+		     minting. Showing the success card here would be premature. -->
+		<Card class="p-4 sm:p-5 bg-card border-primary/30 shadow-md text-center space-y-2 rounded-2xl">
+			<div class="h-10 w-10 mx-auto rounded-full bg-primary/10 text-primary flex items-center justify-center">
+				<Loader2 class="h-5 w-5 animate-spin" />
+			</div>
+			<div class="text-sm font-bold text-foreground">Installing Open Love…</div>
+			<p class="text-xs text-muted-foreground">This only takes a moment.</p>
 		</Card>
 	{:else if userOS !== 'ios'}
 		<!-- 1-Click PWA Installation Callout (Chromium on Android / Desktop) -->

@@ -72,7 +72,27 @@
 
 	async function handleInstallPWA() {
 		const outcome = await pwaStore.promptInstall();
-		if (outcome === 'accepted') {
+		if (outcome === 'unavailable') {
+			showAddressBarTip = true;
+		}
+		// Accepting the native dialog only starts the install — `pwaStore.isInstalled`
+		// (driven by the real `appinstalled` event) is what flips `installSuccess`,
+		// via the $effect below, once the app has actually finished installing.
+	}
+
+	// Fires once, exactly when installation actually completes (not merely when the
+	// user accepts the prompt).
+	//
+	// There's no auto-navigate-into-the-app step here on purpose: a same-tab
+	// `location.href` change never creates an Android Intent, so it can't be
+	// picked up by the OS's app-link resolution the way a link tapped from
+	// another app can — it just reloads this same browser tab. No web API lets a
+	// page force-switch the user into a separately-running installed app (browsers
+	// intentionally don't allow a site to yank someone into another app context
+	// without an explicit tap), so the best available UX is what's already below:
+	// tell the user it's ready and let them open it themselves.
+	$effect(() => {
+		if (pwaStore.isInstalled && !installSuccess) {
 			installSuccess = true;
 			if (typeof window !== 'undefined') {
 				confetti({
@@ -81,10 +101,8 @@
 					origin: { y: 0.6 }
 				});
 			}
-		} else if (outcome === 'unavailable') {
-			showAddressBarTip = true;
 		}
-	}
+	});
 
 	async function nextStep() {
 		if (currentStepKey === 'names') {
@@ -191,6 +209,7 @@
 		{:else if currentStepKey === 'pwa_install'}
 			<PwaInstallStep
 				{installSuccess}
+				installing={pwaStore.isInstalling}
 				{showAddressBarTip}
 				onInstall={handleInstallPWA}
 				onScanQR={() => (isScanModalOpen = true)}

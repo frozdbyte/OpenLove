@@ -1,8 +1,25 @@
+import { goto } from '$app/navigation';
 import { isRunningAsPWA, getDeviceOS, type DeviceOS } from '$lib/utils/pwa';
 import {
 	isStoragePersisted as checkStoragePersisted,
 	requestPersistentStorage
 } from '$lib/utils/storage';
+
+// Desktop-only (Chrome/Edge on Windows/Mac/Linux/ChromeOS — no Android support):
+// with `launch_handler.client_mode: 'focus-existing'` in the manifest, opening an
+// in-scope link while the app is already running focuses that window instead of
+// spawning a new one, but the browser does NOT navigate it for us — without this
+// consumer the target URL is just discarded and the focused window stays put.
+interface LaunchParams {
+	targetURL?: string;
+}
+declare global {
+	interface Window {
+		launchQueue?: {
+			setConsumer(consumer: (params: LaunchParams) => void): void;
+		};
+	}
+}
 
 export interface BeforeInstallPromptEvent extends Event {
 	readonly platforms: string[];
@@ -22,12 +39,18 @@ declare global {
 class PWAStore {
 	isStandalone = $state(false);
 	canInstall = $state(false);
+	// True from the moment the user accepts the native prompt until `appinstalled`
+	// actually fires. On Android that gap is the WebAPK minting round-trip and can
+	// take a few seconds — `isInstalled` must not flip until the real event, or the
+	// UI ends up celebrating a "success" the OS hasn't delivered yet.
+	isInstalling = $state(false);
 	isInstalled = $state(false);
 	userOS = $state<DeviceOS>('desktop');
 	installOutcome = $state<'accepted' | 'dismissed' | null>(null);
 	isStoragePersisted = $state(false);
 	private deferredPrompt: BeforeInstallPromptEvent | null = null;
 	private initialized = false;
+	private installFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
 	init() {
 		if (typeof window === 'undefined' || this.initialized) return;
@@ -50,6 +73,11 @@ class PWAStore {
 		});
 
 		window.addEventListener('appinstalled', () => {
+			if (this.installFallbackTimer) {
+				clearTimeout(this.installFallbackTimer);
+				this.installFallbackTimer = null;
+			}
+			this.isInstalling = false;
 			this.isInstalled = true;
 			this.canInstall = false;
 			this.deferredPrompt = null;
@@ -58,6 +86,14 @@ class PWAStore {
 			// request made now is the most likely to be granted silently.
 			void this.ensurePersistentStorage();
 		});
+
+		if (window.launchQueue) {
+			window.launchQueue.setConsumer((launchParams) => {
+				if (!launchParams.targetURL) return;
+				const url = new URL(launchParams.targetURL);
+				void goto(url.pathname + url.search + url.hash);
+			});
+		}
 
 		// NOTE: the service worker is registered exactly once, from `+layout.svelte`
 		// via `virtual:pwa-register`. There used to be a hand-rolled
@@ -99,8 +135,17 @@ class PWAStore {
 			this.installOutcome = choice.outcome;
 
 			if (choice.outcome === 'accepted') {
-				this.isInstalled = true;
-				void this.ensurePersistentStorage();
+				// `userChoice` resolving 'accepted' only means the user tapped Install
+				// in the native dialog — the WebAPK isn't minted yet. `appinstalled`
+				// (listened for in init()) is the real completion signal. As a safety
+				// net in case that event never arrives, fall back to treating it as
+				// installed after a generous delay rather than stranding the UI.
+				this.isInstalling = true;
+				this.installFallbackTimer = setTimeout(() => {
+					this.isInstalling = false;
+					this.isInstalled = true;
+					this.installFallbackTimer = null;
+				}, 15000);
 			}
 
 			this.deferredPrompt = null;

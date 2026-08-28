@@ -1,6 +1,6 @@
 {
   "name": "openlove",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "dev:push": "node scripts/dev-push-cli.js",
     "build": "prisma generate && vite build && node scripts/verify-precache.js",
     "verify:precache": "node scripts/verify-precache.js",
+    "icons:maskable": "node scripts/make-maskable-icons.js",
     "preview": "vite preview",
     "start": "node --env-file-if-exists=.env build/index.js",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
@@ -56,6 +57,7 @@
     "@types/web-push": "^3.6.4",
     "@vite-pwa/sveltekit": "^0.6.2",
     "prisma": "^7.9.1",
+    "sharp": "^0.35.4",
     "svelte": "^5.20.5",
     "svelte-check": "^4.1.4",
     "typescript": "^5.7.3",

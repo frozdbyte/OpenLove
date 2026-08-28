@@ -35,30 +35,47 @@ export default defineConfig({
 				start_url: '/',
 				scope: '/',
 				display: 'standalone',
-				background_color: '#fff1f2',
+				// Static value: Android's WebAPK splash screen is drawn from this before any
+				// JS runs, so it can't react to prefers-color-scheme like the in-page
+				// <meta name="theme-color"> does. Kept dark so it doesn't flash bright
+				// white on dark-mode devices; matches the maskable icon background below.
+				background_color: '#151323',
 				theme_color: '#e11d48',
 				icons: [
 					{
+						purpose: 'any',
 						src: '/icon-192.png',
 						sizes: '192x192',
 						type: 'image/png'
 					},
 					{
+						purpose: 'any',
 						src: '/icon-512.png',
 						sizes: '512x512',
 						type: 'image/png'
 					},
+					// Separate from the `any` icons above: Android's adaptive icon mask
+					// crops aggressively, so these have the artwork padded into a safe
+					// zone on an opaque background (see scripts/make-maskable-icons.js).
+					// Reusing the full-bleed `any` icon here clips the heart and shows
+					// a black splash background on Android.
 					{
-						src: '/icon-512.png',
+						purpose: 'maskable',
+						src: '/icon-192-maskable.png',
+						sizes: '192x192',
+						type: 'image/png'
+					},
+					{
+						purpose: 'maskable',
+						src: '/icon-512-maskable.png',
 						sizes: '512x512',
-						type: 'image/png',
-						purpose: 'any maskable'
+						type: 'image/png'
 					}
 				],
+				handle_links: 'preferred',
 				launch_handler: {
 					client_mode: 'focus-existing'
-				},
-				handle_links: 'preferred'
+				}
 			},
 			injectManifest: {
 				// Workbox globs `.svelte-kit/output`, not `build/`. The prerendered SPA shell
