@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { cn } from "$lib/utils";
-	import { X } from "@lucide/svelte";
+	import { ArrowLeft, X } from "@lucide/svelte";
 	import type { Snippet } from "svelte";
 
 	interface Props {
@@ -10,6 +10,10 @@
 		class?: string;
 		children?: Snippet;
 		onclose?: () => void;
+		/** Optional back button rendered before the title. Omit to render the
+		 * header exactly as before — used by multi-view content (e.g. a
+		 * drill-down settings list) to navigate back without closing the modal. */
+		onBack?: () => void;
 	}
 
 	let {
@@ -18,7 +22,8 @@
 		description,
 		class: className = "",
 		children,
-		onclose
+		onclose,
+		onBack
 	}: Props = $props();
 
 	// Internal lifecycle state for 100% flicker-free transitions
@@ -172,13 +177,25 @@
 
 			<!-- Header -->
 			<div class="flex items-center justify-between pb-4 border-b border-border">
-				<div>
-					{#if title}
-						<h2 class="text-xl font-extrabold text-foreground tracking-tight pointer-events-none">{title}</h2>
+				<div class="flex items-center gap-2 min-w-0">
+					{#if onBack}
+						<button
+							type="button"
+							class="rounded-full p-2 -ml-2 shrink-0 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer touch-manipulation"
+							onclick={onBack}
+							aria-label="Back"
+						>
+							<ArrowLeft class="h-5 w-5" />
+						</button>
 					{/if}
-					{#if description}
-						<p class="text-xs text-muted-foreground mt-0.5 pointer-events-none">{description}</p>
-					{/if}
+					<div class="min-w-0">
+						{#if title}
+							<h2 class="text-xl font-extrabold text-foreground tracking-tight pointer-events-none truncate">{title}</h2>
+						{/if}
+						{#if description}
+							<p class="text-xs text-muted-foreground mt-0.5 pointer-events-none truncate">{description}</p>
+						{/if}
+					</div>
 				</div>
 				<button
 					type="button"

@@ -2,13 +2,14 @@
 	/**
 	 * On-device storage durability, JSON backup/restore/reset, and the app-version
 	 * footer. Extracted from `SettingsSheet.svelte` — see REFACTOR_PLAN.md, High H1.
-	 * Only ever mounted when `showAppWideSettings && !isNewBond`.
+	 * Only ever mounted when `showAppWideSettings && !isNewBond` and the user has
+	 * navigated into the "Data & Backup" section of the settings drawer.
 	 *
-	 * `open` is threaded through (rather than loading the storage estimate on
-	 * mount) because `Modal.svelte` keeps its children mounted through its own
-	 * ~260ms close animation and only tears them down after — passing `open`
-	 * preserves the original effect's exact re-fire-on-every-open semantics
-	 * instead of relying on remount timing.
+	 * `open` is threaded through (rather than loading the storage estimate purely
+	 * on mount) because `Modal.svelte` keeps its children mounted through its own
+	 * ~260ms close animation, during which `open` goes false before the actual
+	 * unmount — passing `open` (rather than mount timing alone) keeps the storage
+	 * estimate from being needlessly refetched during that closing window.
 	 */
 	import { profileStore } from '$lib/stores/profile.svelte';
 	import { pwaStore } from '$lib/stores/pwa.svelte';
