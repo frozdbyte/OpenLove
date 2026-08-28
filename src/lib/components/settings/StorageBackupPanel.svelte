@@ -129,9 +129,13 @@
 			<div class="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
 				<CloudOff class="h-3.5 w-3.5 shrink-0 mt-0.5" />
 				<span>
-					{pwaStore.isStandalone
-						? 'Storage is not marked as persistent yet.'
-						: 'In a browser tab, iOS can clear this data after ~7 days unused. Install Open Love to your Home Screen to keep it safe.'}
+					{#if pwaStore.isStandalone}
+						Storage is not marked as persistent yet.
+					{:else if pwaStore.userOS === 'ios'}
+						In a browser tab, iOS can clear this data after ~7 days unused. Install Open Love to your Home Screen to keep it safe.
+					{:else}
+						In a browser tab, your browser may clear this data if it's unused for a while. Install Open Love as an app to help keep it safe.
+					{/if}
 				</span>
 			</div>
 			<Button

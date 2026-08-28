@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { profileStore } from '$lib/stores/profile.svelte';
+	import { pwaStore } from '$lib/stores/pwa.svelte';
 	import type { UIThemeId, ColorMode, ColorPalette } from '$lib/types/profile';
 	import type { Bond, BondType, DaysMilestoneFilter } from '$lib/types/bonds';
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
@@ -41,12 +42,20 @@
 	type SettingsSection = 'identity' | 'appearance' | 'notifications' | 'milestones' | 'data';
 	let activeSection = $state<SettingsSection | null>(null);
 
-	const SECTION_META: Record<SettingsSection, { title: string; description: string; icon: typeof UserRound }> = {
+	const SECTION_META: Record<
+		SettingsSection,
+		{ title: string; description: string; icon: typeof UserRound; needsAttention?: () => boolean }
+	> = {
 		identity: { title: 'Identity', description: 'Names, date, and photo', icon: UserRound },
 		appearance: { title: 'Appearance', description: 'Theme, colors, and display', icon: Palette },
 		notifications: { title: 'Notifications', description: 'Device alerts and milestone preferences', icon: Bell },
 		milestones: { title: 'Milestones', description: 'Upcoming and custom milestones', icon: Flag },
-		data: { title: 'Data & Backup', description: 'Storage, backup, restore, and reset', icon: Database }
+		data: {
+			title: 'Data & Backup',
+			description: 'Storage, backup, restore, and reset',
+			icon: Database,
+			needsAttention: () => !pwaStore.isStoragePersisted
+		}
 	};
 	const SETTINGS_SECTIONS: SettingsSection[] = ['identity', 'appearance', 'notifications', 'milestones', 'data'];
 
@@ -83,10 +92,21 @@
 		isNewBond ? bondColorPalette : (currentBond.colorPalette ?? profileStore.state.colorPalette)
 	);
 
-	// Sync local form state when opening or switching target bond
+	// Reset to the root nav view every time the drawer freshly opens. Kept in
+	// its own effect (reading only `open`) rather than folded into the resync
+	// effect below — that one also reacts to live edits to `currentBond` (see
+	// its own fields read inside), so sharing one effect meant every setting
+	// change re-ran this reset too, bouncing the user back to the root list
+	// mid-edit.
 	$effect(() => {
 		if (open) {
 			activeSection = null;
+		}
+	});
+
+	// Sync local form state when opening or switching target bond
+	$effect(() => {
+		if (open) {
 			if (isNewBond) {
 				const active = profileStore.activeBond;
 				bondType = 'romantic';
@@ -276,14 +296,20 @@
 				{#each SETTINGS_SECTIONS as key (key)}
 					{@const meta = SECTION_META[key]}
 					{@const Icon = meta.icon}
+					{@const attention = meta.needsAttention?.() ?? false}
 					{#if key !== 'data' || showAppWideSettings}
 						<button
 							type="button"
 							class="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-border bg-card/70 hover:bg-accent/60 transition-colors text-left cursor-pointer"
 							onclick={() => (activeSection = key)}
 						>
-							<div class="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary">
-								<Icon class="h-4 w-4" />
+							<div class="relative h-9 w-9 shrink-0">
+								<div class="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+									<Icon class="h-4 w-4" />
+								</div>
+								{#if attention}
+									<div class="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-card"></div>
+								{/if}
 							</div>
 							<div class="min-w-0 flex-1">
 								<div class="text-sm font-semibold text-foreground">{meta.title}</div>
