@@ -3,7 +3,7 @@ import type { Bond, BondType, MilestoneCategoryPrefs, DaysMilestoneFilter, AppSt
 
 export type { Bond, BondType, MilestoneCategoryPrefs, DaysMilestoneFilter, AppState };
 
-export type UIThemeId = 'modern' | 'traditional' | 'cover';
+export type UIThemeId = 'modern' | 'traditional' | 'cover' | 'polaroid' | 'monograph' | 'botanical' | 'constellation';
 export type ColorMode = 'system' | 'light' | 'dark';
 export type ColorPalette = 'rose' | 'lavender' | 'terracotta' | 'sage' | 'midnight';
 

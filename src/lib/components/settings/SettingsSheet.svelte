@@ -380,6 +380,7 @@
 			<section>
 				<ThemeSelector
 					value={activeTheme}
+					allowExpand={true}
 					onchange={(theme) => {
 						bondUiTheme = theme;
 						if (!isNewBond) void profileStore.setUITheme(theme, currentBond.id);
