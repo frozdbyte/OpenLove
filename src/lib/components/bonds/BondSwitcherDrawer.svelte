@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { profileStore } from '$lib/stores/profile.svelte';
+	import { createKeyedPhotoRetryGuard } from '$lib/stores/photoRetryGuard.svelte';
 	import type { Bond } from '$lib/types/bonds';
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
 	import Button from '$lib/components/ui/button';
@@ -38,26 +39,10 @@
 		onclose?.();
 	}
 
-	// Guards each bond's photo against looping a retry against a genuinely
-	// corrupt Blob — see `profileStore.regeneratePhotoUrl`'s doc comment for why
-	// `<img>` can fail to load a `photoUrl` that looks valid, possibly more than
-	// once per session. Keyed per bond id since this list renders every bond in
-	// one component instance (not one per row); cleared on `onload` once the
-	// regenerated URL actually loads, not just when the Blob changes, so a
-	// later backgrounding cycle can trigger another retry.
-	let photoRegenAttempted = $state<Record<string, boolean>>({});
-
-	function handlePhotoError(bond: Bond) {
-		if (photoRegenAttempted[bond.id] || !bond.photoBlob) return;
-		photoRegenAttempted = { ...photoRegenAttempted, [bond.id]: true };
-		profileStore.regeneratePhotoUrl(bond.id);
-	}
-
-	function handlePhotoLoad(bond: Bond) {
-		if (!photoRegenAttempted[bond.id]) return;
-		const { [bond.id]: _, ...rest } = photoRegenAttempted;
-		photoRegenAttempted = rest;
-	}
+	// Keyed since this list renders every bond's photo in one component
+	// instance (not one per row) — see `createKeyedPhotoRetryGuard`'s doc
+	// comment.
+	const photoGuard = createKeyedPhotoRetryGuard();
 </script>
 
 <Modal
@@ -95,8 +80,8 @@
 										src={bond.photoUrl}
 										alt={bond.names}
 										class="h-full w-full object-cover"
-										onerror={() => handlePhotoError(bond)}
-										onload={() => handlePhotoLoad(bond)}
+										onerror={() => photoGuard.handleError(bond)}
+										onload={() => photoGuard.handleLoad(bond)}
 									/>
 								{:else if bond.type === 'friendship'}
 									<div class="h-full w-full bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400">

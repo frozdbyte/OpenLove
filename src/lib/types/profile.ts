@@ -43,6 +43,6 @@ export interface ThemeProps {
 	milestones: MilestoneItem[];
 	onOpenSettings: () => void;
 	onOpenShare: () => void;
-	onOpenSwitcher?: () => void;
+	onOpenSwitcher: () => void;
 }
 

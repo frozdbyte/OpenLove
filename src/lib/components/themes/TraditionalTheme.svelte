@@ -1,32 +1,15 @@
 <script lang="ts">
 	import type { ThemeProps } from '$lib/types/profile';
 	import { Settings, Heart, Share2, Sparkles, ChevronDown } from '@lucide/svelte';
-	import { profileStore } from '$lib/stores/profile.svelte';
 	import SyncStatusPill from '$lib/components/offline/SyncStatusPill.svelte';
+	import BondFallbackIcon from '$lib/components/themes/shared/BondFallbackIcon.svelte';
+	import { createPhotoRetryGuard } from '$lib/stores/photoRetryGuard.svelte';
 
 	let { profile, bond, timeBreakdown, onOpenSettings, onOpenShare, onOpenSwitcher }: ThemeProps = $props();
 
 	let isFriendship = $derived(bond?.type === 'friendship');
 
-	// See `profileStore.regeneratePhotoUrl`'s doc comment: an `<img>` can fail to
-	// load a `photoUrl` that looks valid after the app sits backgrounded a
-	// while, possibly more than once per session. `photoRegenAttempted` guards
-	// against looping against a genuinely corrupt Blob — it blocks retrying
-	// again until the regenerated URL actually loads (`handlePhotoLoad`), not
-	// just until the Blob itself changes (bond switch, new upload).
-	let photoRegenAttempted = $state(false);
-	$effect(() => {
-		bond?.photoBlob;
-		photoRegenAttempted = false;
-	});
-	function handlePhotoError() {
-		if (photoRegenAttempted || !bond?.photoBlob) return;
-		photoRegenAttempted = true;
-		profileStore.regeneratePhotoUrl(bond.id);
-	}
-	function handlePhotoLoad() {
-		photoRegenAttempted = false;
-	}
+	const photoGuard = createPhotoRetryGuard(() => bond?.id, () => bond?.photoBlob);
 </script>
 
 <div class="min-h-svh w-full flex flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-serif selection:bg-primary selection:text-primary-foreground">
@@ -73,19 +56,17 @@
 				src={profile.photoUrl}
 				alt={profile.names}
 				class="w-full h-full object-cover object-center"
-				onerror={handlePhotoError}
-				onload={handlePhotoLoad}
+				onerror={photoGuard.handleError}
+				onload={photoGuard.handleLoad}
 			/>
-		{:else if isFriendship}
-			<div class="w-full h-full bg-gradient-to-tr from-primary/30 via-accent to-primary/10 dark:from-zinc-900 dark:via-primary/20 dark:to-zinc-800 flex flex-col items-center justify-center text-primary">
-				<Sparkles class="h-20 w-20 opacity-40 animate-pulse" />
-				<span class="text-xs font-sans tracking-wider uppercase mt-2 opacity-60">Add friend photo in settings</span>
-			</div>
 		{:else}
-			<div class="w-full h-full bg-gradient-to-tr from-primary/30 via-accent to-primary/10 dark:from-zinc-900 dark:via-primary/20 dark:to-zinc-800 flex flex-col items-center justify-center text-primary">
-				<Heart class="h-20 w-20 fill-current opacity-30 animate-pulse" />
-				<span class="text-xs font-sans tracking-wider uppercase mt-2 opacity-60">Add couple photo in settings</span>
-			</div>
+			<BondFallbackIcon
+				{isFriendship}
+				containerClass="bg-gradient-to-tr from-primary/30 via-accent to-primary/10 dark:from-zinc-900 dark:via-primary/20 dark:to-zinc-800"
+				iconClass={isFriendship ? 'h-20 w-20 opacity-40 animate-pulse' : 'h-20 w-20 fill-current opacity-30 animate-pulse'}
+				caption={isFriendship ? 'Add friend photo in settings' : 'Add couple photo in settings'}
+				captionClass="text-xs font-sans tracking-wider uppercase mt-2 opacity-60"
+			/>
 		{/if}
 
 		<!-- Translucent Date Banner Overlay -->

@@ -1,36 +1,19 @@
 <script lang="ts">
 	import type { ThemeProps } from '$lib/types/profile';
 	import { Heart, Settings, Share2, Sparkles, ChevronDown } from '@lucide/svelte';
-	import { profileStore } from '$lib/stores/profile.svelte';
 	import SyncStatusPill from '$lib/components/offline/SyncStatusPill.svelte';
 	import ThemeIconButton from '$lib/components/themes/shared/ThemeIconButton.svelte';
 	import HeroCounterCard from '$lib/components/themes/shared/HeroCounterCard.svelte';
 	import StatBreakdownGrid from '$lib/components/themes/shared/StatBreakdownGrid.svelte';
 	import NextMilestoneCard from '$lib/components/themes/shared/NextMilestoneCard.svelte';
+	import BondFallbackIcon from '$lib/components/themes/shared/BondFallbackIcon.svelte';
+	import { createPhotoRetryGuard } from '$lib/stores/photoRetryGuard.svelte';
 
 	let { profile, bond, timeBreakdown, nextMilestone, onOpenSettings, onOpenShare, onOpenSwitcher }: ThemeProps = $props();
 
 	let isFriendship = $derived(bond?.type === 'friendship');
 
-	// See `profileStore.regeneratePhotoUrl`'s doc comment: an `<img>` can fail to
-	// load a `photoUrl` that looks valid after the app sits backgrounded a
-	// while, possibly more than once per session. `photoRegenAttempted` guards
-	// against looping against a genuinely corrupt Blob — it blocks retrying
-	// again until the regenerated URL actually loads (`handlePhotoLoad`), not
-	// just until the Blob itself changes (bond switch, new upload).
-	let photoRegenAttempted = $state(false);
-	$effect(() => {
-		bond?.photoBlob;
-		photoRegenAttempted = false;
-	});
-	function handlePhotoError() {
-		if (photoRegenAttempted || !bond?.photoBlob) return;
-		photoRegenAttempted = true;
-		profileStore.regeneratePhotoUrl(bond.id);
-	}
-	function handlePhotoLoad() {
-		photoRegenAttempted = false;
-	}
+	const photoGuard = createPhotoRetryGuard(() => bond?.id, () => bond?.photoBlob);
 </script>
 
 <div class="relative min-h-svh w-full max-w-md mx-auto px-4 py-6 flex flex-col justify-between pb-12">
@@ -80,17 +63,17 @@
 							src={profile.photoUrl}
 							alt={profile.names}
 							class="h-full w-full object-cover"
-							onerror={handlePhotoError}
-							onload={handlePhotoLoad}
+							onerror={photoGuard.handleError}
+							onload={photoGuard.handleLoad}
 						/>
-					{:else if isFriendship}
-						<div class="h-full w-full bg-gradient-to-br from-emerald-100 to-teal-200 dark:from-emerald-950/60 dark:to-zinc-900 flex items-center justify-center text-primary">
-							<Sparkles class="h-12 w-12" />
-						</div>
 					{:else}
-						<div class="h-full w-full bg-gradient-to-br from-rose-100 to-rose-200 dark:from-rose-950/60 dark:to-zinc-900 flex items-center justify-center text-primary">
-							<Heart class="h-12 w-12 fill-primary/30 stroke-primary animate-heartbeat" />
-						</div>
+						<BondFallbackIcon
+							{isFriendship}
+							containerClass={isFriendship
+								? 'bg-gradient-to-br from-emerald-100 to-teal-200 dark:from-emerald-950/60 dark:to-zinc-900'
+								: 'bg-gradient-to-br from-rose-100 to-rose-200 dark:from-rose-950/60 dark:to-zinc-900'}
+							iconClass={isFriendship ? 'h-12 w-12' : 'h-12 w-12 fill-primary/30 stroke-primary animate-heartbeat'}
+						/>
 					{/if}
 				</div>
 

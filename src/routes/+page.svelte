@@ -203,7 +203,7 @@
 {#if profileStore.isLoading}
 	<!-- Splash / Loading screen -->
 	<div class="min-h-screen flex flex-col items-center justify-center space-y-4">
-		<div class="h-16 w-16 rounded-full bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center text-primary animate-heartbeat shadow-lg">
+		<div class="h-16 w-16 rounded-full bg-primary/20 flex items-center justify-center text-primary animate-heartbeat shadow-lg">
 			<Heart class="h-8 w-8 fill-primary" />
 		</div>
 		<p class="text-sm font-medium text-muted-foreground animate-pulse">Loading your memories...</p>

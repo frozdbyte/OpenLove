@@ -12,7 +12,7 @@
 	 * `handleCreateNewBond`.
 	 */
 	import type { Bond, BondType } from '$lib/types/bonds';
-	import { profileStore } from '$lib/stores/profile.svelte';
+	import { createPhotoRetryGuard } from '$lib/stores/photoRetryGuard.svelte';
 	import Input from '$lib/components/ui/input';
 	import Button from '$lib/components/ui/button';
 	import BondTypeSelector from '$lib/components/shared/BondTypeSelector.svelte';
@@ -50,26 +50,17 @@
 
 	let displayedPhotoUrl = $derived(isNewBond ? bondPhotoUrl : currentBond.photoUrl);
 
-	// See `profileStore.regeneratePhotoUrl`'s doc comment: an `<img>` can fail to
-	// load a `photoUrl` that looks valid after the app sits backgrounded a
-	// while, possibly more than once per session. Only applies to an existing
-	// bond's persisted photo — a new bond's draft preview URL is created fresh
-	// moments earlier and isn't backed by a store entry to regenerate from.
-	// `photoRegenAttempted` guards against looping against a genuinely corrupt
-	// Blob — it blocks retrying again until the regenerated URL actually loads
-	// (`handlePhotoLoad`), not just until the Blob itself changes.
-	let photoRegenAttempted = $state(false);
-	$effect(() => {
-		currentBond.photoBlob;
-		photoRegenAttempted = false;
-	});
+	// Only applies to an existing bond's persisted photo — a new bond's draft
+	// preview URL is created fresh moments earlier and isn't backed by a store
+	// entry to regenerate from (see `createPhotoRetryGuard`'s doc comment).
+	const photoGuard = createPhotoRetryGuard(() => currentBond.id, () => currentBond.photoBlob);
 	function handlePhotoError() {
-		if (isNewBond || photoRegenAttempted || !currentBond.photoBlob) return;
-		photoRegenAttempted = true;
-		profileStore.regeneratePhotoUrl(currentBond.id);
+		if (isNewBond) return;
+		photoGuard.handleError();
 	}
 	function handlePhotoLoad() {
-		photoRegenAttempted = false;
+		if (isNewBond) return;
+		photoGuard.handleLoad();
 	}
 </script>
 
