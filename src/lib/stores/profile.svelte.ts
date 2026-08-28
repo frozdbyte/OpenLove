@@ -483,6 +483,13 @@ class ProfileStore {
 	 * which surfaces as an `<img>` failing to load a `photoUrl` that looks
 	 * perfectly valid. Since the `Blob` itself is untouched, this is a one-line
 	 * self-heal — see the `onerror` handlers next to every `<img src={...photoUrl}>`.
+	 *
+	 * Callers guard each retry with a per-image flag to avoid looping forever
+	 * against a genuinely corrupt Blob, but must clear that flag on the
+	 * resulting `<img>`'s `onload` (not just when the Blob itself changes) —
+	 * the app can be backgrounded and evicted repeatedly within one session,
+	 * and each occurrence needs its own retry once the previous one has
+	 * proven the Blob is still good.
 	 */
 	regeneratePhotoUrl(bondId: string) {
 		const bond = this.state.bonds.find((b) => b.id === bondId);

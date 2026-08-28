@@ -52,9 +52,12 @@
 
 	// See `profileStore.regeneratePhotoUrl`'s doc comment: an `<img>` can fail to
 	// load a `photoUrl` that looks valid after the app sits backgrounded a
-	// while. Only applies to an existing bond's persisted photo — a new bond's
-	// draft preview URL is created fresh moments earlier and isn't backed by a
-	// store entry to regenerate from. One retry per distinct Blob.
+	// while, possibly more than once per session. Only applies to an existing
+	// bond's persisted photo — a new bond's draft preview URL is created fresh
+	// moments earlier and isn't backed by a store entry to regenerate from.
+	// `photoRegenAttempted` guards against looping against a genuinely corrupt
+	// Blob — it blocks retrying again until the regenerated URL actually loads
+	// (`handlePhotoLoad`), not just until the Blob itself changes.
 	let photoRegenAttempted = $state(false);
 	$effect(() => {
 		currentBond.photoBlob;
@@ -64,6 +67,9 @@
 		if (isNewBond || photoRegenAttempted || !currentBond.photoBlob) return;
 		photoRegenAttempted = true;
 		profileStore.regeneratePhotoUrl(currentBond.id);
+	}
+	function handlePhotoLoad() {
+		photoRegenAttempted = false;
 	}
 </script>
 
@@ -107,7 +113,7 @@
 	<div class="flex items-center gap-4">
 		<div class="h-16 w-16 rounded-2xl overflow-hidden bg-muted border border-border flex items-center justify-center shrink-0">
 			{#if displayedPhotoUrl}
-				<img src={displayedPhotoUrl} alt="Bond" class="h-full w-full object-cover" onerror={handlePhotoError} />
+				<img src={displayedPhotoUrl} alt="Bond" class="h-full w-full object-cover" onerror={handlePhotoError} onload={handlePhotoLoad} />
 			{:else if bondType === 'friendship'}
 				<Sparkles class="h-6 w-6 text-muted-foreground" />
 			{:else}
