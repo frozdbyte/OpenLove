@@ -179,7 +179,7 @@
 		<!-- QR Code -->
 		<div class="p-3 bg-white rounded-3xl shadow-md border border-border flex items-center justify-center">
 			{#if qrDataUrl}
-				<img src={qrDataUrl} alt="Partner QR Code" class="w-48 h-48" />
+				<img src={qrDataUrl} alt="Invite QR Code" class="w-48 h-48" />
 			{:else}
 				<div class="w-48 h-48 flex items-center justify-center text-muted-foreground">
 					<QrCode class="h-12 w-12 animate-pulse" />

@@ -64,7 +64,7 @@
 			onclick={onScanQR}
 		>
 			<QrCode class="h-3.5 w-3.5" />
-			<span>Sync with Partner / Scan QR Code</span>
+			<span>Have an Invite?</span>
 		</button>
 	</div>
 </div>

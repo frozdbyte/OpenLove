@@ -68,7 +68,7 @@
 
 	<div class="space-y-1">
 		<h1 class="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">Welcome to Open Love</h1>
-		<p class="text-xs sm:text-sm text-muted-foreground">A private, romantic space to celebrate your journey</p>
+		<p class="text-xs sm:text-sm text-muted-foreground">A private space to celebrate your journey — built for romance, and great for friendships too.</p>
 	</div>
 
 	<!-- Feature Highlights with Privacy Emphasis -->
@@ -103,7 +103,7 @@
 			</div>
 		</Card>
 
-		<!-- Feature 3: Offline PWA & Partner Sync -->
+		<!-- Feature 3: Offline PWA & Bond Sync -->
 		<Card class="p-3 sm:p-3.5 bg-card border-border shadow-xs flex items-start gap-3 rounded-2xl">
 			<div class="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
 				<Sparkles class="h-4 w-4 sm:h-5 sm:w-5" />
@@ -113,7 +113,7 @@
 					Themes & Private Sync
 				</div>
 				<p class="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
-					Works offline, supports Modern & Classic themes, and syncs seamlessly with your partner via private QR code.
+					Works offline, supports Modern & Classic themes, and syncs seamlessly with a partner or friend via private QR code.
 				</p>
 			</div>
 		</Card>
@@ -126,7 +126,7 @@
 			onclick={onScanQR}
 		>
 			<QrCode class="h-3.5 w-3.5" />
-			<span>Have an invite? Scan Partner QR</span>
+			<span>Have an Invite?</span>
 		</button>
 
 		<input

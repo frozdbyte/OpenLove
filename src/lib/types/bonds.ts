@@ -37,6 +37,9 @@ export interface AppState {
 	isConfigured: boolean;
 	pushSubscribed: boolean;
 	pushIntent: boolean;
+	/** Whether the post-onboarding "Enable Notifications?" prompt has already
+	 * been shown (accepted or dismissed) — shown at most once. */
+	notificationsPromptShown: boolean;
 }
 
 export const DEFAULT_MILESTONE_PREFS_ROMANTIC: MilestoneCategoryPrefs = {

@@ -41,7 +41,8 @@ export const DEFAULT_APP_STATE: AppState = {
 	showSeconds: true,
 	isConfigured: false,
 	pushSubscribed: false,
-	pushIntent: false
+	pushIntent: false,
+	notificationsPromptShown: false
 };
 
 export const DEFAULT_PROFILE: CoupleProfile = {
@@ -155,7 +156,8 @@ export async function loadAppStateFromStorage(): Promise<AppState> {
 				showSeconds: legacyProfile.showSeconds ?? true,
 				isConfigured: legacyProfile.isConfigured ?? false,
 				pushSubscribed: legacyProfile.pushSubscribed ?? false,
-				pushIntent: legacyProfile.pushIntent ?? false
+				pushIntent: legacyProfile.pushIntent ?? false,
+				notificationsPromptShown: false
 			};
 
 			// Persist migrated V2 state

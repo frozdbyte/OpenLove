@@ -9,6 +9,8 @@
 	import BondSwitcherDrawer from '$lib/components/bonds/BondSwitcherDrawer.svelte';
 	import BondPhotoPreloader from '$lib/components/bonds/BondPhotoPreloader.svelte';
 	import OnboardingFlow from '$lib/components/onboarding/OnboardingFlow.svelte';
+	import EnableNotificationsPrompt from '$lib/components/onboarding/EnableNotificationsPrompt.svelte';
+	import { isPushSupported } from '$lib/push/client';
 	import type { Bond } from '$lib/types/bonds';
 	import { Heart } from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
@@ -18,6 +20,7 @@
 	let isShareOpen = $state(false);
 	let isInviteModalOpen = $state(false);
 	let isSwitcherOpen = $state(false);
+	let isNotificationsPromptOpen = $state(false);
 	let pendingIncomingBond = $state<Partial<Bond> | null>(null);
 	let pendingInviteJson = $state('');
 	let pendingInviteRaw = $state('');
@@ -32,6 +35,27 @@
 		}, 1000);
 
 		return () => clearInterval(interval);
+	});
+
+	// One-time "Enable Notifications?" prompt: only ever flips `open` from
+	// false to true (never back), and once `notificationsPromptShown` is set
+	// the condition can never be true again — no reset-loop risk since
+	// nothing else shares this effect. Delayed a few seconds so the user sees
+	// their finished setup first, rather than being prompted the instant
+	// onboarding ends.
+	$effect(() => {
+		if (
+			profileStore.state.isConfigured &&
+			!profileStore.state.pushSubscribed &&
+			!profileStore.state.pushIntent &&
+			!profileStore.state.notificationsPromptShown &&
+			isPushSupported()
+		) {
+			const timer = setTimeout(() => {
+				isNotificationsPromptOpen = true;
+			}, 3000);
+			return () => clearTimeout(timer);
+		}
 	});
 
 	// Handle URL query parameter `?bond=id` and Service Worker switch messages
@@ -261,4 +285,6 @@
 		isInviteModalOpen = false;
 	}}
 />
+
+<EnableNotificationsPrompt bind:open={isNotificationsPromptOpen} />
 

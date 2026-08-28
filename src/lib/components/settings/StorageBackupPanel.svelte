@@ -160,7 +160,7 @@
 <section class="pt-2 border-t border-border space-y-2">
 	<Button variant="outline" class="w-full" onclick={onScanQR}>
 		<QrCode class="h-4 w-4 mr-1.5" />
-		<span>Sync with Partner / Scan QR</span>
+		<span>Sync a Bond / Scan QR</span>
 	</Button>
 
 	<input

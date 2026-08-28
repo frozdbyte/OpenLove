@@ -267,7 +267,7 @@
 </script>
 
 
-<Modal bind:open title="Sync with Partner" description="Scan partner QR code or paste share link" onclose={handleClose}>
+<Modal bind:open title="Sync a Bond" description="Scan a QR code or paste a share link" onclose={handleClose}>
 	<div class="space-y-4">
 		<!-- Tab Switcher -->
 		<div class="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-muted/60 border border-border">
@@ -356,8 +356,8 @@
 						id="sync-code-input"
 						rows="3"
 						bind:value={pasteInput}
-						placeholder="Paste partner's share link (https://...) or sync code here"
-						class="w-full rounded-2xl border border-border bg-card text-foreground p-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary shadow-inner"
+						placeholder="Paste a share link (https://...) or sync code here"
+						class="w-full rounded-2xl border border-border bg-card text-foreground p-3 text-base sm:text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary shadow-inner"
 					></textarea>
 				</div>
 

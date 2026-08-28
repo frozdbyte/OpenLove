@@ -8,7 +8,22 @@
 	import { pwaStore } from '$lib/stores/pwa.svelte';
 	import { profileStore } from '$lib/stores/profile.svelte';
 	import type { Bond } from '$lib/types/bonds';
+	import type { ColorPalette } from '$lib/types/profile';
 	import { calculateTimeBreakdown } from '$lib/utils/time';
+
+	/** The sender's own accent color choice, carried through on `incomingBond`
+	 * (`normalizeIncomingBond()` in `profile.svelte.ts` already resolves it) —
+	 * styles this preview in *their* palette rather than the viewer's own
+	 * active theme. Literal class strings, not template-interpolated, so
+	 * Tailwind's scanner can see them — same map `JsonImportPreviewDrawer.svelte`
+	 * already uses for the same reason. */
+	const PALETTE_COLORS: Record<ColorPalette, { text: string; border: string; bg: string; solid: string }> = {
+		rose: { text: 'text-rose-500', border: 'border-rose-500/25', bg: 'bg-rose-500/10', solid: 'bg-rose-500 hover:bg-rose-500/90' },
+		lavender: { text: 'text-purple-500', border: 'border-purple-500/25', bg: 'bg-purple-500/10', solid: 'bg-purple-500 hover:bg-purple-500/90' },
+		terracotta: { text: 'text-orange-600', border: 'border-orange-600/25', bg: 'bg-orange-600/10', solid: 'bg-orange-600 hover:bg-orange-600/90' },
+		sage: { text: 'text-emerald-600', border: 'border-emerald-600/25', bg: 'bg-emerald-600/10', solid: 'bg-emerald-600 hover:bg-emerald-600/90' },
+		midnight: { text: 'text-blue-600', border: 'border-blue-600/25', bg: 'bg-blue-600/10', solid: 'bg-blue-600 hover:bg-blue-600/90' }
+	};
 
 	interface Props {
 		open?: boolean;
@@ -35,6 +50,7 @@
 	let effectiveType = $derived(incomingBond?.type || 'romantic');
 	let effectiveDate = $derived(incomingBond?.togetherSince || new Date().toISOString().split('T')[0]);
 	let timeBreakdown = $derived(calculateTimeBreakdown(effectiveDate));
+	let colors = $derived(PALETTE_COLORS[incomingBond?.colorPalette ?? 'rose']);
 
 	let isUnconfigured = $derived(!profileStore.state.isConfigured);
 	let isSingleBond = $derived(profileStore.state.isConfigured && profileStore.state.bonds.length === 1);
@@ -70,22 +86,24 @@
 <Modal
 	bind:open
 	title={isUnconfigured
-		? 'Partner Invite Received! ❤️'
+		? `${effectiveType === 'friendship' ? 'Friendship' : 'Relationship'} Invite Received! ${effectiveType === 'friendship' ? '🌿' : '❤️'}`
 		: `Received ${effectiveType === 'friendship' ? 'Friendship' : 'Relationship'} Invite`}
 	description={isUnconfigured
-		? `Relationship counter for ${effectiveNames}`
+		? `${effectiveType === 'friendship' ? 'Friendship' : 'Relationship'} counter for ${effectiveNames}`
 		: `Review and add this profile to your Open Love app`}
 	{onclose}
 >
 	<div class="space-y-4 text-left">
 		<!-- Incoming Bond Preview Card -->
-		<div class="p-4 rounded-2xl bg-primary/10 border border-primary/25 text-foreground space-y-3">
+		<div class="p-4 rounded-2xl {colors.bg} border {colors.border} text-foreground space-y-3">
 			<div class="flex items-center gap-3">
-				<div class="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center text-primary shrink-0">
-					{#if effectiveType === 'friendship'}
-						<Sparkles class="h-6 w-6 text-emerald-500 fill-emerald-500/20" />
+				<div class="h-12 w-12 rounded-full overflow-hidden {colors.bg} flex items-center justify-center {colors.text} shrink-0">
+					{#if incomingBond?.photoUrl}
+						<img src={incomingBond.photoUrl} alt={effectiveNames} class="h-full w-full object-cover" />
+					{:else if effectiveType === 'friendship'}
+						<Sparkles class="h-6 w-6 {colors.text} fill-current" />
 					{:else}
-						<Heart class="h-6 w-6 fill-primary" />
+						<Heart class="h-6 w-6 fill-current" />
 					{/if}
 				</div>
 				<div class="min-w-0 flex-1">
@@ -96,15 +114,15 @@
 						</Badge>
 					</div>
 					<div class="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-						<Calendar class="h-3.5 w-3.5 shrink-0 text-primary" />
+						<Calendar class="h-3.5 w-3.5 shrink-0 {colors.text}" />
 						<span>{effectiveType === 'friendship' ? 'Friends since' : 'Together since'} {effectiveDate}</span>
 					</div>
 				</div>
 			</div>
 
-			<div class="pt-2 border-t border-primary/20 flex items-center justify-between text-xs text-foreground font-medium">
+			<div class="pt-2 {colors.border} border-t flex items-center justify-between text-xs text-foreground font-medium">
 				<span>Journey Duration:</span>
-				<span class="font-bold text-primary">{timeBreakdown.totalDays.toLocaleString()} days</span>
+				<span class="font-bold {colors.text}">{timeBreakdown.totalDays.toLocaleString()} days</span>
 			</div>
 		</div>
 
@@ -138,7 +156,7 @@
 					<span>Option B: Already have the app installed?</span>
 				</div>
 				<p class="text-xs text-muted-foreground leading-snug">
-					Copy your sync code, open Open Love on your home screen, and tap <strong class="text-foreground">"Sync with Partner"</strong>.
+					Copy your sync code, open Open Love on your home screen, and tap <strong class="text-foreground">"Sync a Bond"</strong>.
 				</p>
 				<Button variant="outline" size="sm" class="w-full text-xs" onclick={copyCode}>
 					{#if copied}
@@ -153,7 +171,7 @@
 
 			<!-- Choice 3: Continue in browser -->
 			<div class="pt-1">
-				<Button class="w-full h-11 text-sm font-semibold" onclick={() => handleConfirm('replace')}>
+				<Button class="w-full h-11 text-sm font-semibold {colors.solid}" onclick={() => handleConfirm('replace')}>
 					<Sparkles class="h-4 w-4 mr-1.5" />
 					<span>Continue in Browser</span>
 				</Button>
@@ -165,7 +183,7 @@
 					You currently have <strong class="text-foreground font-semibold">{currentActiveBond.names}</strong> configured. What would you like to do?
 				</p>
 
-				<Button class="w-full h-11 text-sm font-bold" onclick={() => handleConfirm('add')}>
+				<Button class="w-full h-11 text-sm font-bold {colors.solid}" onclick={() => handleConfirm('add')}>
 					<Plus class="h-4 w-4 mr-1.5" />
 					<span>Add as New {effectiveType === 'friendship' ? 'Friendship' : 'Relationship'}</span>
 				</Button>
@@ -186,7 +204,7 @@
 					Add <strong class="text-foreground font-semibold">{effectiveNames}</strong> to your tracked relationships and friendships ({profileStore.state.bonds.length} currently active).
 				</p>
 
-				<Button class="w-full h-11 text-sm font-bold" onclick={() => handleConfirm('add')}>
+				<Button class="w-full h-11 text-sm font-bold {colors.solid}" onclick={() => handleConfirm('add')}>
 					<Plus class="h-4 w-4 mr-1.5" />
 					<span>Add to My Bonds ({profileStore.state.bonds.length + 1})</span>
 				</Button>

@@ -428,6 +428,16 @@ class ProfileStore {
 	}
 
 	/**
+	 * Marks the post-onboarding "Enable Notifications?" prompt as shown, so it
+	 * never shows again — called regardless of whether the user accepted or
+	 * declined.
+	 */
+	async markNotificationsPromptShown() {
+		this.state.notificationsPromptShown = true;
+		await saveAppStateToStorage(this.state);
+	}
+
+	/**
 	 * Set or replace photo for a bond (defaults to active bond).
 	 */
 	async setPhoto(blob: Blob | null, targetBondId?: string) {
@@ -683,7 +693,8 @@ class ProfileStore {
 					showSeconds: data.showSeconds ?? true,
 					isConfigured: true,
 					pushSubscribed: this.state.pushSubscribed,
-					pushIntent: this.state.pushIntent
+					pushIntent: this.state.pushIntent,
+					notificationsPromptShown: this.state.notificationsPromptShown
 				};
 				this.applyThemeAndDarkMode();
 				await saveAppStateToStorage(this.state);
