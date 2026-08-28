@@ -7,6 +7,7 @@
 	import ShareModal from '$lib/components/share/ShareModal.svelte';
 	import PartnerInviteModal from '$lib/components/share/PartnerInviteModal.svelte';
 	import BondSwitcherDrawer from '$lib/components/bonds/BondSwitcherDrawer.svelte';
+	import BondPhotoPreloader from '$lib/components/bonds/BondPhotoPreloader.svelte';
 	import OnboardingFlow from '$lib/components/onboarding/OnboardingFlow.svelte';
 	import type { Bond } from '$lib/types/bonds';
 	import { Heart } from '@lucide/svelte';
@@ -247,6 +248,8 @@
 	bind:open={isSwitcherOpen}
 	onclose={() => (isSwitcherOpen = false)}
 />
+
+<BondPhotoPreloader />
 
 <PartnerInviteModal
 	bind:open={isInviteModalOpen}

@@ -484,11 +484,25 @@ class ProfileStore {
 	 * perfectly valid. Since the `Blob` itself is untouched, this is a one-line
 	 * self-heal — see `createPhotoRetryGuard`/`createKeyedPhotoRetryGuard` in
 	 * `./photoRetryGuard.svelte.ts`, which every `<img src={...photoUrl}>` in
-	 * the app wires up via `onerror`/`onload`.
+	 * the app wires up via `onerror`/`onload`, including the always-mounted
+	 * hidden preloader in `BondPhotoPreloader.svelte` that exists specifically
+	 * so every bond gets this treatment, not just whichever one is on screen.
+	 *
+	 * Only called after that bond's own `<img>` has already fired `onerror`,
+	 * so the old URL is known-dead — safe to revoke here rather than proactively
+	 * (a global "revoke + recreate every bond's URL on foreground" sweep was
+	 * tried and made things worse: revoking a URL an `<img>` is *currently*
+	 * relying on races against the browser's own foreground repaint and can
+	 * break an image that was still fine).
 	 */
 	regeneratePhotoUrl(bondId: string) {
 		const bond = this.state.bonds.find((b) => b.id === bondId);
 		if (!bond?.photoBlob || typeof URL === 'undefined') return;
+		if (bond.photoUrl?.startsWith('blob:')) {
+			try {
+				URL.revokeObjectURL(bond.photoUrl);
+			} catch {}
+		}
 		const url = URL.createObjectURL(bond.photoBlob);
 		this.state.bonds = this.state.bonds.map((b) => (b.id === bondId ? { ...b, photoUrl: url } : b));
 	}
