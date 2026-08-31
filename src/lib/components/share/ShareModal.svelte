@@ -66,6 +66,17 @@
 			uploadingPhoto = false;
 			photoUploadFailed = false;
 			sharedImageRef = null;
+
+			// `Modal` fully unmounts its children ~260ms after closing (including
+			// `qrContainer`), but this component instance itself stays alive — so
+			// without this reset, `qrCode`/`qrAppended` would still point at that
+			// now-destroyed container on reopen, `generateQR()` would take the
+			// `.update()` branch and render into a detached element nobody can see,
+			// and the freshly-mounted container would stay empty (and, since
+			// `qrReady` was also still `true`, at full opacity — an empty white box).
+			qrCode = null;
+			qrAppended = false;
+			qrReady = false;
 		}
 	});
 
@@ -123,7 +134,7 @@
 				cornersDotOptions: { type: 'dot' as const, color },
 				backgroundOptions: { color: '#ffffff' },
 				image,
-				imageOptions: { hideBackgroundDots: true, imageSize: 0.4, margin: 6 }
+				imageOptions: { hideBackgroundDots: true, imageSize: 0.2, margin: 6 }
 			};
 
 			if (!qrCode) {
