@@ -51,7 +51,7 @@
 		notifications: { title: 'Notifications', description: 'Device alerts and milestone preferences', icon: Bell },
 		milestones: { title: 'Milestones', description: 'Upcoming and custom milestones', icon: Flag },
 		data: {
-			title: 'Data & Backup',
+			title: 'System & Storage',
 			description: 'Storage, backup, restore, and reset',
 			icon: Database,
 			needsAttention: () => !pwaStore.isStoragePersisted
