@@ -12,6 +12,7 @@ import {
 import type {
 	FlushResult,
 	SyncBondItem,
+	SyncFailureReason,
 	SyncKeys,
 	SyncOp,
 	SyncResponse,
@@ -25,6 +26,10 @@ import type {
 
 export const SYNC_ENDPOINT = '/api/push/sync';
 export const SYNC_TAG = 'openlove-sync';
+
+/** A hung request (e.g. a proxy/tunnel black-holing it) must fail promptly, not
+ *  hang for whatever the platform's own default timeout happens to be. */
+const FETCH_TIMEOUT_MS = 10_000;
 
 const NO_OP: FlushResult = { flushed: 0, failed: 0, dropped: 0, skipped: true };
 
@@ -88,10 +93,11 @@ export function resolveTimezone(): string {
 /**
  * Deliver everything in the outbox in a single request.
  *
- * `navigator.onLine` is deliberately not consulted — it reports `true` behind
- * captive portals. The authoritative signal is whether the fetch succeeded, and
- * because every op is idempotent server-side we can just try and let failures
- * re-queue.
+ * `navigator.onLine` is not consulted for the retry/backoff decision — it reports
+ * `true` behind captive portals. The authoritative signal there is whether the
+ * fetch succeeded, and because every op is idempotent server-side we can just try
+ * and let failures re-queue. It's only read afterwards, as a tiebreaker to label
+ * *why* a failure happened ('client-offline' vs 'server-unreachable') for the UI.
  */
 export async function flushOutbox(opts: { force?: boolean } = {}): Promise<FlushResult> {
 	if (inFlight) return inFlight;
@@ -115,21 +121,30 @@ export async function flushOutbox(opts: { force?: boolean } = {}): Promise<Flush
 
 		let response: Response;
 		try {
+			const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
 			response = await fetch(SYNC_ENDPOINT, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ ops: ops.map(stripLocalFields) })
+				body: JSON.stringify({ ops: ops.map(stripLocalFields) }),
+				signal: timeout
 			});
 		} catch {
-			// Offline, DNS failure, captive portal. Keep everything and back off.
-			return await failAll(ops);
+			// Thrown fetch: offline, DNS failure, captive portal, timed-out request, or a
+			// reachable-but-non-responding server (e.g. a tunnel pointed at nothing). If
+			// the browser itself reports no connection, that is the more useful label;
+			// otherwise the link is up but *this* server didn't answer.
+			const reason: SyncFailureReason =
+				typeof navigator !== 'undefined' && navigator.onLine === false
+					? 'client-offline'
+					: 'server-unreachable';
+			return await failAll(ops, reason);
 		}
 
 		if (!response.ok) {
 			const retryable =
 				response.status >= 500 || response.status === 408 || response.status === 429;
 			if (retryable) {
-				return await failAll(ops);
+				return await failAll(ops, 'server-unreachable');
 			}
 			// Any other 4xx means this payload will never be accepted. Dropping it is
 			// better than retrying forever; the next real mutation re-queues a fresh op.
@@ -152,7 +167,7 @@ export async function flushOutbox(opts: { force?: boolean } = {}): Promise<Flush
 		try {
 			body = await response.json();
 		} catch {
-			return await failAll(ops);
+			return await failAll(ops, 'server-unreachable');
 		}
 
 		const statusByOpId = new Map((body.results ?? []).map((r) => [r.opId, r]));
@@ -193,7 +208,8 @@ export async function flushOutbox(opts: { force?: boolean } = {}): Promise<Flush
 			flushed,
 			failed: remaining.length,
 			dropped,
-			skipped: false
+			skipped: false,
+			...(remaining.length > 0 ? { reason: 'server-unreachable' as const } : {})
 		};
 		await emit(result);
 		return result;
@@ -211,7 +227,7 @@ async function noop(): Promise<FlushResult> {
 	return NO_OP;
 }
 
-async function failAll(ops: SyncOp[]): Promise<FlushResult> {
+async function failAll(ops: SyncOp[], reason: SyncFailureReason): Promise<FlushResult> {
 	const remaining: SyncOp[] = [];
 	let dropped = 0;
 
@@ -232,7 +248,8 @@ async function failAll(ops: SyncOp[]): Promise<FlushResult> {
 		flushed: 0,
 		failed: remaining.length,
 		dropped,
-		skipped: false
+		skipped: false,
+		...(remaining.length > 0 ? { reason } : {})
 	};
 	await emit(result);
 	return result;

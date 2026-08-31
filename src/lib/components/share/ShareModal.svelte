@@ -216,14 +216,18 @@
 		</p>
 
 		{#if featureFlags.flags.shareImages && profileStore.activeBond.photoBlob}
-			<!-- Photo-sharing toggle (IMAGE_SHARING_PLAN.md, Stage 5). Disabled
-			     while offline — the toggle would just fail soft to "share without
-			     it" on upload anyway, but greying it out up front is clearer than
-			     letting the user turn it on and only finding out it didn't work
-			     once they've already generated/copied a link. -->
+			<!-- Photo-sharing toggle (IMAGE_SHARING_PLAN.md, Stage 5). Disabled while
+			     offline or while the server itself is unreachable (`navigator.onLine`
+			     can be true behind a dead tunnel/proxy — see `networkStore.reachability`)
+			     — the toggle would just fail soft to "share without it" on upload
+			     anyway, but greying it out up front is clearer than letting the user
+			     turn it on and only finding out it didn't work once they've already
+			     generated/copied a link. -->
+			{@const uploadBlocked =
+				!networkStore.isOnline || networkStore.reachability === 'server-unreachable'}
 			<div
 				class="w-full flex items-center justify-between gap-3 p-3 rounded-2xl bg-card border border-border text-left transition-opacity"
-				class:opacity-50={!networkStore.isOnline}
+				class:opacity-50={uploadBlocked}
 			>
 				<div class="flex items-center gap-2.5 min-w-0">
 					<div class="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
@@ -234,6 +238,8 @@
 						<p class="text-[11px] text-muted-foreground">
 							{#if !networkStore.isOnline}
 								Offline — connect to share a photo
+							{:else if networkStore.reachability === 'server-unreachable'}
+								Server unreachable — try again shortly
 							{:else if uploadingPhoto}
 								Encrypting &amp; uploading...
 							{:else if photoUploadFailed}
@@ -246,7 +252,7 @@
 				</div>
 				<Switch
 					checked={includePhoto}
-					disabled={uploadingPhoto || !networkStore.isOnline}
+					disabled={uploadingPhoto || uploadBlocked}
 					onchange={(v) => (includePhoto = v)}
 				/>
 			</div>

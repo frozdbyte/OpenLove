@@ -82,11 +82,15 @@ export interface SyncMeta {
 	updatedAt?: string;
 }
 
+export type SyncFailureReason = 'client-offline' | 'server-unreachable';
+
 export interface FlushResult {
 	flushed: number;
 	failed: number;
 	dropped: number;
 	/** True when the flush was a no-op: nothing queued, or still inside backoff. */
 	skipped: boolean;
+	/** Set when `failed > 0` — why delivery failed, for UI messaging. */
+	reason?: SyncFailureReason;
 }
 

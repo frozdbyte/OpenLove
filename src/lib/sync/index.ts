@@ -8,7 +8,9 @@ import {
 import {
 	countOps,
 	enqueue,
+	getRetryState,
 	getSyncMeta,
+	listOps,
 	newOpId,
 	setSyncMeta
 } from '$lib/storage/outbox';
@@ -161,7 +163,49 @@ export async function flush(opts: { force?: boolean } = {}) {
 	return flushOutbox(opts);
 }
 
-export { countOps as pendingSyncCount, onFlush };
+export { countOps as pendingSyncCount, listOps as pendingSyncOps, onFlush };
+
+/* -------------------------------------------------------------------------- */
+/* Foreground retry fallback                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Background Sync (`registerBackgroundSync()` below) already retries a queued
+ * flush once connectivity returns — but iOS Safari and Firefox don't implement
+ * it at all. Without this, a tab left open on one of those browsers while the
+ * server is down just sits in backoff forever: nothing re-triggers `flush()`
+ * until the next `online` event, visibility change, or push. This schedules a
+ * bounded timer to retry at the outbox's own computed backoff time, so an open,
+ * foregrounded tab self-heals on its own.
+ */
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearForegroundRetry() {
+	if (retryTimer) {
+		clearTimeout(retryTimer);
+		retryTimer = null;
+	}
+}
+
+async function scheduleForegroundRetry() {
+	clearForegroundRetry();
+	if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+
+	const pending = await countOps();
+	if (pending === 0) return;
+
+	const retry = await getRetryState();
+	const delay = retry.nextAttemptAt - Date.now();
+	if (delay <= 0) {
+		void flush();
+		return;
+	}
+
+	retryTimer = setTimeout(() => {
+		retryTimer = null;
+		void flush();
+	}, delay);
+}
 
 /**
  * Wire up flush triggers and the profile mutation hook.
@@ -182,10 +226,17 @@ export function initSync() {
 		await queueSubscriptionSync('profile-change');
 	});
 
+	onFlush(() => void scheduleForegroundRetry());
+
 	window.addEventListener('online', () => void flush({ force: true }));
 
 	document.addEventListener('visibilitychange', () => {
-		if (document.visibilityState === 'visible') void flush();
+		if (document.visibilityState === 'visible') {
+			void flush();
+			void scheduleForegroundRetry();
+		} else {
+			clearForegroundRetry();
+		}
 	});
 
 	void (async () => {
@@ -193,6 +244,7 @@ export function initSync() {
 		await reconcileOnStart();
 		await flush({ force: true });
 		await registerBackgroundSync();
+		void scheduleForegroundRetry();
 	})();
 }
 
