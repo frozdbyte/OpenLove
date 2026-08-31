@@ -4,6 +4,8 @@
 	import Button from '$lib/components/ui/button';
 	import { APP_VERSION } from '$lib/version';
 	import { getJustUpdated } from '$lib/utils/version';
+	import { cn } from '$lib/utils';
+	import { profileStore } from '$lib/stores/profile.svelte';
 
 	/**
 	 * Service worker registration and update surface.
@@ -22,6 +24,11 @@
 	let offlineReady = $state(false);
 	let justUpdated = $state(false);
 	let updateServiceWorker = $state<((reload?: boolean) => Promise<void>) | null>(null);
+
+	// Onboarding has no bottom nav/action bar to collide with and its own footer
+	// content lives low on the screen, so the toast sits up top there; everywhere
+	// else it sits at the bottom, clear of the top app bar.
+	let isOnboarding = $derived(!profileStore.isLoading && !profileStore.state.isConfigured);
 
 	onMount(() => {
 		let dismissTimer: ReturnType<typeof setTimeout> | undefined;
@@ -70,7 +77,12 @@
 
 {#if needRefresh || offlineReady || justUpdated}
 	<div
-		class="fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-[max(1rem,env(safe-area-inset-top))] pointer-events-none"
+		class={cn(
+			'fixed inset-x-0 z-50 flex justify-center px-4 pointer-events-none',
+			isOnboarding
+				? 'top-0 pt-[max(1rem,env(safe-area-inset-top))]'
+				: 'bottom-0 pb-[max(1rem,env(safe-area-inset-bottom))]'
+		)}
 		role="status"
 		aria-live="polite"
 	>
