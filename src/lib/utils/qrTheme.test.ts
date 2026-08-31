@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveQrColor, heartLogoDataUri } from './qrTheme';
+import { resolveQrColor, heartLogoDataUri, sparklesLogoDataUri, bondLogoDataUri } from './qrTheme';
 import type { ColorPalette } from '$lib/types/profile';
 
 describe('resolveQrColor', () => {
@@ -31,5 +31,27 @@ describe('heartLogoDataUri', () => {
 
 	it('produces a different data URI per color', () => {
 		expect(heartLogoDataUri('#e11d48')).not.toBe(heartLogoDataUri('#2563eb'));
+	});
+});
+
+describe('sparklesLogoDataUri', () => {
+	it('embeds the given color and all four sparkle shapes', () => {
+		const uri = sparklesLogoDataUri('#059669');
+		const svg = decodeURIComponent(uri.slice('data:image/svg+xml;utf8,'.length));
+
+		expect(svg).toContain('fill="#059669"');
+		expect(svg).toContain('stroke="#059669"');
+		expect(svg).toContain('<circle');
+		expect((svg.match(/<path/g) ?? []).length).toBe(3);
+	});
+});
+
+describe('bondLogoDataUri', () => {
+	it('picks the heart mark for romantic bonds', () => {
+		expect(bondLogoDataUri('romantic', '#e11d48')).toBe(heartLogoDataUri('#e11d48'));
+	});
+
+	it('picks the sparkles mark for friendship bonds', () => {
+		expect(bondLogoDataUri('friendship', '#059669')).toBe(sparklesLogoDataUri('#059669'));
 	});
 });

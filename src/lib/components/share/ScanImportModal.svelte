@@ -22,8 +22,43 @@
 	let pasteInput = $state('');
 	let errorMessage = $state('');
 	let isScanning = $state(false);
+	let scanSuccess = $state(false);
 	let stream: MediaStream | null = null;
 	let animationFrameId: number | null = null;
+	let lastScanAttempt = 0;
+	// ~8/sec is plenty for a QR code (it isn't moving that fast) and leaves more
+	// main-thread headroom than decoding every single `requestAnimationFrame`
+	// tick (up to 60-120Hz on iPhone) — headroom that may otherwise compete with
+	// the camera stream's own focus/exposure adaptation.
+	const SCAN_INTERVAL_MS = 120;
+	const SUCCESS_FEEDBACK_MS = 700;
+
+	// Native Vision-framework-backed detector (Safari 17+/iOS 17+, also
+	// Chromium) — the same engine the OS's own Camera app scanner uses, and
+	// meaningfully more capable than `jsQR`'s pure-JS decoder. `jsQR` remains
+	// the fallback for browsers without it. Constructed once; if it ever throws
+	// mid-session (rather than just finding nothing in a given frame), fall
+	// back to `jsQR` for the rest of the session instead of retrying it forever.
+	let barcodeDetector: BarcodeDetector | null = null;
+	if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+		try {
+			barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+		} catch {
+			barcodeDetector = null;
+		}
+	}
+	// Check this in a remote inspector (Safari > Develop > [device] on a Mac) to
+	// tell whether a scan is actually running the native detector or the jsQR
+	// fallback — the two paths behave very differently and it isn't otherwise
+	// visible from the UI.
+	console.info(`[scan] using ${barcodeDetector ? 'native BarcodeDetector' : 'jsQR fallback'}`);
+
+	// Guards against overlapping decode attempts: if a single `detect()`/`jsQR()`
+	// call ever takes longer than SCAN_INTERVAL_MS, the throttle in `scanFrame`
+	// alone wouldn't stop a second one from starting on top of it — each doing a
+	// full canvas redraw, competing for the same main thread and compositor
+	// budget that the UI (including the scan-line animation) also needs.
+	let decodeInFlight = false;
 
 	let videoRef = $state<HTMLVideoElement | null>(null);
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
@@ -34,6 +69,15 @@
 	let pendingIncomingBond = $state<Partial<Bond> | null>(null);
 	let pendingRaw = $state('');
 	let pendingJson = $state('');
+	// Set synchronously at the top of `handleAcceptInvite` (i.e. before its first
+	// `await`, so it's in place before `PartnerInviteModal`'s close animation
+	// even starts). Its `onclose` fires ~260ms after `isInviteModalOpen` goes
+	// false, which can easily be *before* `handleAcceptInvite`'s async
+	// `profileStore.importJSON()` finishes and sets this scan modal's own `open`
+	// to false — reading `open` at that point to decide whether to restart the
+	// camera would be racy. This flag makes the distinction deterministic
+	// instead: accepted (successfully) vs. declined/dismissed/failed.
+	let inviteAccepted = false;
 
 	// Start camera when modal opens on 'camera' tab
 	$effect(() => {
@@ -64,8 +108,8 @@
 			stream = await navigator.mediaDevices.getUserMedia({
 				video: {
 					facingMode: 'environment',
-					width: { ideal: 640 },
-					height: { ideal: 640 }
+					width: { ideal: 1280 },
+					height: { ideal: 1280 }
 				}
 			});
 
@@ -73,6 +117,7 @@
 				videoRef.srcObject = stream;
 				videoRef.setAttribute('playsinline', 'true');
 				await videoRef.play();
+				lastScanAttempt = 0;
 				scanFrame();
 			}
 		} catch (err: any) {
@@ -84,6 +129,7 @@
 
 	function stopCamera() {
 		isScanning = false;
+		scanSuccess = false;
 		if (animationFrameId) {
 			cancelAnimationFrame(animationFrameId);
 			animationFrameId = null;
@@ -94,31 +140,81 @@
 		}
 	}
 
+	/** Scheduling loop only — kept on every `requestAnimationFrame` tick purely
+	 *  for smooth timing, with the actual (possibly async) decode work throttled
+	 *  and delegated to `attemptDecode()` so it never blocks this loop. */
 	function scanFrame() {
 		if (!isScanning || !videoRef || !canvasRef) return;
 
-		if (videoRef.readyState === videoRef.HAVE_ENOUGH_DATA) {
-			const canvas = canvasRef;
-			const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-			if (ctx) {
-				canvas.width = videoRef.videoWidth;
-				canvas.height = videoRef.videoHeight;
-				ctx.drawImage(videoRef, 0, 0, canvas.width, canvas.height);
-
-				const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-				const code = jsQR(imageData.data, imageData.width, imageData.height, {
-					inversionAttempts: 'dontInvert'
-				});
-
-				if (code && code.data) {
-					handleImportData(code.data);
-					return;
-				}
-			}
+		const now = performance.now();
+		if (!decodeInFlight && now - lastScanAttempt >= SCAN_INTERVAL_MS) {
+			lastScanAttempt = now;
+			decodeInFlight = true;
+			void attemptDecode().finally(() => {
+				decodeInFlight = false;
+			});
 		}
 
 		animationFrameId = requestAnimationFrame(scanFrame);
+	}
+
+	async function attemptDecode() {
+		if (!isScanning || !videoRef || !canvasRef) return;
+		if (videoRef.readyState !== videoRef.HAVE_ENOUGH_DATA) return;
+
+		if (barcodeDetector) {
+			try {
+				// Straight off the live video element — no canvas snapshot needed for
+				// this path, and it's the source shape the API is most commonly used
+				// (and presumably tested) against.
+				const codes = await barcodeDetector.detect(videoRef);
+				// Scanning may have been stopped (modal closed, tab switched) while
+				// this was in flight — a detection landing after that must not fire.
+				if (!isScanning) return;
+				if (codes.length > 0 && codes[0].rawValue) {
+					onCodeDetected(codes[0].rawValue);
+				}
+				return;
+			} catch (err) {
+				console.warn('BarcodeDetector failed; falling back to jsQR for this session.', err);
+				barcodeDetector = null;
+			}
+		}
+
+		const canvas = canvasRef;
+		const ctx = canvas.getContext('2d', { willReadFrequently: true });
+		if (!ctx) return;
+
+		canvas.width = videoRef.videoWidth;
+		canvas.height = videoRef.videoHeight;
+		// Default smoothing softens hard module edges before the decoder ever
+		// sees them — the opposite of what a QR decoder wants.
+		ctx.imageSmoothingEnabled = false;
+		ctx.drawImage(videoRef, 0, 0, canvas.width, canvas.height);
+
+		const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+		const code = jsQR(imageData.data, imageData.width, imageData.height, {
+			inversionAttempts: 'dontInvert'
+		});
+
+		if (code && code.data) {
+			onCodeDetected(code.data);
+		}
+	}
+
+	/** Stops scanning and shows a brief success state before handing off to the
+	 *  existing import pipeline — confirms the scan registered instead of the
+	 *  camera view instantly cutting to the preview drawer. */
+	function onCodeDetected(data: string) {
+		isScanning = false;
+		if (animationFrameId) {
+			cancelAnimationFrame(animationFrameId);
+			animationFrameId = null;
+		}
+		scanSuccess = true;
+		setTimeout(() => {
+			handleImportData(data);
+		}, SUCCESS_FEEDBACK_MS);
 	}
 
 	async function handlePhotoUpload(e: Event) {
@@ -241,6 +337,7 @@
 	}
 
 	async function handleAcceptInvite(mode: 'replace' | 'add') {
+		inviteAccepted = true;
 		if (pendingJson) {
 			const success = await profileStore.importJSON(pendingJson, mode);
 			if (success) {
@@ -254,7 +351,13 @@
 						origin: { y: 0.6 }
 					});
 				}
+			} else {
+				// Import failed — nothing to resume into, let the invite-dismiss
+				// path restart the camera same as a decline would.
+				inviteAccepted = false;
 			}
+		} else {
+			inviteAccepted = false;
 		}
 	}
 
@@ -323,13 +426,40 @@
 					<canvas bind:this={canvasRef} class="hidden"></canvas>
 
 					<!-- Scanner Target Frame Overlay -->
-					<div class="absolute inset-8 rounded-2xl border-2 border-white/70 pointer-events-none flex items-center justify-center shadow-lg">
-						<div class="w-full h-0.5 bg-primary/80 animate-pulse shadow-sm shadow-primary"></div>
+					<div
+						class="absolute inset-8 rounded-2xl border-2 pointer-events-none shadow-lg overflow-hidden transition-colors duration-300 {scanSuccess
+							? 'border-emerald-400'
+							: 'border-white/70'}"
+					>
+						{#if !scanSuccess}
+							<!-- `animate-scan-sweep` moves this wrapper via `transform`
+							     (GPU-composited, no layout reflow) rather than animating
+							     `top` directly — the wrapper's own height matches the
+							     frame's (inset-0), so translateY(100%) slides the thin bar
+							     sitting at its top the full frame height. -->
+							<div class="absolute inset-0 animate-scan-sweep">
+								<div class="h-0.5 w-full bg-primary/80 shadow-sm shadow-primary"></div>
+							</div>
+						{/if}
 					</div>
+
+					{#if scanSuccess}
+						<!-- Confirms the scan registered instead of instantly cutting to the
+						     preview drawer — held for SUCCESS_FEEDBACK_MS before proceeding. -->
+						<div class="absolute inset-0 flex items-center justify-center bg-black/40">
+							<div
+								class="h-16 w-16 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg animate-pop-in"
+							>
+								<Check class="h-8 w-8 text-white" />
+							</div>
+						</div>
+					{/if}
 				</div>
 
 				<p class="text-xs text-muted-foreground text-center">
-					Point your camera at the QR code on your partner's phone screen.
+					{scanSuccess
+						? 'Code detected!'
+						: "Point your camera at the QR code on your partner's phone screen."}
 				</p>
 
 				<!-- Upload image fallback -->
@@ -375,6 +505,23 @@
 	incomingBond={pendingIncomingBond}
 	importRaw={pendingRaw}
 	onAccept={handleAcceptInvite}
-	onclose={() => (isInviteModalOpen = false)}
+	onclose={() => {
+		isInviteModalOpen = false;
+		// The camera was explicitly stopped before opening this invite drawer
+		// (see the `stopCamera()` above `isInviteModalOpen = true`), and nothing
+		// else restarts it — the outer scan modal's own start/stop `$effect`
+		// only reruns when `open`/`activeTab` change, neither of which do here.
+		// Declining/dismissing the invite must resume it, or the camera view is
+		// left black. Accepting closes the whole scan modal instead, via
+		// `handleAcceptInvite`'s own `open = false` — but that happens after an
+		// `await`, so it can easily still be in flight when this fires (~260ms
+		// after the invite modal starts closing). Reading `open` here would race
+		// against it; `inviteAccepted` (set synchronously, before that await) is
+		// the deterministic version of the same check.
+		if (!inviteAccepted && open && activeTab === 'camera') {
+			startCamera();
+		}
+		inviteAccepted = false;
+	}}
 />
 

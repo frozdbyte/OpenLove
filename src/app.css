@@ -253,6 +253,25 @@
   animation: shake-once 0.4s ease-in-out;
 }
 
+@keyframes scan-sweep {
+  0%, 100% { transform: translateY(0%); }
+  50% { transform: translateY(100%); }
+}
+
+.animate-scan-sweep {
+  animation: scan-sweep 1.8s infinite ease-in-out;
+}
+
+@keyframes pop-in {
+  0% { transform: scale(0.5); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-pop-in {
+  animation: pop-in 0.3s ease-out;
+}
+
 @utility no-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;

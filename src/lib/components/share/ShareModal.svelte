@@ -21,7 +21,7 @@
 	import QRCodeStyling from 'qr-code-styling';
 	import { copyToClipboard } from '$lib/utils/clipboard';
 	import { getDeviceOS } from '$lib/utils/pwa';
-	import { resolveQrColor, heartLogoDataUri } from '$lib/utils/qrTheme';
+	import { resolveQrColor, bondLogoDataUri } from '$lib/utils/qrTheme';
 
 	interface Props {
 		open?: boolean;
@@ -35,7 +35,17 @@
 	// rest. Doesn't change during a session, so a plain const is enough.
 	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
-	const QR_SIZE = 192;
+	const QR_SIZE = 280;
+	// `type: 'canvas'` renders at exactly `width`/`height` raw pixels *and*
+	// displays at that many CSS pixels — on any HiDPI screen (2x/3x, i.e. most
+	// laptops and phones now) a QR_SIZE-pixel raster shown at QR_SIZE CSS px is
+	// only "1x" density, visibly softer than the rest of the UI. Rendering at
+	// QR_SIZE * devicePixelRatio and then pinning the canvas's CSS size back
+	// down to QR_SIZE (in generateQR, after append/update) is the standard fix —
+	// downscaling a higher-res raster stays crisp; upscaling a lower-res one
+	// (what was happening before) is what looked blurry.
+	const QR_RENDER_SCALE = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+	const QR_RENDER_SIZE = Math.round(QR_SIZE * QR_RENDER_SCALE);
 
 	let qrContainer = $state<HTMLDivElement | null>(null);
 	let qrReady = $state(false);
@@ -115,7 +125,7 @@
 			const json = await buildShareJson();
 			const shareUrl = await buildShareUrl(window.location.origin, json);
 			const color = resolveQrColor(profileStore.profile.colorPalette);
-			const image = heartLogoDataUri(color);
+			const image = bondLogoDataUri(profileStore.activeBond.type, color);
 
 			const options = {
 				data: shareUrl,
@@ -124,24 +134,32 @@
 				qrOptions: { errorCorrectionLevel: 'H' as const },
 				// `roundSize` (default true) floors each dot to a whole pixel and only
 				// fills `floor(QR_SIZE / moduleCount) * moduleCount` of the canvas,
-				// leaving the remainder as blank space — and since module count tracks
-				// payload length, the shortfall (and the code's visible size) changes
-				// with it, e.g. between the with-photo and without-photo payloads.
-				// Irrelevant for SVG output (vector, no pixel-crisping need), so this
-				// keeps the code filling QR_SIZE exactly, always.
-				dotsOptions: { type: 'classy-rounded' as const, color, roundSize: false },
+				// leaving the remainder as blank space that grows/shrinks with payload
+				// length (module count). It's applied identically by both the SVG and
+				// canvas renderers (same shared geometry math, confirmed in the
+				// library's own source) — disabling it isn't a canvas-specific
+				// scan-reliability risk, so it's safe to turn off here to keep the
+				// code filling QR_SIZE exactly regardless of what's encoded.
+				dotsOptions: { type: 'rounded' as const, color, roundSize: false },
 				cornersSquareOptions: { type: 'extra-rounded' as const, color },
 				cornersDotOptions: { type: 'dot' as const, color },
 				backgroundOptions: { color: '#ffffff' },
 				image,
-				imageOptions: { hideBackgroundDots: true, imageSize: 0.2, margin: 6 }
+				// `margin` is an absolute pixel value in the same raster coordinate
+				// space as width/height, so it's scaled by QR_RENDER_SCALE too — left
+				// at a flat 2 it'd end up proportionally tighter the higher the DPR.
+				imageOptions: {
+					hideBackgroundDots: true,
+					imageSize: 0.2,
+					margin: Math.round(2 * QR_RENDER_SCALE)
+				}
 			};
 
 			if (!qrCode) {
 				qrCode = new QRCodeStyling({
-					width: QR_SIZE,
-					height: QR_SIZE,
-					type: 'svg',
+					width: QR_RENDER_SIZE,
+					height: QR_RENDER_SIZE,
+					type: 'canvas',
 					...options
 				});
 			} else {
@@ -154,6 +172,14 @@
 			if (!qrAppended && qrContainer) {
 				qrCode.append(qrContainer);
 				qrAppended = true;
+			}
+			// `.append()`/`.update()` both (re)create the canvas at QR_RENDER_SIZE
+			// raw pixels — pin its CSS box back down to QR_SIZE so it displays
+			// downscaled (crisp) rather than at its native, oversized raster size.
+			const canvasEl = qrContainer?.querySelector('canvas');
+			if (canvasEl) {
+				canvasEl.style.width = `${QR_SIZE}px`;
+				canvasEl.style.height = `${QR_SIZE}px`;
 			}
 			qrReady = true;
 		} catch (err) {
@@ -266,13 +292,16 @@
 	{onclose}
 >
 	<div class="flex flex-col items-center text-center space-y-4 py-2">
-		<!-- QR Code. `qr-code-styling` mounts its own <svg> into this container via
-		     `.append()` — it isn't a Svelte-rendered element, so it stays present
-		     unconditionally rather than being swapped by an {#if}. -->
+		<!-- QR Code. `qr-code-styling` mounts its own <canvas> into this container
+		     via `.append()` — it isn't a Svelte-rendered element, so it stays
+		     present unconditionally rather than being swapped by an {#if}. Sized
+		     to exactly QR_SIZE so the browser never has to scale the canvas
+		     (scaling a raster canvas via CSS can soften the module edges a
+		     decoder relies on). -->
 		<div class="relative p-3 bg-white rounded-3xl shadow-md border border-border flex items-center justify-center">
 			<div
 				bind:this={qrContainer}
-				class="w-48 h-48 transition-opacity duration-300 {!qrReady
+				class="w-70 h-70 transition-opacity duration-300 {!qrReady
 					? 'opacity-0'
 					: uploadingPhoto
 						? 'opacity-30 animate-pulse'
