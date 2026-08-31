@@ -14,6 +14,7 @@
 	import { profileStore } from '$lib/stores/profile.svelte';
 	import { pwaStore } from '$lib/stores/pwa.svelte';
 	import { getStorageEstimate, type StorageEstimate } from '$lib/utils/storage';
+	import { getDeviceOS } from '$lib/utils/pwa';
 	import Button from '$lib/components/ui/button';
 	import {
 		QrCode,
@@ -55,11 +56,33 @@
 		// photo inline as base64 — safe for a downloaded file, unlike the
 		// QR/link/sync-code payloads, which must stay small.
 		const json = await profileStore.exportBackupJSON();
+		const filename = `openlove-backup-${new Date().toISOString().split('T')[0]}.json`;
+
+		// iOS Safari (and the in-app browsers built on it) doesn't honour `<a download>`
+		// for blob: URLs — it just opens the JSON in its own viewer, leaving the user to
+		// find Share > Save to Files themselves. The Web Share API's file support opens
+		// that exact same share sheet directly, so route through it there instead.
+		// Everywhere else `<a download>` already saves straight to disk, so it's untouched.
+		if (getDeviceOS() === 'ios') {
+			const file = new File([json], filename, { type: 'application/json' });
+			if (navigator.canShare?.({ files: [file] })) {
+				try {
+					await navigator.share({ files: [file], title: filename });
+					return;
+				} catch (err: any) {
+					// The user dismissing the share sheet also rejects with AbortError —
+					// not a failure; anything else falls through to the anchor download.
+					if (err?.name === 'AbortError') return;
+					console.error('Failed to share backup file, falling back to download:', err);
+				}
+			}
+		}
+
 		const blob = new Blob([json], { type: 'application/json' });
 		const url = URL.createObjectURL(blob);
 		const anchor = document.createElement('a');
 		anchor.href = url;
-		anchor.download = `openlove-backup-${new Date().toISOString().split('T')[0]}.json`;
+		anchor.download = filename;
 		anchor.click();
 		URL.revokeObjectURL(url);
 	}
