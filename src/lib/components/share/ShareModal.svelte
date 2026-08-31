@@ -7,7 +7,17 @@
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
 	import Button from '$lib/components/ui/button';
 	import Switch from '$lib/components/ui/switch';
-	import { Copy, Check, QrCode, Download, Heart, ImageUp, Share2 } from '@lucide/svelte';
+	import {
+		Copy,
+		Check,
+		QrCode,
+		Download,
+		Heart,
+		ImageUp,
+		Share2,
+		Loader2,
+		AlertTriangle
+	} from '@lucide/svelte';
 	import QRCode from 'qrcode';
 	import { copyToClipboard } from '$lib/utils/clipboard';
 	import { getDeviceOS } from '$lib/utils/pwa';
@@ -201,12 +211,26 @@
 >
 	<div class="flex flex-col items-center text-center space-y-4 py-2">
 		<!-- QR Code -->
-		<div class="p-3 bg-white rounded-3xl shadow-md border border-border flex items-center justify-center">
+		<div class="relative p-3 bg-white rounded-3xl shadow-md border border-border flex items-center justify-center">
 			{#if qrDataUrl}
-				<img src={qrDataUrl} alt="Invite QR Code" class="w-48 h-48" />
+				<img
+					src={qrDataUrl}
+					alt="Invite QR Code"
+					class="w-48 h-48 transition-opacity duration-300 {uploadingPhoto
+						? 'opacity-30 animate-pulse'
+						: ''}"
+				/>
 			{:else}
 				<div class="w-48 h-48 flex items-center justify-center text-muted-foreground">
 					<QrCode class="h-12 w-12 animate-pulse" />
+				</div>
+			{/if}
+			{#if uploadingPhoto}
+				<!-- The QR itself is about to change (it encodes the photo reference), so
+				     dimming + pulsing it while the upload is in flight makes that visible
+				     instead of the code just silently swapping a moment later. -->
+				<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+					<Loader2 class="h-8 w-8 text-primary animate-spin" />
 				</div>
 			{/if}
 		</div>
@@ -226,16 +250,30 @@
 			{@const uploadBlocked =
 				!networkStore.isOnline || networkStore.reachability === 'server-unreachable'}
 			<div
-				class="w-full flex items-center justify-between gap-3 p-3 rounded-2xl bg-card border border-border text-left transition-opacity"
+				class="w-full flex items-center justify-between gap-3 p-3 rounded-2xl border text-left transition-colors
+					{photoUploadFailed ? 'bg-destructive/5 border-destructive/30 animate-shake-once' : 'bg-card border-border'}"
 				class:opacity-50={uploadBlocked}
 			>
 				<div class="flex items-center gap-2.5 min-w-0">
-					<div class="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-						<ImageUp class="h-4 w-4" />
+					<div
+						class="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-colors
+							{photoUploadFailed ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary'}"
+					>
+						{#if uploadingPhoto}
+							<Loader2 class="h-4 w-4 animate-spin" />
+						{:else if photoUploadFailed}
+							<AlertTriangle class="h-4 w-4" />
+						{:else}
+							<ImageUp class="h-4 w-4" />
+						{/if}
 					</div>
 					<div class="min-w-0">
 						<div class="text-sm font-semibold text-foreground">Share Photo</div>
-						<p class="text-[11px] text-muted-foreground">
+						<p
+							class="text-[11px]"
+							class:text-muted-foreground={!photoUploadFailed}
+							class:text-destructive={photoUploadFailed}
+						>
 							{#if !networkStore.isOnline}
 								Offline — connect to share a photo
 							{:else if networkStore.reachability === 'server-unreachable'}
@@ -243,7 +281,15 @@
 							{:else if uploadingPhoto}
 								Encrypting &amp; uploading...
 							{:else if photoUploadFailed}
-								Couldn't upload — sharing without it
+								Couldn't upload —
+								<button
+									type="button"
+									class="underline underline-offset-2 hover:no-underline cursor-pointer"
+									onclick={() => generateQR()}
+								>
+									retry
+								</button>
+								or share without it
 							{:else}
 								🔒 End-to-End Encrypted
 							{/if}
