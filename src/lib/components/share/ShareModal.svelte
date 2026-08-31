@@ -10,6 +10,7 @@
 	import { Copy, Check, QrCode, Download, Heart, ImageUp, Share2 } from '@lucide/svelte';
 	import QRCode from 'qrcode';
 	import { copyToClipboard } from '$lib/utils/clipboard';
+	import { getDeviceOS } from '$lib/utils/pwa';
 
 	interface Props {
 		open?: boolean;
@@ -159,11 +160,34 @@
 		// photo inline as base64 — safe for a downloaded file, unlike the
 		// QR/link/sync-code payloads, which must stay small.
 		const json = await profileStore.exportBackupJSON(true);
+		const filename = `openlove-share-${profileStore.activeBond.names.replace(/\s+/g, '-').toLowerCase()}.json`;
+
+		// iOS Safari (and the in-app browsers built on it) doesn't honour `<a download>`
+		// for blob: URLs — it just opens the JSON in its own viewer, leaving the user to
+		// find Share > Save to Files themselves. The Web Share API's file support opens
+		// that exact same share sheet directly, so route through it there instead.
+		// Everywhere else `<a download>` already saves straight to disk, so it's untouched.
+		// Mirrors StorageBackupPanel.svelte's downloadBackup().
+		if (getDeviceOS() === 'ios') {
+			const file = new File([json], filename, { type: 'application/json' });
+			if (navigator.canShare?.({ files: [file] })) {
+				try {
+					await navigator.share({ files: [file], title: filename });
+					return;
+				} catch (err: any) {
+					// The user dismissing the share sheet also rejects with AbortError —
+					// not a failure; anything else falls through to the anchor download.
+					if (err?.name === 'AbortError') return;
+					console.error('Failed to share bond JSON file, falling back to download:', err);
+				}
+			}
+		}
+
 		const blob = new Blob([json], { type: 'application/json' });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url;
-		a.download = `openlove-share-${profileStore.activeBond.names.replace(/\s+/g, '-').toLowerCase()}.json`;
+		a.download = filename;
 		a.click();
 		URL.revokeObjectURL(url);
 	}
