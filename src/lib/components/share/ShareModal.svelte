@@ -18,9 +18,10 @@
 		Loader2,
 		AlertTriangle
 	} from '@lucide/svelte';
-	import QRCode from 'qrcode';
+	import QRCodeStyling from 'qr-code-styling';
 	import { copyToClipboard } from '$lib/utils/clipboard';
 	import { getDeviceOS } from '$lib/utils/pwa';
+	import { resolveQrColor, heartLogoDataUri } from '$lib/utils/qrTheme';
 
 	interface Props {
 		open?: boolean;
@@ -34,7 +35,16 @@
 	// rest. Doesn't change during a session, so a plain const is enough.
 	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
-	let qrDataUrl = $state<string>('');
+	const QR_SIZE = 192;
+
+	let qrContainer = $state<HTMLDivElement | null>(null);
+	let qrReady = $state(false);
+	// Not `$state`: the instance itself is never read reactively, only mutated
+	// and re-used across `generateQR()` calls (`.update()` re-renders in place
+	// rather than reconstructing).
+	let qrCode: QRCodeStyling | null = null;
+	let qrAppended = false;
+
 	let copied = $state(false);
 	let copiedCode = $state(false);
 
@@ -62,6 +72,7 @@
 	$effect(() => {
 		if (open && typeof window !== 'undefined') {
 			includePhoto; // tracked dependency: regenerate when the toggle changes too
+			profileStore.profile.colorPalette; // ...and when the user changes theme while open
 			generateQR();
 		}
 	});
@@ -92,14 +103,48 @@
 		try {
 			const json = await buildShareJson();
 			const shareUrl = await buildShareUrl(window.location.origin, json);
-			qrDataUrl = await QRCode.toDataURL(shareUrl, {
-				width: 280,
-				margin: 2,
-				color: {
-					dark: '#8B1E2D',
-					light: '#FFFFFF'
-				}
-			});
+			const color = resolveQrColor(profileStore.profile.colorPalette);
+			const image = heartLogoDataUri(color);
+
+			const options = {
+				data: shareUrl,
+				// 'H' (~30% redundancy) is required for the center logo to not break
+				// scannability — it covers roughly the middle 40% of the code.
+				qrOptions: { errorCorrectionLevel: 'H' as const },
+				// `roundSize` (default true) floors each dot to a whole pixel and only
+				// fills `floor(QR_SIZE / moduleCount) * moduleCount` of the canvas,
+				// leaving the remainder as blank space — and since module count tracks
+				// payload length, the shortfall (and the code's visible size) changes
+				// with it, e.g. between the with-photo and without-photo payloads.
+				// Irrelevant for SVG output (vector, no pixel-crisping need), so this
+				// keeps the code filling QR_SIZE exactly, always.
+				dotsOptions: { type: 'classy-rounded' as const, color, roundSize: false },
+				cornersSquareOptions: { type: 'extra-rounded' as const, color },
+				cornersDotOptions: { type: 'dot' as const, color },
+				backgroundOptions: { color: '#ffffff' },
+				image,
+				imageOptions: { hideBackgroundDots: true, imageSize: 0.4, margin: 6 }
+			};
+
+			if (!qrCode) {
+				qrCode = new QRCodeStyling({
+					width: QR_SIZE,
+					height: QR_SIZE,
+					type: 'svg',
+					...options
+				});
+			} else {
+				qrCode.update(options);
+			}
+			// Decoupled from construction: `qrContainer` (bound via `bind:this`) may
+			// not be set yet the very first time this runs, so this catches up on
+			// whichever later call finds it ready instead of leaving the code
+			// permanently unmounted.
+			if (!qrAppended && qrContainer) {
+				qrCode.append(qrContainer);
+				qrAppended = true;
+			}
+			qrReady = true;
 		} catch (err) {
 			console.error('Failed to generate QR code:', err);
 		}
@@ -210,18 +255,20 @@
 	{onclose}
 >
 	<div class="flex flex-col items-center text-center space-y-4 py-2">
-		<!-- QR Code -->
+		<!-- QR Code. `qr-code-styling` mounts its own <svg> into this container via
+		     `.append()` — it isn't a Svelte-rendered element, so it stays present
+		     unconditionally rather than being swapped by an {#if}. -->
 		<div class="relative p-3 bg-white rounded-3xl shadow-md border border-border flex items-center justify-center">
-			{#if qrDataUrl}
-				<img
-					src={qrDataUrl}
-					alt="Invite QR Code"
-					class="w-48 h-48 transition-opacity duration-300 {uploadingPhoto
+			<div
+				bind:this={qrContainer}
+				class="w-48 h-48 transition-opacity duration-300 {!qrReady
+					? 'opacity-0'
+					: uploadingPhoto
 						? 'opacity-30 animate-pulse'
 						: ''}"
-				/>
-			{:else}
-				<div class="w-48 h-48 flex items-center justify-center text-muted-foreground">
+			></div>
+			{#if !qrReady}
+				<div class="absolute inset-0 flex items-center justify-center text-muted-foreground">
 					<QrCode class="h-12 w-12 animate-pulse" />
 				</div>
 			{/if}
