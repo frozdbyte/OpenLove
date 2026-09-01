@@ -943,7 +943,7 @@ async function renderConstellationStyle(
 	const starTagSize = width * 0.028;
 	ctx.font = `700 ${starTagSize}px "Plus Jakarta Sans Variable"`;
 	if ('letterSpacing' in ctx) ctx.letterSpacing = `${starTagSize * 0.15}px`;
-	ctx.fillStyle = lighten(color, 0.55);
+	ctx.fillStyle = lighten(color, 0.75);
 	const tagBaseline = cursorY + measuredAscent(ctx, starTag, starTagSize);
 	ctx.fillText(starTag, width / 2, tagBaseline);
 	if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
@@ -968,17 +968,17 @@ async function renderConstellationStyle(
 	ctx.fillText(bond.names, width / 2, namesBaseline);
 	cursorY = namesBaseline + measuredDescent(ctx, bond.names, namesFontSize) + gap * 0.8;
 
-	// Anniversary date adhering to accent color
+	// Anniversary date (bright starlight text with subtle glow for dark cosmic contrast)
 	const dateText = `✦ ${formatLongDate(bond.togetherSince)} ✦`;
 	const dateFontSize = width * 0.028;
-	ctx.font = `500 ${dateFontSize}px "Plus Jakarta Sans Variable"`;
-	ctx.fillStyle = hexToRgba(lighten(color, 0.6), 0.85);
+	ctx.font = `600 ${dateFontSize}px "Plus Jakarta Sans Variable"`;
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
 	const dateBaseline = cursorY + measuredAscent(ctx, dateText, dateFontSize);
 	ctx.fillText(dateText, width / 2, dateBaseline);
 
-	// Watermark
+	// Watermark (crisp semi-transparent white on dark cosmic background)
 	ctx.font = `600 ${width * 0.022}px "Plus Jakarta Sans Variable"`;
-	ctx.fillStyle = hexToRgba(lighten(color, 0.5), 0.5);
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
 	ctx.fillText('✦ OPEN LOVE ✦', width / 2, isStory ? height - height * 0.055 : height - height * 0.035);
 }
 

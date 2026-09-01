@@ -60,7 +60,6 @@
 	let imageBlob = $state<Blob | null>(null);
 	let previewUrl = $state<string | null>(null);
 	let failed = $state(false);
-	let failedReason = $state("");
 
 	// Bumped on every requested render. `regenerate()` *serializes* actual
 	// generation rather than letting overlapping calls race: a request that
@@ -104,7 +103,6 @@
 				} catch (err) {
 					if (runToken === renderToken) {
 						console.error('Failed to generate share card image:', err);
-						failedReason = err as string;
 						failed = true;
 					}
 				}
@@ -119,6 +117,54 @@
 	}
 
 	let currentBondId = $state(profileStore.activeBond.id);
+	let scrollContainer = $state<HTMLDivElement | null>(null);
+	let canScrollLeft = $state(false);
+	let canScrollRight = $state(false);
+
+	function updateScrollState() {
+		if (!scrollContainer) return;
+		const { scrollLeft, scrollWidth, clientWidth } = scrollContainer;
+		const maxScroll = Math.max(0, scrollWidth - clientWidth);
+		canScrollLeft = scrollLeft > 3;
+		canScrollRight = maxScroll > 3 && scrollLeft < maxScroll - 3;
+	}
+
+	$effect(() => {
+		if (!scrollContainer) return;
+		const el = scrollContainer;
+		updateScrollState();
+
+		const handleScroll = () => updateScrollState();
+		el.addEventListener('scroll', handleScroll, { passive: true });
+
+		const ro = new ResizeObserver(() => updateScrollState());
+		ro.observe(el);
+
+		window.addEventListener('resize', handleScroll, { passive: true });
+
+		return () => {
+			el.removeEventListener('scroll', handleScroll);
+			ro.disconnect();
+			window.removeEventListener('resize', handleScroll);
+		};
+	});
+
+	const maskStyle = $derived.by(() => {
+		const fadeSize = '28px';
+		if (canScrollLeft && canScrollRight) {
+			const grad = `linear-gradient(to right, transparent 0%, black ${fadeSize}, black calc(100% - ${fadeSize}), transparent 100%)`;
+			return `mask-image: ${grad}; -webkit-mask-image: ${grad};`;
+		}
+		if (canScrollLeft && !canScrollRight) {
+			const grad = `linear-gradient(to right, transparent 0%, black ${fadeSize}, black 100%)`;
+			return `mask-image: ${grad}; -webkit-mask-image: ${grad};`;
+		}
+		if (!canScrollLeft && canScrollRight) {
+			const grad = `linear-gradient(to right, black 0%, black calc(100% - ${fadeSize}), transparent 100%)`;
+			return `mask-image: ${grad}; -webkit-mask-image: ${grad};`;
+		}
+		return '';
+	});
 
 	$effect(() => {
 		const newBondId = profileStore.activeBond.id;
@@ -232,19 +278,20 @@
 				try again
 			</button>
 		</p>
-		<pre>
-			{failedReason}
-		</pre>
 	{/if}
 
 	<!-- Style / Theme picker -->
-	<div class="w-full max-w-[340px] sm:max-w-sm overflow-x-auto py-2 px-2 mx-auto">
-		<div class="inline-flex items-center gap-3 min-w-full justify-center px-1">
+	<div
+		bind:this={scrollContainer}
+		class="w-full max-w-[340px] sm:max-w-sm overflow-x-auto py-2 mx-auto scrollbar-none transition-[mask-image] duration-200"
+		style={maskStyle}
+	>
+		<div class="inline-flex items-center gap-3 w-max mx-auto px-3.5 py-1">
 			{#each STYLE_OPTIONS as opt (opt.value)}
 				<button
 					type="button"
 					class="h-8 w-8 rounded-full shrink-0 border transition-transform cursor-pointer flex items-center justify-center {style === opt.value
-						? 'border-primary bg-primary text-primary-foreground ring-5 ring-primary/30 scale-110 shadow-xs'
+						? 'border-primary bg-primary text-primary-foreground ring-4 ring-primary/30 scale-110 shadow-xs'
 						: 'border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent'}"
 					onclick={() => (style = opt.value)}
 					title={opt.label}
