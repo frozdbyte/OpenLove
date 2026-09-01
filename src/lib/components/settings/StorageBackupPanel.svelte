@@ -1,9 +1,9 @@
 <script lang="ts">
 	/**
-	 * On-device storage durability, JSON backup/restore/reset, and the app-version
-	 * footer. Extracted from `SettingsSheet.svelte` — see REFACTOR_PLAN.md, High H1.
-	 * Only ever mounted when `showAppWideSettings && !isNewBond` and the user has
-	 * navigated into the "Data & Backup" section of the settings drawer.
+	 * On-device storage durability and JSON backup/restore/reset. Extracted from
+	 * `SettingsSheet.svelte` — see REFACTOR_PLAN.md, High H1. Only ever mounted
+	 * when `showAppWideSettings && !isNewBond` and the user has navigated into
+	 * the "Data & Backup" section of the settings drawer.
 	 *
 	 * `open` is threaded through (rather than loading the storage estimate purely
 	 * on mount) because `Modal.svelte` keeps its children mounted through its own
@@ -16,19 +16,7 @@
 	import { getStorageEstimate, type StorageEstimate } from '$lib/utils/storage';
 	import { getDeviceOS } from '$lib/utils/pwa';
 	import Button from '$lib/components/ui/button';
-	import {
-		QrCode,
-		UploadCloud,
-		RotateCcw,
-		Download,
-		HardDrive,
-		CloudOff,
-		ShieldCheck,
-		Heart,
-		Code,
-		RefreshCw
-	} from '@lucide/svelte';
-	import { APP_VERSION } from '$lib/version';
+	import { QrCode, UploadCloud, RotateCcw, Download, HardDrive, CloudOff, ShieldCheck } from '@lucide/svelte';
 	import { classifyImportPayload, type ImportPreview } from '$lib/utils/share';
 	import JsonImportPreviewDrawer from '$lib/components/share/JsonImportPreviewDrawer.svelte';
 
@@ -45,7 +33,6 @@
 	let pendingFile = $state<File | null>(null);
 	let pendingPreview = $state<ImportPreview | null>(null);
 	let isPreviewOpen = $state(false);
-	let isCheckingForUpdates = $state(false);
 
 	$effect(() => {
 		if (open) {
@@ -122,57 +109,6 @@
 		if (confirm('Are you sure you want to reset all data? This will clear all relationships.')) {
 			await profileStore.reset();
 			onAfterReset();
-		}
-	}
-
-	/**
-	 * Manual escape hatch for installs (mainly iOS Safari/homescreen) that get stuck
-	 * on a stale service worker and never pick up `registerType: 'autoUpdate'`'s
-	 * silent background update. `registration.update()` bypasses the browser's normal
-	 * update throttling and forces a real network fetch of the SW script.
-	 *
-	 * `service-worker.ts`'s install handler calls `self.skipWaiting()` unconditionally,
-	 * so a new worker (if found) activates and claims this page itself shortly after —
-	 * but that handoff is async, so the reload waits (briefly, bounded) for
-	 * `controllerchange` rather than racing ahead of it and reloading into whichever
-	 * worker happened to still be active at that instant.
-	 */
-	async function checkForUpdates() {
-		if (isCheckingForUpdates) return;
-		isCheckingForUpdates = true;
-
-		try {
-			if ('serviceWorker' in navigator) {
-				const registration = await navigator.serviceWorker.getRegistration();
-
-				if (registration) {
-					await registration.update();
-
-					if (registration.installing || registration.waiting) {
-						await new Promise<void>((resolve) => {
-							const onControllerChange = () => {
-								navigator.serviceWorker.removeEventListener(
-									'controllerchange',
-									onControllerChange
-								);
-								resolve();
-							};
-							navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
-							setTimeout(() => {
-								navigator.serviceWorker.removeEventListener(
-									'controllerchange',
-									onControllerChange
-								);
-								resolve();
-							}, 3000);
-						});
-					}
-				}
-			}
-		} catch (err) {
-			console.error('Manual update check failed:', err);
-		} finally {
-			window.location.reload();
 		}
 	}
 </script>
@@ -258,29 +194,3 @@
 </section>
 
 <JsonImportPreviewDrawer bind:open={isPreviewOpen} preview={pendingPreview} onConfirm={handleConfirmImport} />
-
-<!-- App Version Indicator -->
-<div class="pt-2 pb-1 text-center space-y-1">
-	<div class="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-muted/60 border border-border/50 text-[11px] font-medium text-muted-foreground">
-		<Heart class="h-3 w-3 text-primary fill-primary/30" />
-		<span>Open Love v{APP_VERSION}</span>
-	</div>
-	<div>
-		<Button
-			size="sm"
-			variant="ghost"
-			class="h-7 px-2.5 text-[11px] text-muted-foreground"
-			disabled={isCheckingForUpdates}
-			onclick={checkForUpdates}
-		>
-			<RefreshCw class="h-3 w-3 mr-1 {isCheckingForUpdates ? 'animate-spin' : ''}" />
-			<span>{isCheckingForUpdates ? 'Checking…' : 'Check for Updates'}</span>
-		</Button>
-	</div>
-	<p class="text-[10px] text-muted-foreground/60">Privacy-first & self-hosted
-	<br>Made with 🩵 by Frozd</p>
-	<a class="text-[10px] text-muted-foreground/40" href="https://github.com/frozdbyte/openlove">
-		<Code class="inline size-2.5 mr-0.5" />
-		View Source on GitHub
-	</a>
-</div>

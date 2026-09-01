@@ -7,20 +7,86 @@
 	 */
 	import { APP_VERSION } from '$lib/version';
 	import { CHANGELOG } from '$lib/utils/changelog';
-	import { Heart, Code, ScrollText, ShieldCheck, ExternalLink } from '@lucide/svelte';
+	import Button from '$lib/components/ui/button';
+	import { Heart, Code, ScrollText, ShieldCheck, ExternalLink, RefreshCw } from '@lucide/svelte';
 
 	const RECENT_ENTRIES = CHANGELOG.slice(0, 5);
+
+	let isCheckingForUpdates = $state(false);
+
+	/**
+	 * Manual escape hatch for installs (mainly iOS Safari/homescreen) that get stuck
+	 * on a stale service worker and never pick up `registerType: 'autoUpdate'`'s
+	 * silent background update. `registration.update()` bypasses the browser's normal
+	 * update throttling and forces a real network fetch of the SW script.
+	 *
+	 * `service-worker.ts`'s install handler calls `self.skipWaiting()` unconditionally,
+	 * so a new worker (if found) activates and claims this page itself shortly after —
+	 * but that handoff is async, so the reload waits (briefly, bounded) for
+	 * `controllerchange` rather than racing ahead of it and reloading into whichever
+	 * worker happened to still be active at that instant.
+	 */
+	async function checkForUpdates() {
+		if (isCheckingForUpdates) return;
+		isCheckingForUpdates = true;
+
+		try {
+			if ('serviceWorker' in navigator) {
+				const registration = await navigator.serviceWorker.getRegistration();
+
+				if (registration) {
+					await registration.update();
+
+					if (registration.installing || registration.waiting) {
+						await new Promise<void>((resolve) => {
+							const onControllerChange = () => {
+								navigator.serviceWorker.removeEventListener(
+									'controllerchange',
+									onControllerChange
+								);
+								resolve();
+							};
+							navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+							setTimeout(() => {
+								navigator.serviceWorker.removeEventListener(
+									'controllerchange',
+									onControllerChange
+								);
+								resolve();
+							}, 3000);
+						});
+					}
+				}
+			}
+		} catch (err) {
+			console.error('Manual update check failed:', err);
+		} finally {
+			window.location.reload();
+		}
+	}
 </script>
 
 <!-- App identity -->
-<section class="p-4 rounded-2xl bg-card border border-border flex items-center gap-3">
-	<div class="h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
-		<Heart class="h-5 w-5 fill-primary/30" />
+<section class="p-4 rounded-2xl bg-card border border-border space-y-3">
+	<div class="flex items-center gap-3">
+		<div class="h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+			<Heart class="h-5 w-5 fill-primary/30" />
+		</div>
+		<div class="min-w-0">
+			<div class="text-sm font-semibold text-foreground">Open Love v{APP_VERSION}</div>
+			<p class="text-xs text-muted-foreground">Privacy-first & self-hosted. Made with 🩵 by Frozd.</p>
+		</div>
 	</div>
-	<div class="min-w-0">
-		<div class="text-sm font-semibold text-foreground">Open Love v{APP_VERSION}</div>
-		<p class="text-xs text-muted-foreground">Privacy-first & self-hosted. Made with 🩵 by Frozd.</p>
-	</div>
+	<Button
+		size="sm"
+		variant="outline"
+		class="w-full h-8 text-xs"
+		disabled={isCheckingForUpdates}
+		onclick={checkForUpdates}
+	>
+		<RefreshCw class="h-3.5 w-3.5 mr-1.5 {isCheckingForUpdates ? 'animate-spin' : ''}" />
+		<span>{isCheckingForUpdates ? 'Checking…' : 'Check for Updates'}</span>
+	</Button>
 </section>
 
 <!-- Privacy summary -->
