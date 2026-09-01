@@ -16,12 +16,15 @@
 		ImageUp,
 		Share2,
 		Loader2,
-		AlertTriangle
+		AlertTriangle,
+		Camera,
+		ChevronRight
 	} from '@lucide/svelte';
 	import QRCodeStyling from 'qr-code-styling';
 	import { copyToClipboard } from '$lib/utils/clipboard';
 	import { getDeviceOS } from '$lib/utils/pwa';
 	import { resolveQrColor, bondLogoDataUri } from '$lib/utils/qrTheme';
+	import ShareProgressView from './ShareProgressView.svelte';
 
 	interface Props {
 		open?: boolean;
@@ -29,6 +32,9 @@
 	}
 
 	let { open = $bindable(false), onclose }: Props = $props();
+
+	type ShareHubView = 'menu' | 'invite' | 'progress';
+	let view = $state<ShareHubView>('menu');
 
 	// Feature-detected, not assumed from a user-agent/viewport check — true on
 	// most mobile browsers and a growing set of desktop ones, absent on the
@@ -71,7 +77,9 @@
 
 	$effect(() => {
 		if (open) {
-			// Fresh session every time the modal opens.
+			// Fresh session every time the modal opens — always lands back on the
+			// chooser rather than reopening on whichever branch was last shown.
+			view = 'menu';
 			includePhoto = false;
 			uploadingPhoto = false;
 			photoUploadFailed = false;
@@ -91,7 +99,7 @@
 	});
 
 	$effect(() => {
-		if (open && typeof window !== 'undefined') {
+		if (open && view === 'invite' && typeof window !== 'undefined') {
 			includePhoto; // tracked dependency: regenerate when the toggle changes too
 			profileStore.profile.colorPalette; // ...and when the user changes theme while open
 			generateQR();
@@ -287,10 +295,49 @@
 
 <Modal
 	bind:open
-	title="Share Bond"
-	description="Share '{profileStore.activeBond.names}' with your partner or friend"
+	title={view === 'invite' ? 'Invite Partner' : view === 'progress' ? 'Share Progress' : 'Share'}
+	description={view === 'invite'
+		? `Share '${profileStore.activeBond.names}' with your partner or friend`
+		: view === 'progress'
+			? 'Post your milestone as a Story or square image'
+			: 'Choose how you want to share'}
+	onBack={view !== 'menu' ? () => (view = 'menu') : undefined}
 	{onclose}
 >
+	{#if view === 'menu'}
+		<nav class="space-y-2 py-2">
+			<button
+				type="button"
+				class="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-border bg-card/70 hover:bg-accent/60 transition-colors text-left cursor-pointer"
+				onclick={() => (view = 'progress')}
+			>
+				<div class="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+					<Camera class="h-4 w-4" />
+				</div>
+				<div class="min-w-0 flex-1">
+					<div class="text-sm font-semibold text-foreground">Share Progress</div>
+					<div class="text-xs text-muted-foreground truncate">Post your milestone as an Instagram Story or square image</div>
+				</div>
+				<ChevronRight class="h-4 w-4 text-muted-foreground shrink-0" />
+			</button>
+			<button
+				type="button"
+				class="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-border bg-card/70 hover:bg-accent/60 transition-colors text-left cursor-pointer"
+				onclick={() => (view = 'invite')}
+			>
+				<div class="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+					<QrCode class="h-4 w-4" />
+				</div>
+				<div class="min-w-0 flex-1">
+					<div class="text-sm font-semibold text-foreground">Invite Partner</div>
+					<div class="text-xs text-muted-foreground truncate">Share a QR code or link to sync this bond</div>
+				</div>
+				<ChevronRight class="h-4 w-4 text-muted-foreground shrink-0" />
+			</button>
+		</nav>
+	{:else if view === 'progress'}
+		<ShareProgressView />
+	{:else}
 	<div class="flex flex-col items-center text-center space-y-4 py-2">
 		<!-- QR Code. `qr-code-styling` mounts its own <canvas> into this container
 		     via `.append()` — it isn't a Svelte-rendered element, so it stays
@@ -433,4 +480,5 @@
 			</Button>
 		</div>
 	</div>
+	{/if}
 </Modal>

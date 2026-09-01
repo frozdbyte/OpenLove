@@ -68,7 +68,7 @@
 				</p>
 			</button>
 
-			<ThemeIconButton icon={Share2} onclick={onOpenShare} ariaLabel="Share with Partner" shrink />
+			<ThemeIconButton icon={Share2} onclick={onOpenShare} ariaLabel="Share" shrink />
 		</header>
 
 		<!-- Offline / pending-sync indicator -->

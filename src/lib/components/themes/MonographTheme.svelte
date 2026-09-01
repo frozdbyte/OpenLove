@@ -31,7 +31,7 @@
 			<ChevronDown class="h-3 w-3 opacity-60 ml-0.5" />
 		</button>
 
-		<ThemeIconButton icon={Share2} onclick={onOpenShare} ariaLabel="Share with Partner" />
+		<ThemeIconButton icon={Share2} onclick={onOpenShare} ariaLabel="Share" />
 	</header>
 
 	<!-- Offline / pending-sync indicator -->

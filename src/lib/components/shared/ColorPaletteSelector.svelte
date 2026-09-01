@@ -10,9 +10,10 @@
 	interface Props {
 		value: ColorPalette;
 		onchange: (palette: ColorPalette) => void;
+		label?: string;
 	}
 
-	let { value, onchange }: Props = $props();
+	let { value, onchange, label = 'Accent Color Palette' }: Props = $props();
 
 	const PALETTES: { id: ColorPalette; name: string; bg: string }[] = [
 		{ id: 'rose', name: 'Rose', bg: 'bg-rose-500' },
@@ -24,7 +25,7 @@
 </script>
 
 <div class="pt-2">
-	<span class="text-[11px] text-muted-foreground font-medium block mb-2">Accent Color Palette</span>
+	<span class="text-[11px] text-muted-foreground font-medium block mb-2">{label}</span>
 	<div class="flex items-center gap-3 px-2">
 		{#each PALETTES as p}
 			<button

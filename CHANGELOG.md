@@ -5,6 +5,21 @@ All notable changes to OpenLove are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-09-01
+
+### Added
+
+- Sharing progress to social media as a story or post
+- "About" section in settings with info and changelog
+
+### Changed
+
+- Tapping "Share" now opens a selection prompt between sharing the bond with a partner or sharing progress on social media
+
+### Fixed
+
+- The "pending changes" drawer is no longer rendered behind bond statistics
+
 ## [1.6.1] - 2026-08-31
 
 ### Added
