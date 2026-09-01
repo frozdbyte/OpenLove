@@ -173,7 +173,9 @@ export async function loadAppStateFromStorage(): Promise<AppState> {
 }
 
 /**
- * Save complete application state and per-bond photo blobs to IndexedDB.
+ * Save complete application state to IndexedDB.
+ * (Photos are saved individually via `saveBondPhoto` on mutation to prevent
+ * expensive and destructive re-serialization of binary blobs on every setting change).
  */
 export async function saveAppStateToStorage(state: AppState): Promise<void> {
 	if (typeof window === 'undefined') return;
@@ -191,15 +193,6 @@ export async function saveAppStateToStorage(state: AppState): Promise<void> {
 		);
 
 		await set(BONDS_V2_KEY, cleanPayload);
-
-		// Save photos individually
-		for (const bond of state.bonds) {
-			if (bond.photoBlob) {
-				await set(`${PHOTO_KEY_PREFIX}${bond.id}`, bond.photoBlob);
-			} else if (bond.photoBlob === null) {
-				await del(`${PHOTO_KEY_PREFIX}${bond.id}`);
-			}
-		}
 	} catch (error) {
 		console.error('Failed to save app state to IndexedDB:', error);
 	}

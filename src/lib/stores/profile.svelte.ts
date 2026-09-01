@@ -680,13 +680,14 @@ class ProfileStore {
 			// Case 1: V2 full backup (always replaces full state)
 			if (data.version === 2 && Array.isArray(data.bonds) && data.bonds.length > 0) {
 				const previous = { ...this.state };
+				const normalizedBonds: Bond[] = data.bonds.map((b: Partial<Bond>) => ({
+					id: b.id || `bond_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+					notificationsEnabled: b.notificationsEnabled ?? true,
+					...normalizeIncomingBond(b.type || 'romantic', b, data)
+				}));
 				this.state = {
-					activeBondId: data.activeBondId || data.bonds[0].id,
-					bonds: data.bonds.map((b: Partial<Bond>) => ({
-						id: b.id || `bond_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-						notificationsEnabled: b.notificationsEnabled ?? true,
-						...normalizeIncomingBond(b.type || 'romantic', b, data)
-					})),
+					activeBondId: data.activeBondId || normalizedBonds[0].id,
+					bonds: normalizedBonds,
 					uiTheme: data.uiTheme || 'modern',
 					colorMode: data.colorMode || 'system',
 					colorPalette: data.colorPalette || 'rose',
@@ -696,6 +697,12 @@ class ProfileStore {
 					pushIntent: this.state.pushIntent,
 					notificationsPromptShown: this.state.notificationsPromptShown
 				};
+				// Persist any decoded inline photos to IndexedDB
+				for (const b of normalizedBonds) {
+					if (b.photoBlob) {
+						await saveBondPhoto(b.id, b.photoBlob);
+					}
+				}
 				this.applyThemeAndDarkMode();
 				await saveAppStateToStorage(this.state);
 				this.notifyMutation(previous);

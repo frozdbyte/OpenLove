@@ -148,6 +148,49 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 	return img.decode().then(() => img);
 }
 
+/**
+ * Loads an image from a Blob or URL into an HTMLImageElement using .decode(),
+ * which works reliably across all browsers including iOS WebKit / Safari PWA.
+ */
+async function loadPhotoElement(
+	photoBlob: Blob,
+	fallbackUrl?: string
+): Promise<{ image: HTMLImageElement; cleanup: () => void }> {
+	let objectUrl: string | null = null;
+	try {
+		objectUrl = URL.createObjectURL(photoBlob);
+		const img = new Image();
+		img.src = objectUrl;
+		await img.decode();
+		return {
+			image: img,
+			cleanup: () => {
+				if (objectUrl) {
+					try {
+						URL.revokeObjectURL(objectUrl);
+					} catch {}
+				}
+			}
+		};
+	} catch (err) {
+		if (objectUrl) {
+			try {
+				URL.revokeObjectURL(objectUrl);
+			} catch {}
+		}
+		// If object URL decoding failed on the in-memory Blob and a fallback URL exists, try it
+		if (fallbackUrl) {
+			try {
+				const img = new Image();
+				img.src = fallbackUrl;
+				await img.decode();
+				return { image: img, cleanup: () => {} };
+			} catch {}
+		}
+		throw err;
+	}
+}
+
 /** Draws `photoBlob` into an arbitrary destination rect, cropped (never
  * letterboxed) to cover it exactly — same "fill the frame, crop the
  * overflow" behavior as the app's own `object-cover` photo treatment
@@ -158,42 +201,60 @@ async function drawCoverPhotoInRect(
 	dx: number,
 	dy: number,
 	dw: number,
-	dh: number
+	dh: number,
+	fallbackUrl?: string
 ): Promise<void> {
-	const bitmap = await createImageBitmap(photoBlob);
+	const { image, cleanup } = await loadPhotoElement(photoBlob, fallbackUrl);
 	try {
+		const naturalWidth = image.naturalWidth || image.width;
+		const naturalHeight = image.naturalHeight || image.height;
+		if (!naturalWidth || !naturalHeight) return;
+
 		const rectRatio = dw / dh;
-		const imageRatio = bitmap.width / bitmap.height;
+		const imageRatio = naturalWidth / naturalHeight;
 		let sx = 0;
 		let sy = 0;
-		let sWidth = bitmap.width;
-		let sHeight = bitmap.height;
+		let sWidth = naturalWidth;
+		let sHeight = naturalHeight;
 
 		if (imageRatio > rectRatio) {
-			sWidth = bitmap.height * rectRatio;
-			sx = (bitmap.width - sWidth) / 2;
+			sWidth = naturalHeight * rectRatio;
+			sx = (naturalWidth - sWidth) / 2;
 		} else {
-			sHeight = bitmap.width / rectRatio;
-			sy = (bitmap.height - sHeight) / 2;
+			sHeight = naturalWidth / rectRatio;
+			sy = (naturalHeight - sHeight) / 2;
 		}
 
-		ctx.drawImage(bitmap, sx, sy, sWidth, sHeight, dx, dy, dw, dh);
+		ctx.drawImage(image, sx, sy, sWidth, sHeight, dx, dy, dw, dh);
 	} finally {
-		bitmap.close();
+		cleanup();
 	}
 }
 
-async function drawCoverPhoto(ctx: CanvasRenderingContext2D, photoBlob: Blob, width: number, height: number): Promise<void> {
-	return drawCoverPhotoInRect(ctx, photoBlob, 0, 0, width, height);
+async function drawCoverPhoto(
+	ctx: CanvasRenderingContext2D,
+	photoBlob: Blob,
+	width: number,
+	height: number,
+	fallbackUrl?: string
+): Promise<void> {
+	return drawCoverPhotoInRect(ctx, photoBlob, 0, 0, width, height, fallbackUrl);
 }
 
 /** Circle-clipped cover photo — the "Bold" style's small avatar. */
-async function drawCircularPhoto(ctx: CanvasRenderingContext2D, photoBlob: Blob, cx: number, cy: number, radius: number): Promise<void> {
+async function drawCircularPhoto(
+	ctx: CanvasRenderingContext2D,
+	photoBlob: Blob,
+	cx: number,
+	cy: number,
+	radius: number,
+	fallbackUrl?: string
+): Promise<void> {
 	ctx.save();
 	ctx.beginPath();
 	ctx.arc(cx, cy, radius, 0, Math.PI * 2);
 	ctx.clip();
-	await drawCoverPhotoInRect(ctx, photoBlob, cx - radius, cy - radius, radius * 2, radius * 2);
+	await drawCoverPhotoInRect(ctx, photoBlob, cx - radius, cy - radius, radius * 2, radius * 2, fallbackUrl);
 	ctx.restore();
 }
 
@@ -205,13 +266,14 @@ async function drawFramedPhoto(
 	y: number,
 	w: number,
 	h: number,
-	radius: number
+	radius: number,
+	fallbackUrl?: string
 ): Promise<void> {
 	ctx.save();
 	ctx.beginPath();
 	ctx.roundRect(x, y, w, h, radius);
 	ctx.clip();
-	await drawCoverPhotoInRect(ctx, photoBlob, x, y, w, h);
+	await drawCoverPhotoInRect(ctx, photoBlob, x, y, w, h, fallbackUrl);
 	ctx.restore();
 }
 
@@ -410,9 +472,16 @@ async function renderScrimStyle(
 	milestone: string,
 	color: string
 ): Promise<void> {
+	let drewPhoto = false;
 	if (bond.photoBlob) {
-		await drawCoverPhoto(ctx, bond.photoBlob, dims.width, dims.height);
-	} else {
+		try {
+			await drawCoverPhoto(ctx, bond.photoBlob, dims.width, dims.height, bond.photoUrl);
+			drewPhoto = true;
+		} catch (err) {
+			console.warn('Failed to draw photo in scrim style, falling back to gradient:', err);
+		}
+	}
+	if (!drewPhoto) {
 		drawGradientBackground(ctx, color, dims.width, dims.height);
 	}
 
@@ -463,9 +532,16 @@ async function renderFramedStyle(
 	ctx.fill();
 	ctx.shadowBlur = 0;
 
+	let drewPhoto = false;
 	if (bond.photoBlob) {
-		await drawFramedPhoto(ctx, bond.photoBlob, frameX, frameY, frameSize, frameSize, frameRadius);
-	} else {
+		try {
+			await drawFramedPhoto(ctx, bond.photoBlob, frameX, frameY, frameSize, frameSize, frameRadius, bond.photoUrl);
+			drewPhoto = true;
+		} catch (err) {
+			console.warn('Failed to draw framed photo, falling back to glyph:', err);
+		}
+	}
+	if (!drewPhoto) {
 		ctx.beginPath();
 		ctx.roundRect(frameX, frameY, frameSize, frameSize, frameRadius);
 		ctx.fillStyle = lighten(color, 0.85);
@@ -508,14 +584,21 @@ async function renderBoldStyle(
 
 	const avatarRadius = width * 0.13;
 	const avatarCy = height * BOLD_AVATAR_CENTER[format];
+	let drewPhoto = false;
 	if (bond.photoBlob) {
-		await drawCircularPhoto(ctx, bond.photoBlob, width / 2, avatarCy, avatarRadius);
-		ctx.beginPath();
-		ctx.arc(width / 2, avatarCy, avatarRadius, 0, Math.PI * 2);
-		ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-		ctx.lineWidth = width * 0.008;
-		ctx.stroke();
-	} else {
+		try {
+			await drawCircularPhoto(ctx, bond.photoBlob, width / 2, avatarCy, avatarRadius, bond.photoUrl);
+			ctx.beginPath();
+			ctx.arc(width / 2, avatarCy, avatarRadius, 0, Math.PI * 2);
+			ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+			ctx.lineWidth = width * 0.008;
+			ctx.stroke();
+			drewPhoto = true;
+		} catch (err) {
+			console.warn('Failed to draw circular photo in bold style, falling back to glyph:', err);
+		}
+	}
+	if (!drewPhoto) {
 		await drawBondGlyph(ctx, width / 2, avatarCy, avatarRadius, bond.type, darken(color, 0.35));
 	}
 
@@ -610,14 +693,21 @@ async function renderPolaroidStyle(
 	const photoX = -cardW / 2 + cardPadding;
 	const photoY = -cardH / 2 + cardPadding;
 
+	let drewPhoto = false;
 	if (bond.photoBlob) {
 		ctx.save();
 		ctx.beginPath();
 		ctx.rect(photoX, photoY, photoSize, photoSize);
 		ctx.clip();
-		await drawCoverPhotoInRect(ctx, bond.photoBlob, photoX, photoY, photoSize, photoSize);
+		try {
+			await drawCoverPhotoInRect(ctx, bond.photoBlob, photoX, photoY, photoSize, photoSize, bond.photoUrl);
+			drewPhoto = true;
+		} catch (err) {
+			console.warn('Failed to draw polaroid photo, falling back to glyph:', err);
+		}
 		ctx.restore();
-	} else {
+	}
+	if (!drewPhoto) {
 		ctx.fillStyle = lighten(color, 0.88);
 		ctx.fillRect(photoX, photoY, photoSize, photoSize);
 		await drawBondGlyph(ctx, photoX + photoSize / 2, photoY + photoSize / 2, photoSize * 0.22, bond.type, color);
@@ -824,14 +914,21 @@ async function renderConstellationStyle(
 	}
 
 	// Avatar Photo / Glyph
+	let drewPhoto = false;
 	if (bond.photoBlob) {
-		await drawCircularPhoto(ctx, bond.photoBlob, width / 2, avatarCy, avatarRadius);
-		ctx.beginPath();
-		ctx.arc(width / 2, avatarCy, avatarRadius, 0, Math.PI * 2);
-		ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-		ctx.lineWidth = width * 0.006;
-		ctx.stroke();
-	} else {
+		try {
+			await drawCircularPhoto(ctx, bond.photoBlob, width / 2, avatarCy, avatarRadius, bond.photoUrl);
+			ctx.beginPath();
+			ctx.arc(width / 2, avatarCy, avatarRadius, 0, Math.PI * 2);
+			ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+			ctx.lineWidth = width * 0.006;
+			ctx.stroke();
+			drewPhoto = true;
+		} catch (err) {
+			console.warn('Failed to draw constellation photo, falling back to glyph:', err);
+		}
+	}
+	if (!drewPhoto) {
 		await drawBondGlyph(ctx, width / 2, avatarCy, avatarRadius, bond.type, darken(color, 0.3));
 	}
 
@@ -902,9 +999,16 @@ async function renderMonographStyle(
 ): Promise<void> {
 	const { width, height } = dims;
 
+	let drewPhoto = false;
 	if (bond.photoBlob) {
-		await drawCoverPhoto(ctx, bond.photoBlob, width, height);
-	} else {
+		try {
+			await drawCoverPhoto(ctx, bond.photoBlob, width, height, bond.photoUrl);
+			drewPhoto = true;
+		} catch (err) {
+			console.warn('Failed to draw monograph photo, falling back to gradient:', err);
+		}
+	}
+	if (!drewPhoto) {
 		const bg = ctx.createLinearGradient(0, 0, width, height);
 		bg.addColorStop(0, '#141416');
 		bg.addColorStop(1, darken(color, 0.8));
@@ -1062,17 +1166,28 @@ async function renderBotanicalStyle(
 	ctx.restore();
 
 	// Draw photo inside arch
-	ctx.save();
-	createArchPath();
-	ctx.clip();
+	let drewPhoto = false;
 	if (bond.photoBlob) {
-		await drawCoverPhotoInRect(ctx, bond.photoBlob, archX, archY, archW, archH);
-	} else {
+		ctx.save();
+		createArchPath();
+		ctx.clip();
+		try {
+			await drawCoverPhotoInRect(ctx, bond.photoBlob, archX, archY, archW, archH, bond.photoUrl);
+			drewPhoto = true;
+		} catch (err) {
+			console.warn('Failed to draw botanical arch photo, falling back to glyph:', err);
+		}
+		ctx.restore();
+	}
+	if (!drewPhoto) {
+		ctx.save();
+		createArchPath();
+		ctx.clip();
 		ctx.fillStyle = lighten(color, 0.88);
 		ctx.fill();
 		await drawBondGlyph(ctx, archX + archW / 2, archY + archH / 2, archW * 0.2, bond.type, color);
+		ctx.restore();
 	}
-	ctx.restore();
 
 	// Outer arch delicate stroke + subtle accent color keyline
 	createArchPath();
@@ -1190,7 +1305,7 @@ async function renderBotanicalStyle(
 
 /* -------------------------------------------------------------------------
  * Style: Glass (Frosted Glassmorphism) — ultra-modern floating frosted glass
- * card over blurred ambient background with ambient color orbs, glowing avatar
+ * card over ambient background with ambient color orbs, glowing avatar
  * ring, and crisp modern metrics.
  * ---------------------------------------------------------------------- */
 
@@ -1204,16 +1319,18 @@ async function renderGlassStyle(
 ): Promise<void> {
 	const { width, height } = dims;
 
-	// Background: dark base + ambient blurred photo or gradients
+	// Background: dark base + ambient photo or gradients
 	ctx.fillStyle = '#080c16';
 	ctx.fillRect(0, 0, width, height);
 
 	if (bond.photoBlob) {
 		ctx.save();
-		if ('filter' in ctx) {
-			ctx.filter = 'blur(45px) brightness(0.45) saturate(1.2)';
+		ctx.globalAlpha = 0.28;
+		try {
+			await drawCoverPhoto(ctx, bond.photoBlob, width, height, bond.photoUrl);
+		} catch (err) {
+			console.warn('Failed to draw glass ambient photo:', err);
 		}
-		await drawCoverPhoto(ctx, bond.photoBlob, width, height);
 		ctx.restore();
 	}
 
@@ -1279,17 +1396,24 @@ async function renderGlassStyle(
 	const avatarCy = cardY + cardH * (isStory ? 0.22 : 0.2);
 	const avatarRadius = width * 0.13;
 
+	let drewAvatar = false;
 	if (bond.photoBlob) {
-		await drawCircularPhoto(ctx, bond.photoBlob, width / 2, avatarCy, avatarRadius);
-		ctx.beginPath();
-		ctx.arc(width / 2, avatarCy, avatarRadius, 0, Math.PI * 2);
-		ctx.strokeStyle = color;
-		ctx.lineWidth = width * 0.007;
-		ctx.shadowColor = color;
-		ctx.shadowBlur = width * 0.03;
-		ctx.stroke();
-		ctx.shadowBlur = 0;
-	} else {
+		try {
+			await drawCircularPhoto(ctx, bond.photoBlob, width / 2, avatarCy, avatarRadius, bond.photoUrl);
+			ctx.beginPath();
+			ctx.arc(width / 2, avatarCy, avatarRadius, 0, Math.PI * 2);
+			ctx.strokeStyle = color;
+			ctx.lineWidth = width * 0.007;
+			ctx.shadowColor = color;
+			ctx.shadowBlur = width * 0.03;
+			ctx.stroke();
+			ctx.shadowBlur = 0;
+			drewAvatar = true;
+		} catch (err) {
+			console.warn('Failed to draw glass avatar photo, falling back to glyph:', err);
+		}
+	}
+	if (!drewAvatar) {
 		await drawBondGlyph(ctx, width / 2, avatarCy, avatarRadius, bond.type, color);
 	}
 

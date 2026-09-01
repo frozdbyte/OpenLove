@@ -60,6 +60,7 @@
 	let imageBlob = $state<Blob | null>(null);
 	let previewUrl = $state<string | null>(null);
 	let failed = $state(false);
+	let failedReason = $state("");
 
 	// Bumped on every requested render. `regenerate()` *serializes* actual
 	// generation rather than letting overlapping calls race: a request that
@@ -103,6 +104,7 @@
 				} catch (err) {
 					if (runToken === renderToken) {
 						console.error('Failed to generate share card image:', err);
+						failedReason = err as string;
 						failed = true;
 					}
 				}
@@ -116,10 +118,24 @@
 		}
 	}
 
+	let currentBondId = $state(profileStore.activeBond.id);
+
+	$effect(() => {
+		const newBondId = profileStore.activeBond.id;
+		if (newBondId !== currentBondId) {
+			currentBondId = newBondId;
+			const prefs = loadShareProgressPrefs(newBondId);
+			format = prefs.format ?? 'story';
+			style = prefs.style ?? 'scrim';
+			cardColor = prefs.colorPalette ?? profileStore.activeBond.colorPalette ?? 'rose';
+		}
+	});
+
 	$effect(() => {
 		format; // tracked dependencies: regenerate whenever any of these change
 		style;
 		cardColor;
+		profileStore.activeBond;
 		void regenerate();
 	});
 
@@ -216,6 +232,9 @@
 				try again
 			</button>
 		</p>
+		<pre>
+			{failedReason}
+		</pre>
 	{/if}
 
 	<!-- Style / Theme picker -->
