@@ -6,7 +6,7 @@
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
 	import Button from '$lib/components/ui/button';
 	import Switch from '$lib/components/ui/switch';
-	import { Trash2, Plus, QrCode, Users, Clock, BellOff, UserRound, Palette, Bell, Flag, Database, ChevronRight } from '@lucide/svelte';
+	import { Trash2, Plus, QrCode, Users, Clock, BellOff, UserRound, Palette, Bell, Flag, Database, Info, ChevronRight } from '@lucide/svelte';
 	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
 	import ThemeSelector from '$lib/components/shared/ThemeSelector.svelte';
 	import ColorModeSelector from '$lib/components/shared/ColorModeSelector.svelte';
@@ -16,6 +16,7 @@
 	import MilestonesList from './MilestonesList.svelte';
 	import PushNotificationPanel from './PushNotificationPanel.svelte';
 	import StorageBackupPanel from './StorageBackupPanel.svelte';
+	import AboutPanel from './AboutPanel.svelte';
 
 	interface Props {
 		open?: boolean;
@@ -39,7 +40,7 @@
 
 	// Root-list/sub-view navigation within the drawer (existing-bond editing
 	// only — new-bond creation stays a single flat form, see below).
-	type SettingsSection = 'identity' | 'appearance' | 'notifications' | 'milestones' | 'data';
+	type SettingsSection = 'identity' | 'appearance' | 'notifications' | 'milestones' | 'data' | 'about';
 	let activeSection = $state<SettingsSection | null>(null);
 
 	const SECTION_META: Record<
@@ -55,9 +56,18 @@
 			description: 'Storage, backup, restore, and reset',
 			icon: Database,
 			needsAttention: () => !pwaStore.isStoragePersisted
-		}
+		},
+		about: { title: 'About', description: "Version, what's new, and links", icon: Info }
 	};
-	const SETTINGS_SECTIONS: SettingsSection[] = ['identity', 'appearance', 'notifications', 'milestones', 'data'];
+	const SETTINGS_SECTIONS: SettingsSection[] = [
+		'identity',
+		'appearance',
+		'notifications',
+		'milestones',
+		'data',
+		'about'
+	];
+	const APP_WIDE_ONLY_SECTIONS: SettingsSection[] = ['data', 'about'];
 
 	// Target bond resolution
 	let currentBond = $derived<Bond>(
@@ -297,7 +307,7 @@
 					{@const meta = SECTION_META[key]}
 					{@const Icon = meta.icon}
 					{@const attention = meta.needsAttention?.() ?? false}
-					{#if key !== 'data' || showAppWideSettings}
+					{#if !APP_WIDE_ONLY_SECTIONS.includes(key) || showAppWideSettings}
 						<button
 							type="button"
 							class="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-border bg-card/70 hover:bg-accent/60 transition-colors text-left cursor-pointer"
@@ -480,6 +490,10 @@
 					onclose?.();
 				}}
 			/>
+		{/if}
+
+		{#if showAppWideSettings && !isNewBond && activeSection === 'about'}
+			<AboutPanel />
 		{/if}
 	</div>
 </Modal>

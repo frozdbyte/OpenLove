@@ -4,6 +4,8 @@
 
 > **A free, self-hosted, privacy-first relationship tracker and anniversary reminder alternative to "My Love".**
 
+🔗 [Project website](https://frozdbyte.github.io/OpenLove/) · [Changelog](./CHANGELOG.md)
+
 OpenLove allows couples to track how long they have been together with live counters, special multi-category milestones (months, years, days, custom), customizable romantic themes, and Web Push milestone alerts.
 
 ---

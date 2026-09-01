@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Open Love - a self-hosted, privacy-first relationship tracker</title>
+	<meta
+		name="description"
+		content="Open Love is a free, self-hosted, privacy-first relationship tracker and anniversary reminder alternative to 'My Love'. Track how long you've been together, milestones, and more — with zero-knowledge privacy."
+	/>
+	<link rel="icon" href="./assets/favicon.svg" type="image/svg+xml" />
+	<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+	<div class="wrap">
+		<nav class="nav">
+			<a class="brand" href="#top">
+				<img src="./assets/icon.png" alt="" />
+				<span>Open Love</span>
+			</a>
+			<div class="links">
+				<a href="#features">Features</a>
+				<a href="#quickstart">Self-host</a>
+				<a href="#changelog">Changelog</a>
+				<a href="https://github.com/frozdbyte/OpenLove" target="_blank" rel="noopener noreferrer">GitHub</a>
+			</div>
+		</nav>
+
+		<header class="hero" id="top">
+			<div class="hero-inner">
+				<div class="hero-copy-top">
+					<p class="eyebrow">Free &amp; open source · Self-hosted · Zero-knowledge</p>
+					<h1>Your love, <span class="grad">privately tracked.</span></h1>
+				</div>
+
+				<div class="hero-visual">
+					<div class="hero-blob hero-blob-a" aria-hidden="true"></div>
+					<div class="hero-blob hero-blob-b" aria-hidden="true"></div>
+					<img
+						class="hero-shot"
+						src="./assets/screenshot.webp"
+						alt="Open Love app showing a couple's 'together for 1 year and 7 days' counter, with months, weeks, days, and hours stats and a milestone progress bar"
+						width="1370"
+						height="2732"
+					/>
+				</div>
+
+				<div class="hero-copy-rest">
+					<p class="tagline">
+						A self-hosted relationship tracker and anniversary reminder, alternative to "My Love."
+						Live counters, milestone alerts, and romantic themes — with names, dates, and photos
+						that never leave your device.
+					</p>
+					<div class="cta-row">
+						<a class="btn primary" href="https://github.com/frozdbyte/OpenLove" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+						<a class="btn secondary" href="#quickstart">Self-host it</a>
+					</div>
+					<div class="hero-trust">
+						<span>🔒 Zero-knowledge by design</span>
+						<span>📲 Installable PWA</span>
+						<span>🐳 Docker &amp; Coolify ready</span>
+					</div>
+				</div>
+			</div>
+		</header>
+
+		<section id="features">
+			<h2>Why Open Love</h2>
+			<div class="grid">
+				<div class="card">
+					<h3>🔒 Zero-Knowledge Privacy</h3>
+					<p>Names, dates, and high-res photos live in your browser's IndexedDB. The server never stores your memories.</p>
+				</div>
+				<div class="card">
+					<h3>💖 Multiple Bonds</h3>
+					<p>Track romantic relationships and friendships side by side, each with its own milestones and look.</p>
+				</div>
+				<div class="card">
+					<h3>🎨 Themes for every taste</h3>
+					<p>Modern, Cover, Traditional, and more — light, dark, or system, per bond.</p>
+				</div>
+				<div class="card">
+					<h3>📲 Genuinely offline-first</h3>
+					<p>Installable as a PWA that cold-starts with no network at all — airplane mode included.</p>
+				</div>
+				<div class="card">
+					<h3>🔔 Milestone push alerts</h3>
+					<p>Anonymous Web Push notifications on your exact milestone day, in your local timezone.</p>
+				</div>
+				<div class="card">
+					<h3>💾 QR share &amp; backup</h3>
+					<p>1-tap backup/restore and instant QR sharing, with optional end-to-end encrypted photo sharing.</p>
+				</div>
+			</div>
+		</section>
+
+		<section id="quickstart">
+			<h2>Self-host it</h2>
+			<p class="section-lede">
+				Open Love ships as a single container with a bundled SQLite database — no external
+				services to wire up. Pick whichever fits how you already run things.
+			</p>
+
+			<div class="host-grid">
+				<div class="host-card">
+					<h3>🐳 Docker Compose</h3>
+					<p>Run it anywhere Docker runs — a VPS, a home server, or your laptop.</p>
+					<div class="cmd-list">
+						<div class="cmd">
+							<code>git clone https://github.com/frozdbyte/OpenLove.git</code>
+							<button class="copy-btn" type="button" data-copy="git clone https://github.com/frozdbyte/OpenLove.git" aria-label="Copy command">
+								<svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+								<svg class="icon-check" style="display: none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><polyline points="20 6 9 17 4 12"/></svg>
+							</button>
+						</div>
+						<div class="cmd">
+							<code>cd OpenLove</code>
+							<button class="copy-btn" type="button" data-copy="cd OpenLove" aria-label="Copy command">
+								<svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+								<svg class="icon-check" style="display: none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><polyline points="20 6 9 17 4 12"/></svg>
+							</button>
+						</div>
+						<div class="cmd">
+							<code>docker compose up -d</code>
+							<button class="copy-btn" type="button" data-copy="docker compose up -d" aria-label="Copy command">
+								<svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+								<svg class="icon-check" style="display: none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><polyline points="20 6 9 17 4 12"/></svg>
+							</button>
+						</div>
+					</div>
+					<p>Open <code>http://localhost:3000</code> to start the onboarding wizard.</p>
+					<p class="host-note">
+						SQLite data and auto-generated VAPID push keys persist in the
+						<code>openlove_data</code> volume.
+					</p>
+				</div>
+
+				<div class="host-card">
+					<h3>☁️ Coolify</h3>
+					<p>Open Love ships a ready-made compose file for Coolify's one-click deploys.</p>
+					<ol>
+						<li>In Coolify, create a new <strong>Docker Compose</strong> service.</li>
+						<li>
+							Point it at this repository, or paste the contents of
+							<code>docker-compose.coolify.yml</code>.
+						</li>
+						<li>
+							Set your domain in the Coolify UI — <code>SERVICE_FQDN_OPENLOVE_3000</code> wires
+							it up automatically.
+						</li>
+						<li>Deploy. Coolify handles SSL, the reverse proxy, and restarts.</li>
+					</ol>
+					<p class="host-note">
+						VAPID push keys auto-generate into <code>/app/data/vapid.json</code> on first boot —
+						or set your own via <code>PUBLIC_VAPID_KEY</code> / <code>PRIVATE_VAPID_KEY</code> /
+						<code>VAPID_SUBJECT</code> in Coolify's environment tab.
+					</p>
+				</div>
+			</div>
+
+			<p class="section-foot">
+				See the
+				<a href="https://github.com/frozdbyte/OpenLove#readme" target="_blank" rel="noopener noreferrer">README</a>
+				for the full environment variable reference and privacy architecture.
+			</p>
+		</section>
+
+		<section id="changelog">
+			<h2>What's new</h2>
+			<div id="changelog-list"><p style="color: var(--muted)">Loading…</p></div>
+			<p class="changelog-more">
+				<a href="https://github.com/frozdbyte/OpenLove/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">Full changelog on GitHub →</a>
+			</p>
+		</section>
+
+		<footer>
+			<p>MIT Licensed. Crafted with ❤️ for couples everywhere.</p>
+			<p><a href="https://github.com/frozdbyte/OpenLove" target="_blank" rel="noopener noreferrer">GitHub</a></p>
+		</footer>
+	</div>
+
+	<script>
+		fetch('./changelog.json')
+			.then((r) => (r.ok ? r.json() : []))
+			.then((entries) => {
+				const list = document.getElementById('changelog-list');
+				if (!Array.isArray(entries) || entries.length === 0) {
+					list.innerHTML = '<p style="color: var(--muted)">See the full changelog on GitHub.</p>';
+					return;
+				}
+				list.innerHTML = entries
+					.map((entry) => {
+						const sections = entry.sections
+							.map(
+								(section) =>
+									`<h4>${escapeHtml(section.heading)}</h4><ul>${section.items
+										.map((item) => `<li>${escapeHtml(item)}</li>`)
+										.join('')}</ul>`
+							)
+							.join('');
+						return `<div class="entry">
+							<div class="entry-head">
+								<span class="version">v${escapeHtml(entry.version)}</span>
+								${entry.date ? `<span class="date">${escapeHtml(entry.date)}</span>` : ''}
+							</div>
+							${sections}
+						</div>`;
+					})
+					.join('');
+			})
+			.catch(() => {
+				document.getElementById('changelog-list').innerHTML =
+					'<p style="color: var(--muted)">See the full changelog on GitHub.</p>';
+			});
+
+		function escapeHtml(str) {
+			const div = document.createElement('div');
+			div.textContent = str;
+			return div.innerHTML;
+		}
+
+		document.querySelectorAll('.copy-btn').forEach((btn) => {
+			btn.addEventListener('click', async () => {
+				const text = btn.dataset.copy || '';
+				try {
+					if (navigator.clipboard?.writeText) {
+						await navigator.clipboard.writeText(text);
+					} else {
+						const el = document.createElement('textarea');
+						el.value = text;
+						el.style.position = 'fixed';
+						el.style.opacity = '0';
+						document.body.appendChild(el);
+						el.select();
+						document.execCommand('copy');
+						el.remove();
+					}
+				} catch {
+					return;
+				}
+
+				btn.classList.add('copied');
+				btn.querySelector('.icon-copy').hidden = true;
+				btn.querySelector('.icon-copy').style.display = "none";
+				btn.querySelector('.icon-check').hidden = false;
+				btn.querySelector('.icon-check').style.display = "block";
+				clearTimeout(btn._copyTimer);
+				btn._copyTimer = setTimeout(() => {
+					btn.classList.remove('copied');
+					btn.querySelector('.icon-copy').hidden = false;
+					btn.querySelector('.icon-copy').style.display = "block";
+					btn.querySelector('.icon-check').hidden = true;
+					btn.querySelector('.icon-check').style.display = "none";
+				}, 1500);
+			});
+		});
+	</script>
+</body>
+</html>

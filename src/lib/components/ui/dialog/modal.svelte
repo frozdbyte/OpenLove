@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { cn } from "$lib/utils";
 	import { ArrowLeft, X } from "@lucide/svelte";
+	import { Portal } from "bits-ui";
 	import type { Snippet } from "svelte";
 
 	interface Props {
@@ -136,6 +137,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if mounted}
+<Portal>
 	<!-- Backdrop with smooth CSS opacity & blur transition -->
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -213,4 +215,5 @@
 			{@render children?.()}
 		</div>
 	</div>
+</Portal>
 {/if}
