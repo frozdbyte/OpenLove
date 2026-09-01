@@ -8,6 +8,7 @@
 	import { initSync } from "$lib/sync";
 	import { initPushRetry } from "$lib/push/client";
 	import PWAToast from "$lib/components/pwa/PWAToast.svelte";
+	import ToastContainer from "$lib/components/ui/toast/ToastContainer.svelte";
 	import { pwaInfo } from "virtual:pwa-info";
 
 	interface Props {
@@ -38,3 +39,4 @@
 </div>
 
 <PWAToast />
+<ToastContainer />

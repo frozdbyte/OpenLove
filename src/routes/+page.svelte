@@ -16,6 +16,7 @@
 	import { isPushSupported } from '$lib/push/client';
 	import type { Bond } from '$lib/types/bonds';
 	import Button from '$lib/components/ui/button';
+	import ConfirmModal from '$lib/components/ui/dialog/ConfirmModal.svelte';
 	import { Heart } from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
 	import { decodeSharePayloadString, detectFullBackup } from '$lib/utils/share';
@@ -26,6 +27,9 @@
 	let isInviteModalOpen = $state(false);
 	let isSwitcherOpen = $state(false);
 	let isNotificationsPromptOpen = $state(false);
+	let isFullBackupConfirmOpen = $state(false);
+	let pendingFullBackupJson = $state<string | null>(null);
+	let pendingFullBackupCount = $state<number>(0);
 	let pendingIncomingBond = $state<Partial<Bond> | null>(null);
 	let pendingInviteJson = $state('');
 	let pendingInviteRaw = $state('');
@@ -164,15 +168,9 @@
 					await completeHashImport(json, 'replace');
 					return;
 				}
-				const { bondCount } = fullBackup;
-				const confirmed = confirm(
-					`This link contains a full backup with ${bondCount} relationship${bondCount === 1 ? '' : 's'}/friendship${bondCount === 1 ? '' : 's'}. Importing it will replace ALL bonds currently on this device — this cannot be undone unless you have your own backup. Continue?`
-				);
-				if (confirmed) {
-					await completeHashImport(json, 'replace');
-				}
-				// Declined: leave the hash in place, matching the single-bond invite
-				// flow's existing behavior when its modal is closed without accepting.
+				pendingFullBackupJson = json;
+				pendingFullBackupCount = fullBackup.bondCount;
+				isFullBackupConfirmOpen = true;
 				return;
 			}
 
@@ -234,6 +232,13 @@
 		}
 	}
 
+
+	async function handleConfirmFullBackupHash() {
+		if (pendingFullBackupJson) {
+			await completeHashImport(pendingFullBackupJson, 'replace');
+			pendingFullBackupJson = null;
+		}
+	}
 
 	let timeBreakdown = $derived(
 		calculateTimeBreakdown(profileStore.activeBond.togetherSince, currentTime, locale)
@@ -330,4 +335,16 @@
 		isShareOpen = true;
 	}}
 />
+
+<ConfirmModal
+	bind:open={isFullBackupConfirmOpen}
+	title="Restore Full Backup"
+	message={`This link contains a full backup with ${pendingFullBackupCount} relationship${pendingFullBackupCount === 1 ? '' : 's'}/friendship${pendingFullBackupCount === 1 ? '' : 's'}. Importing it will replace ALL bonds currently on this device — this cannot be undone unless you have your own backup. Continue?`}
+	confirmLabel="Replace All Data"
+	variant="destructive"
+	onConfirm={handleConfirmFullBackupHash}
+	onCancel={() => (pendingFullBackupJson = null)}
+	onclose={() => (pendingFullBackupJson = null)}
+/>
+
 

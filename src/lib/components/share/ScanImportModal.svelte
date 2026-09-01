@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { profileStore, parseSharePayload } from '$lib/stores/profile.svelte';
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
+	import ConfirmModal from '$lib/components/ui/dialog/ConfirmModal.svelte';
 	import Button from '$lib/components/ui/button';
 	import Input from '$lib/components/ui/input';
 	import { Camera, QrCode, Upload, FileText, Check, AlertCircle, Sparkles } from '@lucide/svelte';
@@ -69,6 +70,9 @@
 	let pendingIncomingBond = $state<Partial<Bond> | null>(null);
 	let pendingRaw = $state('');
 	let pendingJson = $state('');
+	let isFullBackupConfirmOpen = $state(false);
+	let pendingFullBackupJson = $state<string | null>(null);
+	let pendingFullBackupCount = $state<number>(0);
 	// Set synchronously at the top of `handleAcceptInvite` (i.e. before its first
 	// `await`, so it's in place before `PartnerInviteModal`'s close animation
 	// even starts). Its `onclose` fires ~260ms after `isInviteModalOpen` goes
@@ -300,16 +304,10 @@
 					return;
 				}
 
-				const { bondCount } = fullBackup;
-				const confirmed = confirm(
-					`This code contains a full backup with ${bondCount} relationship${bondCount === 1 ? '' : 's'}/friendship${bondCount === 1 ? '' : 's'}. Importing it will replace ALL bonds currently on this device — this cannot be undone unless you have your own backup. Continue?`
-				);
-				if (!confirmed) return;
-
-				const success = await completeImport(jsonString, 'replace');
-				if (!success) {
-					errorMessage = 'Failed to restore backup. Invalid file format.';
-				}
+				stopCamera();
+				pendingFullBackupJson = jsonString;
+				pendingFullBackupCount = fullBackup.bondCount;
+				isFullBackupConfirmOpen = true;
 				return;
 			}
 
@@ -358,6 +356,23 @@
 			}
 		} else {
 			inviteAccepted = false;
+		}
+	}
+
+	async function handleConfirmFullBackup() {
+		if (pendingFullBackupJson) {
+			const success = await completeImport(pendingFullBackupJson, 'replace');
+			if (!success) {
+				errorMessage = 'Failed to restore backup. Invalid file format.';
+			}
+			pendingFullBackupJson = null;
+		}
+	}
+
+	function handleCancelFullBackup() {
+		pendingFullBackupJson = null;
+		if (open && activeTab === 'camera') {
+			startCamera();
 		}
 	}
 
@@ -524,4 +539,16 @@
 		inviteAccepted = false;
 	}}
 />
+
+<ConfirmModal
+	bind:open={isFullBackupConfirmOpen}
+	title="Restore Full Backup"
+	message={`This code contains a full backup with ${pendingFullBackupCount} relationship${pendingFullBackupCount === 1 ? '' : 's'}/friendship${pendingFullBackupCount === 1 ? '' : 's'}. Importing it will replace ALL bonds currently on this device — this cannot be undone unless you have your own backup. Continue?`}
+	confirmLabel="Replace All Data"
+	variant="destructive"
+	onConfirm={handleConfirmFullBackup}
+	onCancel={handleCancelFullBackup}
+	onclose={handleCancelFullBackup}
+/>
+
 

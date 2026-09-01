@@ -142,5 +142,19 @@
 				</div>
 			</div>
 		{/each}
+
+		{#if filteredMilestones.length === 0}
+			<div class="flex flex-col items-center justify-center py-8 text-center text-muted-foreground gap-2">
+				{#if selectedMilestoneTab === 'custom'}
+					<HeartHandshake class="h-8 w-8 opacity-30" />
+					<p class="text-xs">No custom moments yet.</p>
+					<p class="text-[11px] opacity-70">Tap "+ Add Custom" above to create one.</p>
+				{:else}
+					<Sparkles class="h-8 w-8 opacity-30" />
+					<p class="text-xs">No {selectedMilestoneTab} milestones yet.</p>
+					<p class="text-[11px] opacity-70">They'll appear here as time passes.</p>
+				{/if}
+			</div>
+		{/if}
 	</div>
 </section>

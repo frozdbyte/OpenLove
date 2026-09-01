@@ -25,6 +25,8 @@
 		bondNames: string;
 		bondTogetherSince: string;
 		bondPhotoUrl: string | undefined;
+		photoUploadError?: string;
+		isPhotoSaving?: boolean;
 		onTypeChange: (type: BondType) => void;
 		onNamesChange: (value: string) => void;
 		onDateChange: (value: string) => void;
@@ -39,6 +41,8 @@
 		bondNames,
 		bondTogetherSince,
 		bondPhotoUrl,
+		photoUploadError = '',
+		isPhotoSaving = false,
 		onTypeChange,
 		onNamesChange,
 		onDateChange,
@@ -130,6 +134,12 @@
 					<Trash2 class="h-4 w-4 mr-1.5" />
 					<span>Remove Photo</span>
 				</Button>
+			{/if}
+
+			{#if photoUploadError}
+				<p class="text-xs text-destructive">{photoUploadError}</p>
+			{:else if isPhotoSaving}
+				<p class="text-xs text-muted-foreground">Saving photo…</p>
 			{/if}
 		</div>
 	</div>

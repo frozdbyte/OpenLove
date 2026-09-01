@@ -13,9 +13,11 @@
 	 */
 	import { profileStore } from '$lib/stores/profile.svelte';
 	import { pwaStore } from '$lib/stores/pwa.svelte';
+	import { showToast } from '$lib/stores/toast.svelte';
 	import { getStorageEstimate, type StorageEstimate } from '$lib/utils/storage';
 	import { getDeviceOS } from '$lib/utils/pwa';
 	import Button from '$lib/components/ui/button';
+	import { ConfirmModal } from '$lib/components/ui/dialog';
 	import { QrCode, UploadCloud, RotateCcw, Download, HardDrive, CloudOff, ShieldCheck } from '@lucide/svelte';
 	import { classifyImportPayload, type ImportPreview } from '$lib/utils/share';
 	import JsonImportPreviewDrawer from '$lib/components/share/JsonImportPreviewDrawer.svelte';
@@ -33,6 +35,7 @@
 	let pendingFile = $state<File | null>(null);
 	let pendingPreview = $state<ImportPreview | null>(null);
 	let isPreviewOpen = $state(false);
+	let isResetConfirmOpen = $state(false);
 
 	$effect(() => {
 		if (open) {
@@ -85,7 +88,7 @@
 		const text = await file.text();
 		const classification = classifyImportPayload(text);
 		if (!classification) {
-			alert('Failed to restore backup. Invalid file format.');
+			showToast('Failed to restore backup. Invalid file format.', 'error');
 			return;
 		}
 
@@ -99,17 +102,15 @@
 		const ok = await profileStore.importJSONFromFile(pendingFile);
 		isPreviewOpen = false;
 		if (ok) {
-			alert('Data restored successfully!');
+			showToast('Data restored successfully!', 'success');
 		} else {
-			alert('Failed to restore backup. Invalid file format.');
+			showToast('Failed to restore backup. Invalid file format.', 'error');
 		}
 	}
 
-	async function handleResetData() {
-		if (confirm('Are you sure you want to reset all data? This will clear all relationships.')) {
-			await profileStore.reset();
-			onAfterReset();
-		}
+	async function handleConfirmReset() {
+		await profileStore.reset();
+		onAfterReset();
 	}
 </script>
 
@@ -187,10 +188,20 @@
 		<span>Restore from JSON Backup</span>
 	</Button>
 
-	<Button variant="ghost" class="w-full text-destructive hover:bg-destructive/10" onclick={handleResetData}>
+	<Button variant="ghost" class="w-full text-destructive hover:bg-destructive/10" onclick={() => (isResetConfirmOpen = true)}>
 		<RotateCcw class="h-4 w-4 mr-1.5" />
 		<span>Reset All Data</span>
 	</Button>
 </section>
 
 <JsonImportPreviewDrawer bind:open={isPreviewOpen} preview={pendingPreview} onConfirm={handleConfirmImport} />
+
+<ConfirmModal
+	bind:open={isResetConfirmOpen}
+	title="Reset All Data"
+	message="This will permanently clear all your relationships, names, dates, and photos. This cannot be undone."
+	confirmLabel="Reset Everything"
+	variant="destructive"
+	onConfirm={handleConfirmReset}
+/>
+

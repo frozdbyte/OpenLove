@@ -4,9 +4,29 @@
 	import type { UIThemeId, ColorMode, ColorPalette } from '$lib/types/profile';
 	import type { Bond, BondType, DaysMilestoneFilter } from '$lib/types/bonds';
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
+	import ConfirmModal from '$lib/components/ui/dialog/ConfirmModal.svelte';
 	import Button from '$lib/components/ui/button';
 	import Switch from '$lib/components/ui/switch';
-	import { Trash2, Plus, QrCode, Users, Clock, BellOff, UserRound, Palette, Bell, Flag, Database, Info, ChevronRight, PartyPopper, Sparkles, Heart } from '@lucide/svelte';
+	import Badge from '$lib/components/ui/badge';
+	import {
+		Trash2,
+		Plus,
+		QrCode,
+		Users,
+		Clock,
+		BellOff,
+		UserRound,
+		Palette,
+		Bell,
+		BellRing,
+		Flag,
+		Database,
+		Info,
+		ChevronRight,
+		PartyPopper,
+		Sparkles,
+		Heart
+	} from '@lucide/svelte';
 	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
 	import ThemeSelector from '$lib/components/shared/ThemeSelector.svelte';
 	import ColorModeSelector from '$lib/components/shared/ColorModeSelector.svelte';
@@ -37,10 +57,20 @@
 	}: Props = $props();
 
 	let isScanModalOpen = $state(false);
+	let isDeleteConfirmOpen = $state(false);
+	let photoUploadError = $state('');
+	let isPhotoSaving = $state(false);
+	let wizardStep = $state<1 | 2 | 3>(1);
 
-	// Root-list/sub-view navigation within the drawer (existing-bond editing
-	// only — new-bond creation stays a single flat form, see below).
-	type SettingsSection = 'identity' | 'appearance' | 'notifications' | 'milestones' | 'data' | 'about';
+	// Root-list/sub-view navigation within the drawer
+	type SettingsSection =
+		| 'identity'
+		| 'appearance'
+		| 'milestones'
+		| 'alerts'
+		| 'deviceNotifications'
+		| 'data'
+		| 'about';
 	let activeSection = $state<SettingsSection | null>(null);
 
 	const SECTION_META: Record<
@@ -49,25 +79,24 @@
 	> = {
 		identity: { title: 'Identity', description: 'Names, date, and photo', icon: UserRound },
 		appearance: { title: 'Appearance', description: 'Theme, colors, and display', icon: Palette },
-		notifications: { title: 'Notifications', description: 'Device alerts and milestone preferences', icon: Bell },
-		milestones: { title: 'Milestones', description: 'Upcoming and custom milestones', icon: Flag },
+		milestones: { title: 'Milestones', description: 'Upcoming moments, custom dates & celebrations', icon: Flag },
+		alerts: { title: 'Alerts', description: 'Push alerts and which milestones trigger them', icon: Bell },
+		deviceNotifications: {
+			title: 'Device Notifications',
+			description: 'WebPush subscription for this device',
+			icon: BellRing
+		},
 		data: {
-			title: 'System & Storage',
-			description: 'Storage, backup, restore, and reset',
+			title: 'Storage & Backup',
+			description: 'Backup, restore, and reset',
 			icon: Database,
 			needsAttention: () => !pwaStore.isStoragePersisted
 		},
 		about: { title: 'About', description: "Version, what's new, and links", icon: Info }
 	};
-	const SETTINGS_SECTIONS: SettingsSection[] = [
-		'identity',
-		'appearance',
-		'notifications',
-		'milestones',
-		'data',
-		'about'
-	];
-	const APP_WIDE_ONLY_SECTIONS: SettingsSection[] = ['data', 'about'];
+
+	const BOND_SECTIONS: SettingsSection[] = ['identity', 'appearance', 'milestones', 'alerts'];
+	const APP_SECTIONS: SettingsSection[] = ['deviceNotifications', 'data', 'about'];
 
 	// Target bond resolution
 	let currentBond = $derived<Bond>(
@@ -103,15 +132,12 @@
 		isNewBond ? bondColorPalette : (currentBond.colorPalette ?? profileStore.state.colorPalette)
 	);
 
-	// Reset to the root nav view every time the drawer freshly opens. Kept in
-	// its own effect (reading only `open`) rather than folded into the resync
-	// effect below — that one also reacts to live edits to `currentBond` (see
-	// its own fields read inside), so sharing one effect meant every setting
-	// change re-ran this reset too, bouncing the user back to the root list
-	// mid-edit.
+	// Reset navigation and wizard state when drawer opens
 	$effect(() => {
 		if (open) {
 			activeSection = null;
+			wizardStep = 1;
+			photoUploadError = '';
 		}
 	});
 
@@ -122,7 +148,8 @@
 				const active = profileStore.activeBond;
 				bondType = 'romantic';
 				bondNames = '';
-				bondTogetherSince = new Date().toISOString().split('T')[0];
+				const now = new Date();
+				bondTogetherSince = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 				bondPhotoBlob = null;
 				bondPhotoUrl = undefined;
 				bondNotificationsEnabled = true;
@@ -176,6 +203,14 @@
 		const target = e.target as HTMLInputElement;
 		if (target.files && target.files[0]) {
 			const file = target.files[0];
+			photoUploadError = '';
+
+			// 10 MB client-side limit
+			if (file.size > 10 * 1024 * 1024) {
+				photoUploadError = 'Photo is too large (max 10 MB). Please choose a smaller image.';
+				return;
+			}
+
 			bondPhotoBlob = file;
 			if (bondPhotoUrl && bondPhotoUrl.startsWith('blob:')) {
 				URL.revokeObjectURL(bondPhotoUrl);
@@ -183,7 +218,12 @@
 			bondPhotoUrl = URL.createObjectURL(file);
 
 			if (!isNewBond) {
-				await profileStore.setPhoto(file, currentBond.id);
+				isPhotoSaving = true;
+				try {
+					await profileStore.setPhoto(file, currentBond.id);
+				} finally {
+					isPhotoSaving = false;
+				}
 			}
 		}
 	}
@@ -209,15 +249,6 @@
 	async function handleCreateNewBond() {
 		if (!bondNames.trim() || !bondTogetherSince) return;
 
-		// Captured before the `addBond` await below: adding the bond makes it
-		// active, which changes `profileStore.activeBond` — a dependency this
-		// component's mount `$effect` reads inside its `isNewBond` branch. Svelte
-		// re-runs that effect on the resulting microtask (while this function is
-		// still suspended on the `await`), and since `open`/`isNewBond` are both
-		// still true at that point, it resets every draft field, including
-		// `bondPhotoBlob`, back to its initial value. Re-reading the reactive
-		// `bondPhotoBlob` after the await silently drops whatever photo was
-		// picked; the captured local doesn't.
 		const photoToSave = bondPhotoBlob;
 
 		const newBond: Bond = {
@@ -252,11 +283,9 @@
 	}
 
 	async function handleDeleteCurrentBond() {
-		if (confirm(`Are you sure you want to delete "${currentBond.names}"?`)) {
-			await profileStore.deleteBond(currentBond.id);
-			open = false;
-			onclose?.();
-		}
+		await profileStore.deleteBond(currentBond.id);
+		open = false;
+		onclose?.();
 	}
 </script>
 
@@ -265,26 +294,201 @@
 	title={activeSection
 		? SECTION_META[activeSection].title
 		: isNewBond
-			? 'Add Relationship or Friendship'
+			? wizardStep === 1
+				? 'New Bond — Identity'
+				: wizardStep === 2
+					? 'New Bond — Appearance'
+					: 'New Bond — Ready!'
 			: showAppWideSettings
-				? 'Settings & Customization'
+				? `${currentBond.names} Settings`
 				: `Edit ${currentBond.type === 'friendship' ? 'Friendship' : 'Relationship'}`}
 	description={activeSection
 		? SECTION_META[activeSection].description
 		: isNewBond
-			? 'Track another romantic relationship or friendship'
+			? wizardStep === 1
+				? 'Who is this bond with?'
+				: wizardStep === 2
+					? 'How should it look?'
+					: 'Review and create'
 			: showAppWideSettings
-				? 'Customize your relationship tracker'
-				: `Configure names, dates, themes, and notifications`}
-	onBack={activeSection ? () => (activeSection = null) : undefined}
+				? 'Customize appearance, alerts & more'
+				: 'Configure names, dates, themes, and notifications'}
+	onBack={activeSection
+		? () => (activeSection = null)
+		: isNewBond
+			? wizardStep === 2
+				? () => (wizardStep = 1)
+				: wizardStep === 3
+					? () => (wizardStep = 2)
+					: undefined
+			: undefined}
 	{onclose}
 >
 	<div class="space-y-6 pb-4">
-		{#if !isNewBond && activeSection === null}
-			<!-- Active Bond Switcher Quick Action (Header gear mode only when multiple bonds exist) -->
+		{#if isNewBond}
+			<!-- Step Indicator -->
+			<div class="flex items-center justify-between text-xs text-muted-foreground pb-1 -mt-2">
+				<span>Step {wizardStep} of 3</span>
+			</div>
+
+			{#if wizardStep === 1}
+				<!-- Step 1: Identity -->
+				<section class="p-3.5 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-between gap-3">
+					<div class="space-y-0.5 min-w-0">
+						<div class="text-xs font-bold text-foreground flex items-center gap-1.5">
+							<QrCode class="h-4 w-4 text-primary shrink-0" />
+							<span>Have a partner invite or QR code?</span>
+						</div>
+						<p class="text-[11px] text-muted-foreground truncate">Import partner or friend profile directly</p>
+					</div>
+					<Button
+						size="sm"
+						variant="outline"
+						class="shrink-0 text-xs h-8 px-2.5 font-semibold bg-background"
+						onclick={() => (isScanModalOpen = true)}
+					>
+						<span>Scan / Paste</span>
+					</Button>
+				</section>
+
+				<BondIdentityForm
+					{isNewBond}
+					{currentBond}
+					{bondType}
+					{bondNames}
+					{bondTogetherSince}
+					{bondPhotoUrl}
+					{photoUploadError}
+					{isPhotoSaving}
+					onTypeChange={handleTypeChange}
+					onNamesChange={(val) => {
+						bondNames = val;
+					}}
+					onDateChange={(val) => {
+						bondTogetherSince = val;
+					}}
+					onPhotoUpload={handlePhotoUpload}
+					onPhotoRemove={removePhoto}
+				/>
+
+				<div class="pt-2">
+					<Button
+						class="w-full h-11 font-semibold"
+						onclick={() => (wizardStep = 2)}
+						disabled={!bondNames.trim() || !bondTogetherSince}
+					>
+						<span>Next: Appearance →</span>
+					</Button>
+				</div>
+			{:else if wizardStep === 2}
+				<!-- Step 2: Appearance -->
+				<section>
+					<ThemeSelector
+						value={bondUiTheme}
+						allowExpand={true}
+						onchange={(theme) => (bondUiTheme = theme)}
+					/>
+				</section>
+
+				<section class="space-y-3">
+					<span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Color Appearance</span>
+					<ColorModeSelector
+						value={bondColorMode}
+						onchange={(mode) => (bondColorMode = mode)}
+					/>
+
+					<ColorPaletteSelector
+						value={bondColorPalette}
+						onchange={(palette) => (bondColorPalette = palette)}
+					/>
+				</section>
+
+				<section class="flex items-center justify-between p-3 rounded-2xl bg-card border border-border">
+					<div>
+						<div class="text-sm font-semibold text-foreground flex items-center gap-1.5">
+							<Clock class="h-4 w-4 text-primary" />
+							<span>Live Ticking Seconds</span>
+						</div>
+						<div class="text-xs text-muted-foreground">Show live seconds counter for this bond</div>
+					</div>
+					<Switch
+						checked={bondShowSeconds}
+						onchange={(val) => (bondShowSeconds = val)}
+					/>
+				</section>
+
+				<div class="space-y-2 pt-2">
+					<Button class="w-full h-11 font-semibold" onclick={() => (wizardStep = 3)}>
+						<span>Next: Review & Finish →</span>
+					</Button>
+				</div>
+			{:else if wizardStep === 3}
+				<!-- Step 3: Review & Create -->
+				<section class="p-4 rounded-2xl bg-card border border-border space-y-3">
+					<div class="flex items-center gap-3">
+						<div class="h-12 w-12 rounded-full overflow-hidden bg-muted border border-border/80 flex items-center justify-center shrink-0">
+							{#if bondPhotoUrl}
+								<img src={bondPhotoUrl} alt="Bond" class="h-full w-full object-cover" />
+							{:else if bondType === 'friendship'}
+								<Sparkles class="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+							{:else}
+								<Heart class="h-6 w-6 text-rose-500 fill-rose-500/20" />
+							{/if}
+						</div>
+						<div class="min-w-0 flex-1">
+							<div class="flex items-center gap-1.5">
+								<h3 class="font-bold text-base text-foreground truncate">{bondNames}</h3>
+								<Badge
+									variant={bondType === 'friendship' ? 'outline' : 'romantic'}
+									class="text-[10px] py-0 px-1.5 shrink-0"
+								>
+									{bondType === 'friendship' ? '🌿 Friend' : '💖 Couple'}
+								</Badge>
+							</div>
+							<p class="text-xs text-muted-foreground mt-0.5">
+								{bondType === 'friendship' ? 'Friends since' : 'Together since'} {bondTogetherSince}
+							</p>
+						</div>
+					</div>
+				</section>
+
+				<!-- Celebration Cards Per-Bond Toggle -->
+				<section class="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border">
+					<div class="space-y-0.5 pr-2">
+						<div class="text-sm font-semibold text-foreground flex items-center gap-1.5">
+							<PartyPopper class="h-4 w-4 text-primary shrink-0" />
+							<span>Celebration Cards</span>
+						</div>
+						<div class="text-xs text-muted-foreground">
+							Auto-show full-screen celebration on milestone days for this bond
+						</div>
+					</div>
+					<Switch
+						checked={bondAutoCelebrate}
+						onchange={(val) => (bondAutoCelebrate = val)}
+					/>
+				</section>
+
+				<div class="space-y-2 pt-2">
+					<Button
+						class="w-full h-11 font-semibold"
+						onclick={handleCreateNewBond}
+						disabled={!bondNames.trim() || !bondTogetherSince}
+					>
+						<Plus class="h-4 w-4 mr-1.5" />
+						<span>Create Bond</span>
+					</Button>
+					<Button variant="ghost" class="w-full h-9 text-xs" onclick={() => (wizardStep = 2)}>
+						<span>← Back to Appearance</span>
+					</Button>
+				</div>
+			{/if}
+		{:else if activeSection === null}
+			<!-- Existing Bond Navigation (Active Bond Header gear mode or scoped edit) -->
+
+			<!-- Active Bond Switcher Quick Action -->
 			{#if showAppWideSettings && profileStore.state.bonds.length > 1}
 				<section class="p-3.5 rounded-2xl bg-card border border-border space-y-2">
-
 					<div class="flex items-center justify-between">
 						<div class="space-y-0.5">
 							<div class="text-sm font-semibold flex items-center gap-1.5 text-foreground">
@@ -298,76 +502,94 @@
 						</div>
 					</div>
 					{#if onOpenSwitcher}
-						<Button variant="outline" size="sm" class="w-full mt-1.5" onclick={onOpenSwitcher}>
+						<Button variant="outline" size="sm" class="w-full mt-1.5 font-semibold" onclick={onOpenSwitcher}>
 							<span>Manage & Switch Bonds ({profileStore.state.bonds.length})</span>
 						</Button>
 					{/if}
 				</section>
 			{/if}
 
-			<!-- Settings navigation list -->
+			<!-- Bond navigation sections -->
 			<nav class="space-y-2">
-				{#each SETTINGS_SECTIONS as key (key)}
+				{#each BOND_SECTIONS as key (key)}
 					{@const meta = SECTION_META[key]}
 					{@const Icon = meta.icon}
 					{@const attention = meta.needsAttention?.() ?? false}
-					{#if !APP_WIDE_ONLY_SECTIONS.includes(key) || showAppWideSettings}
-						<button
-							type="button"
-							class="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-border bg-card/70 hover:bg-accent/60 transition-colors text-left cursor-pointer"
-							onclick={() => (activeSection = key)}
-						>
-							<div class="relative h-9 w-9 shrink-0">
-								<div class="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-									<Icon class="h-4 w-4" />
-								</div>
-								{#if attention}
-									<div class="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-card"></div>
-								{/if}
+					<button
+						type="button"
+						class="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-border bg-card/70 hover:bg-accent/60 transition-colors text-left cursor-pointer"
+						onclick={() => (activeSection = key)}
+					>
+						<div class="relative h-9 w-9 shrink-0">
+							<div class="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+								<Icon class="h-4 w-4" />
 							</div>
-							<div class="min-w-0 flex-1">
-								<div class="text-sm font-semibold text-foreground">{meta.title}</div>
-								<div class="text-xs text-muted-foreground truncate">{meta.description}</div>
-							</div>
-							<ChevronRight class="h-4 w-4 text-muted-foreground shrink-0" />
-						</button>
-					{/if}
+							{#if attention}
+								<div class="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-card" aria-hidden="true"></div>
+								<span class="sr-only">Action required</span>
+							{/if}
+						</div>
+						<div class="min-w-0 flex-1">
+							<div class="text-sm font-semibold text-foreground">{meta.title}</div>
+							<div class="text-xs text-muted-foreground truncate">{meta.description}</div>
+						</div>
+						<ChevronRight class="h-4 w-4 text-muted-foreground shrink-0" />
+					</button>
 				{/each}
 			</nav>
+
+			<!-- App navigation sections (Global Settings only) -->
+			{#if showAppWideSettings && !isNewBond}
+				<div class="pt-2">
+					<div class="flex items-center gap-2 px-1 pb-2">
+						<div class="flex-1 h-px bg-border"></div>
+						<span class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">App</span>
+						<div class="flex-1 h-px bg-border"></div>
+					</div>
+					<nav class="space-y-2">
+						{#each APP_SECTIONS as key (key)}
+							{@const meta = SECTION_META[key]}
+							{@const Icon = meta.icon}
+							{@const attention = meta.needsAttention?.() ?? false}
+							<button
+								type="button"
+								class="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-border bg-card/70 hover:bg-accent/60 transition-colors text-left cursor-pointer"
+								onclick={() => (activeSection = key)}
+							>
+								<div class="relative h-9 w-9 shrink-0">
+									<div class="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+										<Icon class="h-4 w-4" />
+									</div>
+									{#if attention}
+										<div class="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-card" aria-hidden="true"></div>
+										<span class="sr-only">Action required</span>
+									{/if}
+								</div>
+								<div class="min-w-0 flex-1">
+									<div class="text-sm font-semibold text-foreground">{meta.title}</div>
+									<div class="text-xs text-muted-foreground truncate">{meta.description}</div>
+								</div>
+								<ChevronRight class="h-4 w-4 text-muted-foreground shrink-0" />
+							</button>
+						{/each}
+					</nav>
+				</div>
+			{/if}
 
 			<!-- Delete Bond Button (Scoped edit mode when multiple bonds exist) -->
 			{#if !showAppWideSettings && profileStore.state.bonds.length > 1}
 				<div class="pt-2 border-t border-border">
-					<Button variant="outline" class="w-full text-destructive hover:bg-destructive/10" onclick={handleDeleteCurrentBond}>
+					<Button
+						variant="outline"
+						class="w-full text-destructive hover:bg-destructive/10"
+						onclick={() => (isDeleteConfirmOpen = true)}
+					>
 						<Trash2 class="h-4 w-4 mr-1.5" />
-						<span>Delete Bond</span>
+						<span>Delete "{currentBond.names}"</span>
 					</Button>
 				</div>
 			{/if}
-		{/if}
-
-		{#if isNewBond}
-			<!-- Import Shared Profile Action -->
-			<section class="p-3.5 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-between gap-3">
-				<div class="space-y-0.5 min-w-0">
-					<div class="text-xs font-bold text-foreground flex items-center gap-1.5">
-						<QrCode class="h-4 w-4 text-primary shrink-0" />
-						<span>Have a partner invite or QR code?</span>
-					</div>
-					<p class="text-[11px] text-muted-foreground truncate">Import partner or friend profile directly</p>
-				</div>
-				<Button
-					size="sm"
-					variant="outline"
-					class="shrink-0 text-xs h-8 px-2.5 font-semibold bg-background"
-					onclick={() => (isScanModalOpen = true)}
-				>
-					<span>Scan / Paste</span>
-				</Button>
-			</section>
-		{/if}
-
-		{#if isNewBond || activeSection === 'identity'}
+		{:else if activeSection === 'identity'}
 			<BondIdentityForm
 				{isNewBond}
 				{currentBond}
@@ -375,21 +597,21 @@
 				{bondNames}
 				{bondTogetherSince}
 				{bondPhotoUrl}
+				{photoUploadError}
+				{isPhotoSaving}
 				onTypeChange={handleTypeChange}
 				onNamesChange={(val) => {
 					bondNames = val;
-					if (!isNewBond) void handleLiveUpdate({ names: val });
+					void handleLiveUpdate({ names: val });
 				}}
 				onDateChange={(val) => {
 					bondTogetherSince = val;
-					if (!isNewBond) void handleLiveUpdate({ togetherSince: val });
+					void handleLiveUpdate({ togetherSince: val });
 				}}
 				onPhotoUpload={handlePhotoUpload}
 				onPhotoRemove={removePhoto}
 			/>
-		{/if}
-
-		{#if isNewBond || activeSection === 'appearance'}
+		{:else if activeSection === 'appearance'}
 			<!-- UI Style Theme (Configured Per-Bond) -->
 			<section>
 				<ThemeSelector
@@ -397,7 +619,7 @@
 					allowExpand={true}
 					onchange={(theme) => {
 						bondUiTheme = theme;
-						if (!isNewBond) void profileStore.setUITheme(theme, currentBond.id);
+						void profileStore.setUITheme(theme, currentBond.id);
 					}}
 				/>
 			</section>
@@ -409,7 +631,7 @@
 					value={activeMode}
 					onchange={(mode) => {
 						bondColorMode = mode;
-						if (!isNewBond) void profileStore.setColorMode(mode, currentBond.id);
+						void profileStore.setColorMode(mode, currentBond.id);
 					}}
 				/>
 
@@ -418,7 +640,7 @@
 					value={activePalette}
 					onchange={(palette) => {
 						bondColorPalette = palette;
-						if (!isNewBond) void profileStore.setColorPalette(palette, currentBond.id);
+						void profileStore.setColorPalette(palette, currentBond.id);
 					}}
 				/>
 			</section>
@@ -433,139 +655,90 @@
 					<div class="text-xs text-muted-foreground">Show live seconds counter for this bond</div>
 				</div>
 				<Switch
-					checked={isNewBond ? bondShowSeconds : (currentBond.showSeconds ?? profileStore.state.showSeconds)}
+					checked={currentBond.showSeconds ?? profileStore.state.showSeconds}
 					onchange={(val) => {
 						bondShowSeconds = val;
-						if (!isNewBond) handleLiveUpdate({ showSeconds: val });
+						handleLiveUpdate({ showSeconds: val });
 					}}
 				/>
 			</section>
-		{/if}
-
-		{#if isNewBond || activeSection === 'notifications'}
-			<!-- In-App Milestone Celebration Cards Section -->
-			<div class="space-y-2.5">
-				<div class="px-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-					<Sparkles class="h-3.5 w-3.5 text-primary" />
-					<span>Milestone Celebration Cards</span>
+		{:else if activeSection === 'milestones'}
+			<!-- Per-bond celebration cards toggle -->
+			<section class="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border">
+				<div class="space-y-0.5 pr-2">
+					<div class="text-sm font-semibold text-foreground flex items-center gap-1.5">
+						<PartyPopper class="h-4 w-4 text-primary shrink-0" />
+						<span>Celebration Cards</span>
+					</div>
+					<div class="text-xs text-muted-foreground">
+						Auto-show full-screen celebration on milestone days for this bond
+					</div>
 				</div>
+				<Switch
+					checked={currentBond.autoCelebrateMilestones ?? true}
+					onchange={(val) => {
+						bondAutoCelebrate = val;
+						void profileStore.setAutoCelebrateMilestones(val, currentBond.id);
+					}}
+				/>
+			</section>
 
-				{#if showAppWideSettings && !isNewBond}
-					<!-- 1. Global Master Toggle -->
-					<section class="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border">
-						<div class="space-y-0.5 pr-2">
-							<div class="text-sm font-semibold text-foreground flex items-center gap-1.5">
-								<Sparkles class="h-4 w-4 text-primary shrink-0" />
-								<span>All Relationships</span>
-							</div>
-							<div class="text-xs text-muted-foreground">
-								Master switch to auto-show celebratory story cards across all bonds on milestone days
-							</div>
-						</div>
-						<Switch
-							checked={profileStore.state.autoCelebrateMilestones ?? true}
-							onchange={(val) => {
-								void profileStore.setGlobalAutoCelebrateMilestones(val);
-							}}
-						/>
-					</section>
-
-					<!-- 2. Per-Bond Toggle for active bond -->
-					<section class="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border {profileStore.state.autoCelebrateMilestones === false ? 'opacity-60' : ''}">
-						<div class="space-y-0.5 pr-2">
-							<div class="text-sm font-semibold text-foreground flex items-center gap-1.5">
-								<Heart class="h-4 w-4 text-rose-500 shrink-0" />
-								<span class="truncate">This Relationship ({currentBond.names})</span>
-							</div>
-							<div class="text-xs text-muted-foreground">
-								{#if profileStore.state.autoCelebrateMilestones === false}
-									<span class="text-amber-600 dark:text-amber-400 font-medium">Disabled by global switch above</span>
-								{:else}
-									Show celebration story cards for {currentBond.names}
-								{/if}
-							</div>
-						</div>
-						<Switch
-							checked={currentBond.autoCelebrateMilestones ?? true}
-							disabled={profileStore.state.autoCelebrateMilestones === false}
-							onchange={(val) => {
-								bondAutoCelebrate = val;
-								void profileStore.setAutoCelebrateMilestones(val, currentBond.id);
-							}}
-						/>
-					</section>
-				{:else}
-					<!-- Per-Bond Milestone Celebrations (When editing or creating a specific bond) -->
-					<section class="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border">
-						<div class="space-y-0.5 pr-2">
-							<div class="text-sm font-semibold text-foreground flex items-center gap-1.5">
-								<Heart class="h-4 w-4 text-primary shrink-0" />
-								<span>Celebrations for {isNewBond ? 'New Relationship' : currentBond.names}</span>
-							</div>
-							<div class="text-xs text-muted-foreground">Auto-show celebratory story cards on milestone days for this relationship</div>
-						</div>
-						<Switch
-							checked={isNewBond ? bondAutoCelebrate : (currentBond.autoCelebrateMilestones ?? true)}
-							onchange={(val) => {
-								bondAutoCelebrate = val;
-								if (!isNewBond) void profileStore.setAutoCelebrateMilestones(val, currentBond.id);
-							}}
-						/>
-					</section>
-				{/if}
-			</div>
-
-			<!-- Push Notifications Section -->
-			<div class="space-y-2.5 pt-1">
-				<div class="px-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-					<Bell class="h-3.5 w-3.5 text-primary" />
-					<span>Push Notifications</span>
-				</div>
-
-				<!-- Device Notifications (App-Wide) — moved above Bond Notifications so the
-				     master toggle a bond's alerts actually depend on is visible before it. -->
-				{#if showAppWideSettings && !isNewBond}
-					<PushNotificationPanel {currentBond} />
-				{/if}
-
-				<!-- Bond Notifications: meaningless without an active device subscription
-				     to actually deliver them, so only shown once one exists. -->
-				{#if profileStore.state.pushSubscribed}
-					<MilestonePrefsEditor
-						{isNewBond}
-						{currentBond}
-						bind:notificationsEnabled={bondNotificationsEnabled}
-						bind:years={bondYearsPref}
-						bind:months={bondMonthsPref}
-						bind:days={bondDaysPref}
-						bind:custom={bondCustomPref}
-						onNotificationsChange={(v) => handleLiveUpdate({ notificationsEnabled: v })}
-						onPrefsChange={(prefs) => handleLiveUpdate({ milestonePrefs: prefs })}
-					/>
-				{:else}
-					<section class="p-3.5 rounded-2xl bg-muted/40 border border-dashed border-border flex items-center gap-2.5 text-xs text-muted-foreground">
-						<BellOff class="h-4 w-4 shrink-0" />
-						<span>Turn on Device Notifications to choose which milestones alert you for this bond.</span>
-					</section>
-				{/if}
-			</div>
-		{/if}
-
-		{#if !isNewBond && activeSection === 'milestones'}
 			<MilestonesList {currentBond} />
-		{/if}
+		{:else if activeSection === 'alerts'}
+			{#if !profileStore.state.pushSubscribed}
+				<!-- Device status hint -->
+				<section class="p-3.5 rounded-2xl bg-muted/40 border border-dashed border-border space-y-2.5">
+					<div class="flex items-center gap-2 text-xs text-muted-foreground">
+						<BellOff class="h-4 w-4 shrink-0" />
+						<span>Device notifications are not set up. Enable them in <strong>App → Device Notifications</strong> to receive milestone alerts.</span>
+					</div>
+					{#if showAppWideSettings}
+						<Button
+							size="sm"
+							variant="outline"
+							class="w-full h-8 text-xs font-semibold"
+							onclick={() => (activeSection = 'deviceNotifications')}
+						>
+							<span>Set up Device Notifications →</span>
+						</Button>
+					{/if}
+				</section>
+			{/if}
 
-		<!-- Create New Bond Action -->
-		{#if isNewBond}
-			<div class="pt-2">
-				<Button class="w-full h-11" onclick={handleCreateNewBond} disabled={!bondNames.trim() || !bondTogetherSince}>
-					<Plus class="h-4 w-4 mr-2" />
-					<span>Create Bond</span>
-				</Button>
+			<!-- MilestonePrefsEditor always shown (dimmed when not subscribed) -->
+			<div class={!profileStore.state.pushSubscribed ? 'opacity-50 pointer-events-none' : ''}>
+				<MilestonePrefsEditor
+					{isNewBond}
+					{currentBond}
+					bind:notificationsEnabled={bondNotificationsEnabled}
+					bind:years={bondYearsPref}
+					bind:months={bondMonthsPref}
+					bind:days={bondDaysPref}
+					bind:custom={bondCustomPref}
+					onNotificationsChange={(v) => handleLiveUpdate({ notificationsEnabled: v })}
+					onPrefsChange={(prefs) => handleLiveUpdate({ milestonePrefs: prefs })}
+				/>
 			</div>
-		{/if}
+		{:else if showAppWideSettings && activeSection === 'deviceNotifications'}
+			<!-- Global autoCelebrateMilestones master toggle -->
+			<section class="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border">
+				<div class="space-y-0.5 pr-2">
+					<div class="text-sm font-semibold text-foreground flex items-center gap-1.5">
+						<Sparkles class="h-4 w-4 text-primary shrink-0" />
+						<span>Celebration Cards — All Bonds</span>
+					</div>
+					<div class="text-xs text-muted-foreground">
+						Global override: disable celebration cards across every bond
+					</div>
+				</div>
+				<Switch
+					checked={profileStore.state.autoCelebrateMilestones ?? true}
+					onchange={(val) => void profileStore.setGlobalAutoCelebrateMilestones(val)}
+				/>
+			</section>
 
-		{#if showAppWideSettings && !isNewBond && activeSection === 'data'}
+			<PushNotificationPanel {currentBond} />
+		{:else if showAppWideSettings && activeSection === 'data'}
 			<StorageBackupPanel
 				{open}
 				onScanQR={() => (isScanModalOpen = true)}
@@ -574,9 +747,7 @@
 					onclose?.();
 				}}
 			/>
-		{/if}
-
-		{#if showAppWideSettings && !isNewBond && activeSection === 'about'}
+		{:else if showAppWideSettings && activeSection === 'about'}
 			<AboutPanel />
 		{/if}
 	</div>
@@ -590,4 +761,13 @@
 			onclose?.();
 		}
 	}}
+/>
+
+<ConfirmModal
+	bind:open={isDeleteConfirmOpen}
+	title="Delete Bond"
+	message={`Are you sure you want to delete "${currentBond.names}"? This cannot be undone.`}
+	confirmLabel="Delete"
+	variant="destructive"
+	onConfirm={handleDeleteCurrentBond}
 />

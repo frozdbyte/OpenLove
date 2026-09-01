@@ -108,57 +108,44 @@
 
 			<!-- Day Milestones -->
 			<div class="space-y-2 pt-1.5">
+				<!-- Row 1: Label + Switch -->
 				<div class="flex items-center justify-between text-xs">
 					<div class="flex items-center gap-2 font-semibold text-foreground">
 						<Trophy class="h-4 w-4 text-amber-500 shrink-0" />
 						<span>Day Milestones</span>
 					</div>
-					<span class="text-[11px] text-muted-foreground font-medium">
-						{#if currentDays === 'all'}
-							Every 50–100 days
-						{:else if currentDays === 'major'}
-							1,000+ days only
-						{:else}
-							Disabled
-						{/if}
-					</span>
+					<Switch
+						checked={currentDays !== 'off'}
+						onchange={(v) => updatePrefs({ days: v ? 'all' : 'off' })}
+					/>
 				</div>
 
-				<div class="grid grid-cols-3 gap-1.5 p-1 bg-muted/60 rounded-2xl border border-border/60">
-					<button
-						type="button"
-						class="flex flex-col items-center justify-center py-2 px-1.5 rounded-xl transition-all cursor-pointer {currentDays === 'all'
-							? 'bg-card text-foreground font-bold shadow-xs ring-1 ring-border/50 text-primary'
-							: 'text-muted-foreground hover:text-foreground'}"
-						onclick={() => updatePrefs({ days: 'all' })}
-					>
-						<span class="text-xs font-semibold">All Days</span>
-						<span class="text-[10px] opacity-70 font-normal mt-0.5">50, 100, 200...</span>
-					</button>
-
-					<button
-						type="button"
-						class="flex flex-col items-center justify-center py-2 px-1.5 rounded-xl transition-all cursor-pointer {currentDays === 'major'
-							? 'bg-card text-foreground font-bold shadow-xs ring-1 ring-border/50 text-primary'
-							: 'text-muted-foreground hover:text-foreground'}"
-						onclick={() => updatePrefs({ days: 'major' })}
-						title="Only 1,000+ days (1000, 2500, 5000...)"
-					>
-						<span class="text-xs font-semibold">Major Only</span>
-						<span class="text-[10px] opacity-70 font-normal mt-0.5">1k, 2.5k, 5k...</span>
-					</button>
-
-					<button
-						type="button"
-						class="flex flex-col items-center justify-center py-2 px-1.5 rounded-xl transition-all cursor-pointer {currentDays === 'off'
-							? 'bg-card text-foreground font-bold shadow-xs ring-1 ring-border/50 text-primary'
-							: 'text-muted-foreground hover:text-foreground'}"
-						onclick={() => updatePrefs({ days: 'off' })}
-					>
-						<span class="text-xs font-semibold">Off</span>
-						<span class="text-[10px] opacity-70 font-normal mt-0.5">No alerts</span>
-					</button>
-				</div>
+				<!-- Row 2: 2-option segment, only shown when days !== 'off' -->
+				{#if currentDays !== 'off'}
+					<div class="grid grid-cols-2 gap-1.5 p-1 bg-muted/60 rounded-2xl border border-border/60">
+						<button
+							type="button"
+							class="flex flex-col items-center justify-center py-2 px-1.5 rounded-xl transition-all cursor-pointer {currentDays === 'all'
+								? 'bg-card text-foreground font-bold shadow-xs ring-1 ring-border/50'
+								: 'text-muted-foreground hover:text-foreground'}"
+							onclick={() => updatePrefs({ days: 'all' })}
+						>
+							<span class="text-xs font-semibold">All Days</span>
+							<span class="text-[10px] opacity-70 font-normal mt-0.5">50, 100, 200…</span>
+						</button>
+						<button
+							type="button"
+							class="flex flex-col items-center justify-center py-2 px-1.5 rounded-xl transition-all cursor-pointer {currentDays === 'major'
+								? 'bg-card text-foreground font-bold shadow-xs ring-1 ring-border/50'
+								: 'text-muted-foreground hover:text-foreground'}"
+							onclick={() => updatePrefs({ days: 'major' })}
+							title="Only 1,000+ days (1000, 2500, 5000…)"
+						>
+							<span class="text-xs font-semibold">Major Only</span>
+							<span class="text-[10px] opacity-70 font-normal mt-0.5">1k, 2.5k, 5k…</span>
+						</button>
+					</div>
+				{/if}
 			</div>
 
 			<!-- Custom Moments -->

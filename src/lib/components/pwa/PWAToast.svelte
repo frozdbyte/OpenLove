@@ -78,7 +78,7 @@
 {#if needRefresh || offlineReady || justUpdated}
 	<div
 		class={cn(
-			'fixed inset-x-0 z-50 flex justify-center px-4 pointer-events-none',
+			'fixed inset-x-0 z-[60] flex justify-center px-4 pointer-events-none',
 			isOnboarding
 				? 'top-0 pt-[max(1rem,env(safe-area-inset-top))]'
 				: 'bottom-0 pb-[max(1rem,env(safe-area-inset-bottom))]'
