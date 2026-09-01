@@ -2,9 +2,18 @@ import type { Bond, BondType } from '$lib/types/bonds';
 import type { ColorPalette } from '$lib/types/profile';
 import type { TimeBreakdown } from '$lib/types/time';
 import { resolveQrColor, bondLogoDataUri } from './qrTheme';
+import { formatLongDate } from './time';
 
 export type ShareCardFormat = 'story' | 'square';
-export type ShareCardStyle = 'scrim' | 'framed' | 'bold';
+export type ShareCardStyle =
+	| 'scrim'
+	| 'framed'
+	| 'bold'
+	| 'polaroid'
+	| 'constellation'
+	| 'monograph'
+	| 'botanical'
+	| 'glass';
 
 interface Dimensions {
 	width: number;
@@ -52,6 +61,11 @@ function lighten(hex: string, amount: number): string {
 	const { r, g, b } = hexToRgb(hex);
 	const mix = (channel: number) => Math.round(channel + (255 - channel) * amount);
 	return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+	const { r, g, b } = hexToRgb(hex);
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 /** Resolves the accent color to render with: an explicit share-time override
@@ -537,6 +551,829 @@ async function renderBoldStyle(
 }
 
 /* -------------------------------------------------------------------------
+ * Style: Polaroid (Scrapbook) — a warm textured paper background with a
+ * tilted instant photo card pinned by washi tape, handwritten-feel chin text,
+ * and warm details below.
+ * ---------------------------------------------------------------------- */
+
+async function renderPolaroidStyle(
+	ctx: CanvasRenderingContext2D,
+	format: ShareCardFormat,
+	dims: Dimensions,
+	bond: Bond,
+	milestone: string,
+	color: string
+): Promise<void> {
+	const { width, height } = dims;
+
+	// Warm neutral paper background with soft tone
+	const bgGradient = ctx.createLinearGradient(0, 0, width, height);
+	bgGradient.addColorStop(0, '#faf7f2');
+	bgGradient.addColorStop(1, lighten(color, 0.93));
+	ctx.fillStyle = bgGradient;
+	ctx.fillRect(0, 0, width, height);
+
+	// Subtle warm radial vignette
+	const vignette = ctx.createRadialGradient(width / 2, height / 2, width * 0.3, width / 2, height / 2, width * 0.85);
+	vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+	vignette.addColorStop(1, 'rgba(40, 30, 20, 0.06)');
+	ctx.fillStyle = vignette;
+	ctx.fillRect(0, 0, width, height);
+
+	const isStory = format === 'story';
+	const cardW = isStory ? width * 0.78 : width * 0.64;
+	const cardPadding = isStory ? width * 0.045 : width * 0.038;
+	const photoSize = cardW - cardPadding * 2;
+	const bottomChin = isStory ? width * 0.16 : width * 0.13;
+	const cardH = cardPadding + photoSize + bottomChin;
+
+	const cx = width / 2;
+	const cy = isStory ? height * 0.40 : height * 0.38;
+	const angle = isStory ? -2.4 * (Math.PI / 180) : -1.8 * (Math.PI / 180);
+
+	ctx.save();
+	ctx.translate(cx, cy);
+	ctx.rotate(angle);
+
+	// Polaroid card drop shadow
+	ctx.shadowColor = 'rgba(40, 30, 20, 0.16)';
+	ctx.shadowBlur = width * 0.04;
+	ctx.shadowOffsetY = width * 0.02;
+	ctx.fillStyle = '#ffffff';
+	ctx.beginPath();
+	ctx.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, width * 0.01);
+	ctx.fill();
+	ctx.shadowColor = 'transparent';
+	ctx.shadowBlur = 0;
+
+	// Photo area
+	const photoX = -cardW / 2 + cardPadding;
+	const photoY = -cardH / 2 + cardPadding;
+
+	if (bond.photoBlob) {
+		ctx.save();
+		ctx.beginPath();
+		ctx.rect(photoX, photoY, photoSize, photoSize);
+		ctx.clip();
+		await drawCoverPhotoInRect(ctx, bond.photoBlob, photoX, photoY, photoSize, photoSize);
+		ctx.restore();
+	} else {
+		ctx.fillStyle = lighten(color, 0.88);
+		ctx.fillRect(photoX, photoY, photoSize, photoSize);
+		await drawBondGlyph(ctx, photoX + photoSize / 2, photoY + photoSize / 2, photoSize * 0.22, bond.type, color);
+	}
+
+	// 1px subtle inner border around photo
+	ctx.strokeStyle = 'rgba(0, 0, 0, 0.06)';
+	ctx.lineWidth = 2;
+	ctx.strokeRect(photoX, photoY, photoSize, photoSize);
+
+	// Handwritten / elegant milestone on bottom chin
+	const polMilestoneSize = fitFontSize(
+		ctx,
+		milestone,
+		'Playfair Display Variable',
+		700,
+		isStory ? width * 0.065 : width * 0.052,
+		width * 0.035,
+		photoSize * 0.92
+	);
+	ctx.font = `700 ${polMilestoneSize}px "Playfair Display Variable"`;
+	ctx.fillStyle = '#221f1e';
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'middle';
+	const chinCenterY = -cardH / 2 + cardPadding + photoSize + bottomChin * 0.52;
+	ctx.fillText(milestone, 0, chinCenterY);
+
+	// Subtle accent colored washi tape strip pinned at the top center
+	const tapeW = cardW * 0.34;
+	const tapeH = width * 0.045;
+	const tapeY = -cardH / 2 - tapeH * 0.45;
+	ctx.fillStyle = hexToRgba(color, 0.55);
+	ctx.beginPath();
+	ctx.roundRect(-tapeW / 2, tapeY, tapeW, tapeH, 2);
+	ctx.fill();
+	ctx.strokeStyle = hexToRgba(color, 0.8);
+	ctx.lineWidth = 1.5;
+	ctx.stroke();
+
+	ctx.restore();
+
+	// Text below the polaroid
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'alphabetic';
+
+	const gap = width * 0.035;
+	let cursorY = cy + cardH / 2 + (isStory ? height * 0.05 : height * 0.04);
+
+	const namesFontSize = fitFontSize(ctx, bond.names, 'Plus Jakarta Sans Variable', 700, width * 0.056, width * 0.03, width * 0.82);
+	ctx.font = `700 ${namesFontSize}px "Plus Jakarta Sans Variable"`;
+	ctx.fillStyle = '#2c2523';
+	const namesBaseline = cursorY + measuredAscent(ctx, bond.names, namesFontSize);
+	ctx.fillText(bond.names, width / 2, namesBaseline);
+	cursorY = namesBaseline + measuredDescent(ctx, bond.names, namesFontSize) + gap;
+
+	// Anniversary date pill with subtle accent color tint
+	const dateStr = `${bond.type === 'friendship' ? 'Friends' : 'Together'} since ${formatLongDate(bond.togetherSince)}`;
+	const dateFontSize = width * 0.028;
+	ctx.font = `600 ${dateFontSize}px "Plus Jakarta Sans Variable"`;
+	const pillTextW = ctx.measureText(dateStr).width;
+	const pillH = dateFontSize * 2.1;
+	const pillW = pillTextW + dateFontSize * 2.4;
+
+	ctx.beginPath();
+	ctx.roundRect(width / 2 - pillW / 2, cursorY, pillW, pillH, pillH / 2);
+	ctx.fillStyle = hexToRgba(color, 0.12);
+	ctx.fill();
+	ctx.strokeStyle = hexToRgba(color, 0.3);
+	ctx.lineWidth = 1;
+	ctx.stroke();
+
+	ctx.fillStyle = darken(color, 0.25);
+	ctx.textBaseline = 'middle';
+	ctx.fillText(dateStr, width / 2, cursorY + pillH / 2);
+	ctx.textBaseline = 'alphabetic';
+
+	// Watermark
+	const watermarkFontSize = width * 0.022;
+	ctx.font = `600 ${watermarkFontSize}px "Plus Jakarta Sans Variable"`;
+	ctx.fillStyle = '#a8a29e';
+	ctx.fillText('OPEN LOVE', width / 2, isStory ? height - height * 0.055 : height - height * 0.035);
+}
+
+/* -------------------------------------------------------------------------
+ * Style: Constellation (Starlight) — deep midnight cosmic gradient with
+ * sparkling starfield, glowing constellation geometry, celestial halo ring,
+ * and golden starlight typography adhering to the selected palette.
+ * ---------------------------------------------------------------------- */
+
+async function renderConstellationStyle(
+	ctx: CanvasRenderingContext2D,
+	format: ShareCardFormat,
+	dims: Dimensions,
+	bond: Bond,
+	milestone: string,
+	color: string
+): Promise<void> {
+	const { width, height } = dims;
+
+	// Deep space midnight sky blended into selected accent color
+	const sky = ctx.createLinearGradient(0, 0, width, height);
+	sky.addColorStop(0, '#050713');
+	sky.addColorStop(0.4, '#090e24');
+	sky.addColorStop(0.75, darken(color, 0.8));
+	sky.addColorStop(1, darken(color, 0.7));
+	ctx.fillStyle = sky;
+	ctx.fillRect(0, 0, width, height);
+
+	// Ambient cosmic nebula glow in the accent color
+	const nebula = ctx.createRadialGradient(width * 0.5, height * 0.4, 0, width * 0.5, height * 0.4, width * 0.65);
+	nebula.addColorStop(0, hexToRgba(color, 0.22));
+	nebula.addColorStop(1, 'rgba(0, 0, 0, 0)');
+	ctx.fillStyle = nebula;
+	ctx.fillRect(0, 0, width, height);
+
+	// Deterministic starfield (~110 stars) with accent-tinted stars
+	for (let i = 0; i < 110; i++) {
+		const sx = (i * 397.13 + 73.19) % width;
+		const sy = (i * 683.41 + 149.83) % height;
+		const r = 1.0 + ((i * 17) % 22) / 10;
+		const alpha = 0.25 + ((i * 31) % 70) / 100;
+		const isAccent = i % 5 === 0;
+
+		ctx.beginPath();
+		ctx.arc(sx, sy, r, 0, Math.PI * 2);
+		ctx.fillStyle = isAccent ? hexToRgba(lighten(color, 0.5), alpha) : `rgba(255, 255, 255, ${alpha})`;
+		if (i % 9 === 0) {
+			ctx.shadowColor = isAccent ? color : '#ffffff';
+			ctx.shadowBlur = width * 0.012;
+			ctx.fill();
+			ctx.shadowBlur = 0;
+		} else {
+			ctx.fill();
+		}
+	}
+
+	// Constellation lines tinted with accent color
+	const constellations = [
+		[
+			{ x: width * 0.12, y: height * 0.12 },
+			{ x: width * 0.22, y: height * 0.08 },
+			{ x: width * 0.32, y: height * 0.14 },
+			{ x: width * 0.24, y: height * 0.22 }
+		],
+		[
+			{ x: width * 0.72, y: height * 0.1 },
+			{ x: width * 0.86, y: height * 0.15 },
+			{ x: width * 0.8, y: height * 0.24 },
+			{ x: width * 0.9, y: height * 0.28 }
+		]
+	];
+
+	for (const chain of constellations) {
+		ctx.beginPath();
+		ctx.moveTo(chain[0].x, chain[0].y);
+		for (let j = 1; j < chain.length; j++) {
+			ctx.lineTo(chain[j].x, chain[j].y);
+		}
+		ctx.strokeStyle = hexToRgba(lighten(color, 0.3), 0.35);
+		ctx.lineWidth = 1.5;
+		ctx.stroke();
+
+		for (const pt of chain) {
+			ctx.beginPath();
+			ctx.arc(pt.x, pt.y, 3.5, 0, Math.PI * 2);
+			ctx.fillStyle = lighten(color, 0.6);
+			ctx.shadowColor = color;
+			ctx.shadowBlur = 10;
+			ctx.fill();
+			ctx.shadowBlur = 0;
+		}
+	}
+
+	const isStory = format === 'story';
+	const avatarCy = isStory ? height * 0.33 : height * 0.29;
+	const avatarRadius = isStory ? width * 0.2 : width * 0.16;
+
+	// Glowing celestial halo in accent color
+	ctx.beginPath();
+	ctx.arc(width / 2, avatarCy, avatarRadius + width * 0.026, 0, Math.PI * 2);
+	ctx.strokeStyle = hexToRgba(lighten(color, 0.4), 0.75);
+	ctx.lineWidth = width * 0.005;
+	ctx.shadowColor = color;
+	ctx.shadowBlur = width * 0.05;
+	ctx.stroke();
+	ctx.shadowBlur = 0;
+
+	// 4 cardinal star markers on halo ring in accent color
+	const haloR = avatarRadius + width * 0.026;
+	const cardinals = [
+		{ x: width / 2, y: avatarCy - haloR },
+		{ x: width / 2 + haloR, y: avatarCy },
+		{ x: width / 2, y: avatarCy + haloR },
+		{ x: width / 2 - haloR, y: avatarCy }
+	];
+	for (const pt of cardinals) {
+		ctx.beginPath();
+		ctx.arc(pt.x, pt.y, width * 0.008, 0, Math.PI * 2);
+		ctx.fillStyle = lighten(color, 0.6);
+		ctx.shadowColor = color;
+		ctx.shadowBlur = 10;
+		ctx.fill();
+		ctx.shadowBlur = 0;
+	}
+
+	// Avatar Photo / Glyph
+	if (bond.photoBlob) {
+		await drawCircularPhoto(ctx, bond.photoBlob, width / 2, avatarCy, avatarRadius);
+		ctx.beginPath();
+		ctx.arc(width / 2, avatarCy, avatarRadius, 0, Math.PI * 2);
+		ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+		ctx.lineWidth = width * 0.006;
+		ctx.stroke();
+	} else {
+		await drawBondGlyph(ctx, width / 2, avatarCy, avatarRadius, bond.type, darken(color, 0.3));
+	}
+
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'alphabetic';
+
+	const gap = width * 0.038;
+	let cursorY = avatarCy + avatarRadius + gap * 1.5;
+
+	// Starlight pill header adhering to accent color
+	const starTag = '✦ WRITTEN IN THE STARS ✦';
+	const starTagSize = width * 0.028;
+	ctx.font = `700 ${starTagSize}px "Plus Jakarta Sans Variable"`;
+	if ('letterSpacing' in ctx) ctx.letterSpacing = `${starTagSize * 0.15}px`;
+	ctx.fillStyle = lighten(color, 0.55);
+	const tagBaseline = cursorY + measuredAscent(ctx, starTag, starTagSize);
+	ctx.fillText(starTag, width / 2, tagBaseline);
+	if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+	cursorY = tagBaseline + measuredDescent(ctx, starTag, starTagSize) + gap;
+
+	// Milestone headline with glowing accent aura
+	const milestoneFontSize = fitFontSize(ctx, milestone, 'Playfair Display Variable', 800, width * 0.18, width * 0.09, width * 0.86);
+	ctx.font = `800 ${milestoneFontSize}px "Playfair Display Variable"`;
+	ctx.fillStyle = '#ffffff';
+	ctx.shadowColor = color;
+	ctx.shadowBlur = width * 0.04;
+	const milestoneBaseline = cursorY + measuredAscent(ctx, milestone, milestoneFontSize);
+	ctx.fillText(milestone, width / 2, milestoneBaseline);
+	ctx.shadowBlur = 0;
+	cursorY = milestoneBaseline + measuredDescent(ctx, milestone, milestoneFontSize) + gap * 0.9;
+
+	// Bond names (proper baseline clearance)
+	const namesFontSize = fitFontSize(ctx, bond.names, 'Plus Jakarta Sans Variable', 700, width * 0.055, width * 0.03, width * 0.84);
+	ctx.font = `700 ${namesFontSize}px "Plus Jakarta Sans Variable"`;
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+	const namesBaseline = cursorY + measuredAscent(ctx, bond.names, namesFontSize);
+	ctx.fillText(bond.names, width / 2, namesBaseline);
+	cursorY = namesBaseline + measuredDescent(ctx, bond.names, namesFontSize) + gap * 0.8;
+
+	// Anniversary date adhering to accent color
+	const dateText = `✦ ${formatLongDate(bond.togetherSince)} ✦`;
+	const dateFontSize = width * 0.028;
+	ctx.font = `500 ${dateFontSize}px "Plus Jakarta Sans Variable"`;
+	ctx.fillStyle = hexToRgba(lighten(color, 0.6), 0.85);
+	const dateBaseline = cursorY + measuredAscent(ctx, dateText, dateFontSize);
+	ctx.fillText(dateText, width / 2, dateBaseline);
+
+	// Watermark
+	ctx.font = `600 ${width * 0.022}px "Plus Jakarta Sans Variable"`;
+	ctx.fillStyle = hexToRgba(lighten(color, 0.5), 0.5);
+	ctx.fillText('✦ OPEN LOVE ✦', width / 2, isStory ? height - height * 0.055 : height - height * 0.035);
+}
+
+/* -------------------------------------------------------------------------
+ * Style: Monograph (Editorial) — high-fashion magazine cover spread with
+ * masthead, volume & issue numbering, delicate keyline borders, and bold
+ * serif typography.
+ * ---------------------------------------------------------------------- */
+
+async function renderMonographStyle(
+	ctx: CanvasRenderingContext2D,
+	format: ShareCardFormat,
+	dims: Dimensions,
+	bond: Bond,
+	milestone: string,
+	color: string,
+	timeBreakdown: TimeBreakdown
+): Promise<void> {
+	const { width, height } = dims;
+
+	if (bond.photoBlob) {
+		await drawCoverPhoto(ctx, bond.photoBlob, width, height);
+	} else {
+		const bg = ctx.createLinearGradient(0, 0, width, height);
+		bg.addColorStop(0, '#141416');
+		bg.addColorStop(1, darken(color, 0.8));
+		ctx.fillStyle = bg;
+		ctx.fillRect(0, 0, width, height);
+	}
+
+	// Editorial top & bottom scrims
+	const topScrim = ctx.createLinearGradient(0, 0, 0, height * 0.22);
+	topScrim.addColorStop(0, 'rgba(0, 0, 0, 0.8)');
+	topScrim.addColorStop(1, 'rgba(0, 0, 0, 0)');
+	ctx.fillStyle = topScrim;
+	ctx.fillRect(0, 0, width, height * 0.22);
+
+	const botScrim = ctx.createLinearGradient(0, height * 0.52, 0, height);
+	botScrim.addColorStop(0, 'rgba(0, 0, 0, 0)');
+	botScrim.addColorStop(0.5, 'rgba(0, 0, 0, 0.65)');
+	botScrim.addColorStop(1, 'rgba(0, 0, 0, 0.92)');
+	ctx.fillStyle = botScrim;
+	ctx.fillRect(0, height * 0.52, width, height * 0.48);
+
+	// Inner rectangular keyline border
+	const inset = width * 0.04;
+	ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+	ctx.lineWidth = 1;
+	ctx.strokeRect(inset, inset, width - inset * 2, height - inset * 2);
+
+	// Top Masthead
+	const mastheadY = height * 0.075;
+	const mastheadSize = width * 0.04;
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'middle';
+	ctx.font = `800 ${mastheadSize}px "Plus Jakarta Sans Variable"`;
+	if ('letterSpacing' in ctx) ctx.letterSpacing = `${mastheadSize * 0.35}px`;
+	ctx.fillStyle = '#ffffff';
+	ctx.fillText('M O N O G R A P H', width / 2, mastheadY);
+	if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+
+	// Hairline rule below masthead
+	const ruleY = mastheadY + mastheadSize * 0.85;
+	ctx.beginPath();
+	ctx.moveTo(inset + width * 0.04, ruleY);
+	ctx.lineTo(width - inset - width * 0.04, ruleY);
+	ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+	ctx.lineWidth = 1;
+	ctx.stroke();
+
+	// Issue details bar
+	const issueY = ruleY + width * 0.035;
+	const issueSize = width * 0.02;
+	ctx.font = `600 ${issueSize}px "Plus Jakarta Sans Variable"`;
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+
+	const volText = `VOL. ${timeBreakdown.years > 0 ? timeBreakdown.years : 1}`;
+	const issueText = `ISSUE NO. ${timeBreakdown.totalDays}`;
+	const dateText = formatLongDate(bond.togetherSince).toUpperCase();
+
+	ctx.textAlign = 'left';
+	ctx.fillText(volText, inset + width * 0.04, issueY);
+	ctx.textAlign = 'center';
+	ctx.fillText(issueText, width / 2, issueY);
+	ctx.textAlign = 'right';
+	ctx.fillText(dateText, width - inset - width * 0.04, issueY);
+
+	// Bottom Editorial Section
+	ctx.textAlign = 'left';
+	ctx.textBaseline = 'alphabetic';
+	const leftMargin = inset + width * 0.04;
+	const maxTextW = width - leftMargin * 2;
+
+	const isStory = format === 'story';
+	let bottomCursor = isStory ? height - height * 0.08 : height - height * 0.06;
+
+	// Bottom footnote / barcode info
+	ctx.font = `600 ${width * 0.02}px "Plus Jakarta Sans Variable"`;
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+	ctx.fillText('OPEN LOVE SPECIAL EDITION • ALL RIGHTS RESERVED', leftMargin, bottomCursor);
+	bottomCursor -= width * 0.045;
+
+	// Subtitle line
+	const subText = `${bond.type === 'friendship' ? 'A Lifelong Friendship' : 'A Love Story'} in ${milestone}`;
+	const subTextSize = width * 0.032;
+	ctx.font = `500 ${subTextSize}px "Plus Jakarta Sans Variable"`;
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+	ctx.fillText(subText, leftMargin, bottomCursor);
+	bottomCursor -= measuredAscent(ctx, subText, subTextSize) + width * 0.035;
+
+	// Headline milestone / names
+	const mainHeadline = bond.names;
+	const headlineSize = fitFontSize(ctx, mainHeadline, 'Playfair Display Variable', 800, width * 0.11, width * 0.06, maxTextW);
+	ctx.font = `800 ${headlineSize}px "Playfair Display Variable"`;
+	ctx.fillStyle = '#ffffff';
+	ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+	ctx.shadowBlur = width * 0.02;
+	ctx.fillText(mainHeadline, leftMargin, bottomCursor);
+	ctx.shadowBlur = 0;
+	bottomCursor -= measuredAscent(ctx, mainHeadline, headlineSize) + width * 0.025;
+
+	// Small category tag
+	ctx.font = `700 ${width * 0.024}px "Plus Jakarta Sans Variable"`;
+	if ('letterSpacing' in ctx) ctx.letterSpacing = `${width * 0.005}px`;
+	ctx.fillStyle = color;
+	ctx.fillText('FEATURED RELATIONSHIP', leftMargin, bottomCursor);
+	if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+}
+
+/* -------------------------------------------------------------------------
+ * Style: Botanical (Zen) — serene earth tones, organic arch photo frame,
+ * canvas leaf foliage, and calm natural elegance with subtle color accents.
+ * ---------------------------------------------------------------------- */
+
+async function renderBotanicalStyle(
+	ctx: CanvasRenderingContext2D,
+	format: ShareCardFormat,
+	dims: Dimensions,
+	bond: Bond,
+	milestone: string,
+	color: string
+): Promise<void> {
+	const { width, height } = dims;
+
+	// Soothing sage / sand organic background with subtle accent wash
+	const bg = ctx.createLinearGradient(0, 0, width, height);
+	bg.addColorStop(0, '#f4f6f4');
+	bg.addColorStop(0.5, '#ecf0ec');
+	bg.addColorStop(1, lighten(color, 0.93));
+	ctx.fillStyle = bg;
+	ctx.fillRect(0, 0, width, height);
+
+	const isStory = format === 'story';
+	const archW = isStory ? width * 0.72 : width * 0.58;
+	const archH = isStory ? height * 0.45 : height * 0.43;
+	const archX = (width - archW) / 2;
+	const archY = isStory ? height * 0.1 : height * 0.06;
+	const archR = archW / 2;
+
+	// Helper for arch path (semicircle top, rectangle bottom)
+	function createArchPath() {
+		ctx.beginPath();
+		ctx.moveTo(archX, archY + archH);
+		ctx.lineTo(archX, archY + archR);
+		ctx.arc(archX + archR, archY + archR, archR, Math.PI, 0);
+		ctx.lineTo(archX + archW, archY + archH);
+		ctx.closePath();
+	}
+
+	// Arch drop shadow & background fill
+	ctx.save();
+	createArchPath();
+	ctx.shadowColor = 'rgba(50, 70, 55, 0.12)';
+	ctx.shadowBlur = width * 0.04;
+	ctx.shadowOffsetY = width * 0.015;
+	ctx.fillStyle = '#ffffff';
+	ctx.fill();
+	ctx.restore();
+
+	// Draw photo inside arch
+	ctx.save();
+	createArchPath();
+	ctx.clip();
+	if (bond.photoBlob) {
+		await drawCoverPhotoInRect(ctx, bond.photoBlob, archX, archY, archW, archH);
+	} else {
+		ctx.fillStyle = lighten(color, 0.88);
+		ctx.fill();
+		await drawBondGlyph(ctx, archX + archW / 2, archY + archH / 2, archW * 0.2, bond.type, color);
+	}
+	ctx.restore();
+
+	// Outer arch delicate stroke + subtle accent color keyline
+	createArchPath();
+	ctx.strokeStyle = hexToRgba(color, 0.3);
+	ctx.lineWidth = 2.5;
+	ctx.stroke();
+
+	// Botanical Leaf Sprigs outside arch top corners with subtle accent tone berries
+	function drawLeafSprig(startX: number, startY: number, angle: number, scale: number) {
+		ctx.save();
+		ctx.translate(startX, startY);
+		ctx.rotate(angle);
+		ctx.scale(scale, scale);
+
+		ctx.beginPath();
+		ctx.moveTo(0, 0);
+		ctx.quadraticCurveTo(30, -40, 70, -80);
+		ctx.strokeStyle = 'rgba(74, 94, 78, 0.45)';
+		ctx.lineWidth = 2;
+		ctx.stroke();
+
+		// Paired leaves
+		const leafNodes = [
+			{ t: 0.25, side: 1 },
+			{ t: 0.25, side: -1 },
+			{ t: 0.55, side: 1 },
+			{ t: 0.55, side: -1 },
+			{ t: 0.85, side: 1 },
+			{ t: 0.85, side: -1 },
+			{ t: 1.0, side: 0 }
+		];
+
+		for (const node of leafNodes) {
+			const x = 70 * node.t;
+			const y = -80 * node.t;
+			ctx.beginPath();
+			ctx.ellipse(x + node.side * 12, y - 5, 12, 6, node.side * 0.6, 0, Math.PI * 2);
+			ctx.fillStyle = 'rgba(90, 115, 95, 0.35)';
+			ctx.fill();
+
+			// Accent berry dot
+			if (node.side !== 0) {
+				ctx.beginPath();
+				ctx.arc(x + node.side * 4, y - 2, 2.5, 0, Math.PI * 2);
+				ctx.fillStyle = hexToRgba(color, 0.55);
+				ctx.fill();
+			}
+		}
+		ctx.restore();
+	}
+
+	drawLeafSprig(archX - width * 0.02, archY + archR * 0.4, -0.4, width * 0.0014);
+	drawLeafSprig(archX + archW + width * 0.02, archY + archR * 0.4, 0.4 + Math.PI / 2, width * 0.0014);
+
+	// Typography below arch
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'alphabetic';
+
+	const gap = width * 0.035;
+	let cursorY = archY + archH + gap * 1.3;
+
+	// Botanical header tag with subtle accent
+	const bioTag = '✦ TOGETHER IN HARMONY ✦';
+	const bioTagSize = width * 0.026;
+	ctx.font = `700 ${bioTagSize}px "Plus Jakarta Sans Variable"`;
+	if ('letterSpacing' in ctx) ctx.letterSpacing = `${bioTagSize * 0.15}px`;
+	ctx.fillStyle = darken(color, 0.15);
+	const tagBaseline = cursorY + measuredAscent(ctx, bioTag, bioTagSize);
+	ctx.fillText(bioTag, width / 2, tagBaseline);
+	if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+	cursorY = tagBaseline + measuredDescent(ctx, bioTag, bioTagSize) + gap * 0.8;
+
+	// Milestone headline
+	const milestoneFontSize = fitFontSize(ctx, milestone, 'Playfair Display Variable', 800, width * 0.14, width * 0.075, width * 0.84);
+	ctx.font = `800 ${milestoneFontSize}px "Playfair Display Variable"`;
+	ctx.fillStyle = '#233226';
+	const milestoneBaseline = cursorY + measuredAscent(ctx, milestone, milestoneFontSize);
+	ctx.fillText(milestone, width / 2, milestoneBaseline);
+	cursorY = milestoneBaseline + measuredDescent(ctx, milestone, milestoneFontSize) + gap * 0.8;
+
+	// Bond names (proper baseline clearance)
+	const namesFontSize = fitFontSize(ctx, bond.names, 'Plus Jakarta Sans Variable', 700, width * 0.052, width * 0.03, width * 0.82);
+	ctx.font = `700 ${namesFontSize}px "Plus Jakarta Sans Variable"`;
+	ctx.fillStyle = '#3d4e41';
+	const namesBaseline = cursorY + measuredAscent(ctx, bond.names, namesFontSize);
+	ctx.fillText(bond.names, width / 2, namesBaseline);
+	cursorY = namesBaseline + measuredDescent(ctx, bond.names, namesFontSize) + gap * 0.8;
+
+	// Together since date pill with accent tint
+	const dateText = `Since ${formatLongDate(bond.togetherSince)}`;
+	const dateFontSize = width * 0.028;
+	ctx.font = `600 ${dateFontSize}px "Plus Jakarta Sans Variable"`;
+	const pillTextW = ctx.measureText(dateText).width;
+	const pillH = dateFontSize * 2.1;
+	const pillW = pillTextW + dateFontSize * 2.4;
+
+	ctx.beginPath();
+	ctx.roundRect(width / 2 - pillW / 2, cursorY, pillW, pillH, pillH / 2);
+	ctx.fillStyle = hexToRgba(color, 0.12);
+	ctx.fill();
+	ctx.strokeStyle = hexToRgba(color, 0.3);
+	ctx.lineWidth = 1;
+	ctx.stroke();
+
+	ctx.fillStyle = darken(color, 0.3);
+	ctx.textBaseline = 'middle';
+	ctx.fillText(dateText, width / 2, cursorY + pillH / 2);
+	ctx.textBaseline = 'alphabetic';
+
+	// Watermark
+	ctx.font = `600 ${width * 0.022}px "Plus Jakarta Sans Variable"`;
+	ctx.fillStyle = '#7a8e7e';
+	ctx.fillText('🌿 OPEN LOVE', width / 2, isStory ? height - height * 0.055 : height - height * 0.035);
+}
+
+/* -------------------------------------------------------------------------
+ * Style: Glass (Frosted Glassmorphism) — ultra-modern floating frosted glass
+ * card over blurred ambient background with ambient color orbs, glowing avatar
+ * ring, and crisp modern metrics.
+ * ---------------------------------------------------------------------- */
+
+async function renderGlassStyle(
+	ctx: CanvasRenderingContext2D,
+	format: ShareCardFormat,
+	dims: Dimensions,
+	bond: Bond,
+	milestone: string,
+	color: string
+): Promise<void> {
+	const { width, height } = dims;
+
+	// Background: dark base + ambient blurred photo or gradients
+	ctx.fillStyle = '#080c16';
+	ctx.fillRect(0, 0, width, height);
+
+	if (bond.photoBlob) {
+		ctx.save();
+		if ('filter' in ctx) {
+			ctx.filter = 'blur(45px) brightness(0.45) saturate(1.2)';
+		}
+		await drawCoverPhoto(ctx, bond.photoBlob, width, height);
+		ctx.restore();
+	}
+
+	// Ambient glowing radial color orbs
+	const orb1 = ctx.createRadialGradient(width * 0.2, height * 0.25, 0, width * 0.2, height * 0.25, width * 0.55);
+	orb1.addColorStop(0, color);
+	orb1.addColorStop(1, 'rgba(0, 0, 0, 0)');
+	ctx.save();
+	ctx.globalAlpha = 0.4;
+	ctx.fillStyle = orb1;
+	ctx.fillRect(0, 0, width, height);
+
+	const orb2 = ctx.createRadialGradient(width * 0.8, height * 0.75, 0, width * 0.8, height * 0.75, width * 0.55);
+	orb2.addColorStop(0, darken(color, 0.4));
+	orb2.addColorStop(1, 'rgba(0, 0, 0, 0)');
+	ctx.fillStyle = orb2;
+	ctx.fillRect(0, 0, width, height);
+	ctx.restore();
+
+	// Floating Frosted Glass Card
+	const isStory = format === 'story';
+	const cardW = width * 0.86;
+	const cardH = isStory ? height * 0.76 : height * 0.84;
+	const cardX = (width - cardW) / 2;
+	const cardY = isStory ? height * 0.11 : height * 0.08;
+	const cardRadius = width * 0.06;
+
+	// Drop shadow
+	ctx.save();
+	ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+	ctx.shadowBlur = width * 0.05;
+	ctx.shadowOffsetY = width * 0.025;
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+	ctx.beginPath();
+	ctx.roundRect(cardX, cardY, cardW, cardH, cardRadius);
+	ctx.fill();
+	ctx.restore();
+
+	// Frosted fill inside
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+	ctx.beginPath();
+	ctx.roundRect(cardX, cardY, cardW, cardH, cardRadius);
+	ctx.fill();
+
+	// Glass Border Gradient Stroke
+	const strokeGrad = ctx.createLinearGradient(cardX, cardY, cardX + cardW, cardY + cardH);
+	strokeGrad.addColorStop(0, 'rgba(255, 255, 255, 0.55)');
+	strokeGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.15)');
+	strokeGrad.addColorStop(1, 'rgba(255, 255, 255, 0.35)');
+	ctx.strokeStyle = strokeGrad;
+	ctx.lineWidth = width * 0.0035;
+	ctx.stroke();
+
+	// Top Specular Highlight
+	ctx.beginPath();
+	ctx.moveTo(cardX + cardRadius, cardY + 1.5);
+	ctx.lineTo(cardX + cardW - cardRadius, cardY + 1.5);
+	ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+	ctx.lineWidth = 2;
+	ctx.stroke();
+
+	// Inner Avatar
+	const avatarCy = cardY + cardH * (isStory ? 0.22 : 0.2);
+	const avatarRadius = width * 0.13;
+
+	if (bond.photoBlob) {
+		await drawCircularPhoto(ctx, bond.photoBlob, width / 2, avatarCy, avatarRadius);
+		ctx.beginPath();
+		ctx.arc(width / 2, avatarCy, avatarRadius, 0, Math.PI * 2);
+		ctx.strokeStyle = color;
+		ctx.lineWidth = width * 0.007;
+		ctx.shadowColor = color;
+		ctx.shadowBlur = width * 0.03;
+		ctx.stroke();
+		ctx.shadowBlur = 0;
+	} else {
+		await drawBondGlyph(ctx, width / 2, avatarCy, avatarRadius, bond.type, color);
+	}
+
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'alphabetic';
+
+	const gap = width * 0.036;
+	let cursorY = avatarCy + avatarRadius + gap * 1.2;
+
+	// Pill badge
+	const badgeLabel = (bond.type === 'friendship' ? 'Friends for' : 'Together for').toUpperCase();
+	const badgeSize = width * 0.028;
+	ctx.font = `700 ${badgeSize}px "Plus Jakarta Sans Variable"`;
+	const pillTextW = ctx.measureText(badgeLabel).width;
+	const pillH = badgeSize * 2.1;
+	const pillW = pillTextW + badgeSize * 2.4;
+
+	ctx.beginPath();
+	ctx.roundRect(width / 2 - pillW / 2, cursorY, pillW, pillH, pillH / 2);
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+	ctx.fill();
+	ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+	ctx.lineWidth = 1;
+	ctx.stroke();
+
+	// Dot in pill
+	ctx.beginPath();
+	ctx.arc(width / 2 - pillTextW / 2 - badgeSize * 0.3, cursorY + pillH / 2, badgeSize * 0.3, 0, Math.PI * 2);
+	ctx.fillStyle = color;
+	ctx.fill();
+
+	ctx.fillStyle = '#ffffff';
+	ctx.textBaseline = 'middle';
+	ctx.fillText(badgeLabel, width / 2 + badgeSize * 0.2, cursorY + pillH / 2);
+	ctx.textBaseline = 'alphabetic';
+	cursorY += pillH + gap * 0.9;
+
+	// Big Modern Milestone Headline
+	const milestoneFontSize = fitFontSize(ctx, milestone, 'Playfair Display Variable', 800, width * 0.17, width * 0.09, cardW * 0.88);
+	ctx.font = `800 ${milestoneFontSize}px "Playfair Display Variable"`;
+	ctx.fillStyle = '#ffffff';
+	ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+	ctx.shadowBlur = width * 0.02;
+	const milestoneBaseline = cursorY + measuredAscent(ctx, milestone, milestoneFontSize);
+	ctx.fillText(milestone, width / 2, milestoneBaseline);
+	ctx.shadowBlur = 0;
+	cursorY = milestoneBaseline + measuredDescent(ctx, milestone, milestoneFontSize) + gap * 0.8;
+
+	// Bond Names (proper baseline clearance)
+	const namesFontSize = fitFontSize(ctx, bond.names, 'Plus Jakarta Sans Variable', 700, width * 0.054, width * 0.03, cardW * 0.85);
+	ctx.font = `700 ${namesFontSize}px "Plus Jakarta Sans Variable"`;
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+	const namesBaseline = cursorY + measuredAscent(ctx, bond.names, namesFontSize);
+	ctx.fillText(bond.names, width / 2, namesBaseline);
+	cursorY = namesBaseline + measuredDescent(ctx, bond.names, namesFontSize) + gap * 0.8;
+
+	// Date Pill
+	const dateText = `✦ ${formatLongDate(bond.togetherSince)} ✦`;
+	const dateFontSize = width * 0.028;
+	ctx.font = `500 ${dateFontSize}px "Plus Jakarta Sans Variable"`;
+	const datePillTextW = ctx.measureText(dateText).width;
+	const datePillH = dateFontSize * 2.0;
+	const datePillW = datePillTextW + dateFontSize * 2.4;
+
+	ctx.beginPath();
+	ctx.roundRect(width / 2 - datePillW / 2, cursorY, datePillW, datePillH, datePillH / 2);
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+	ctx.fill();
+	ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+	ctx.lineWidth = 1;
+	ctx.stroke();
+
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+	ctx.textBaseline = 'middle';
+	ctx.fillText(dateText, width / 2, cursorY + datePillH / 2);
+	ctx.textBaseline = 'alphabetic';
+
+	// Card Footer Watermark
+	ctx.font = `600 ${width * 0.022}px "Plus Jakarta Sans Variable"`;
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+	ctx.fillText('OPEN LOVE', width / 2, cardY + cardH - width * 0.04);
+}
+
+/* -------------------------------------------------------------------------
  * Public entry point.
  * ---------------------------------------------------------------------- */
 
@@ -552,9 +1389,8 @@ export interface GenerateShareCardOptions {
 
 /**
  * Renders a shareable "relationship progress" card for `bond` in one of
- * three styles (Scrim: full-bleed photo + overlay; Framed: bordered inset
- * photo card; Bold: poster-style typography) and one of two sizes (a
- * Story/9:16 or a square feed post).
+ * eight styles (Scrim, Framed, Bold, Polaroid, Constellation, Monograph,
+ * Botanical, Glass) and one of two sizes (Story/9:16 or square feed post).
  *
  * Pure client-side: draws into an in-memory canvas and resolves a PNG blob.
  * Never touches the server — unlike the partner-invite QR flow's photo
@@ -577,6 +1413,16 @@ export async function generateShareCardImage({ bond, timeBreakdown, format, styl
 		await renderFramedStyle(ctx, format, dims, bond, milestone, color);
 	} else if (style === 'bold') {
 		await renderBoldStyle(ctx, format, dims, bond, milestone, color);
+	} else if (style === 'polaroid') {
+		await renderPolaroidStyle(ctx, format, dims, bond, milestone, color);
+	} else if (style === 'constellation') {
+		await renderConstellationStyle(ctx, format, dims, bond, milestone, color);
+	} else if (style === 'monograph') {
+		await renderMonographStyle(ctx, format, dims, bond, milestone, color, timeBreakdown);
+	} else if (style === 'botanical') {
+		await renderBotanicalStyle(ctx, format, dims, bond, milestone, color);
+	} else if (style === 'glass') {
+		await renderGlassStyle(ctx, format, dims, bond, milestone, color);
 	} else {
 		await renderScrimStyle(ctx, format, dims, bond, milestone, color);
 	}

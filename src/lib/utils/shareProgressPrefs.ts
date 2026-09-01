@@ -10,7 +10,16 @@ export interface ShareProgressPrefs {
 const KEY_PREFIX = 'openlove_share_progress_prefs_';
 
 const VALID_FORMATS: ShareCardFormat[] = ['story', 'square'];
-const VALID_STYLES: ShareCardStyle[] = ['scrim', 'framed', 'bold'];
+const VALID_STYLES: ShareCardStyle[] = [
+	'scrim',
+	'framed',
+	'bold',
+	'polaroid',
+	'constellation',
+	'monograph',
+	'botanical',
+	'glass'
+];
 const VALID_PALETTES: ColorPalette[] = ['rose', 'lavender', 'terracotta', 'sage', 'midnight'];
 
 /**

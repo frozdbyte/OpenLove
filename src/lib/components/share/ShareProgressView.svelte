@@ -13,7 +13,21 @@
 	import type { ColorPalette } from '$lib/types/profile';
 	import Button from '$lib/components/ui/button';
 	import ColorPaletteSelector from '$lib/components/shared/ColorPaletteSelector.svelte';
-	import { Download, Loader2, Share2, Image as ImageIcon, RectangleVertical, Square, Frame, Type } from '@lucide/svelte';
+	import {
+		Download,
+		Loader2,
+		Share2,
+		Image as ImageIcon,
+		RectangleVertical,
+		Square,
+		Frame,
+		Type,
+		Camera,
+		Sparkles,
+		BookOpen,
+		Leaf,
+		Layers
+	} from '@lucide/svelte';
 
 	const FORMAT_OPTIONS: { value: ShareCardFormat; label: string; icon: typeof RectangleVertical }[] = [
 		{ value: 'story', label: 'Story', icon: RectangleVertical },
@@ -21,9 +35,14 @@
 	];
 
 	const STYLE_OPTIONS: { value: ShareCardStyle; label: string; icon: typeof ImageIcon }[] = [
-		{ value: 'scrim', label: 'Scrim', icon: ImageIcon },
-		{ value: 'framed', label: 'Framed', icon: Frame },
-		{ value: 'bold', label: 'Bold', icon: Type }
+		{ value: 'scrim', label: 'Cover Scrim', icon: ImageIcon },
+		{ value: 'framed', label: 'Framed Card', icon: Frame },
+		{ value: 'bold', label: 'Bold Typography', icon: Type },
+		{ value: 'polaroid', label: 'Polaroid Scrapbook', icon: Camera },
+		{ value: 'constellation', label: 'Constellation Starlight', icon: Sparkles },
+		{ value: 'monograph', label: 'Editorial Monograph', icon: BookOpen },
+		{ value: 'botanical', label: 'Botanical Serenity', icon: Leaf },
+		{ value: 'glass', label: 'Frosted Glass', icon: Layers }
 	];
 
 	// Last-used format/style/color for *this* bond, remembered locally so
@@ -200,20 +219,22 @@
 	{/if}
 
 	<!-- Style / Theme picker -->
-	<div class="flex items-center gap-3 px-2">
-		{#each STYLE_OPTIONS as opt (opt.value)}
-			<button
-				type="button"
-				class="h-8 w-8 rounded-full border transition-transform cursor-pointer flex items-center justify-center {style === opt.value
-					? 'border-primary bg-primary text-primary-foreground ring-5 ring-primary/30 scale-110 shadow-xs'
-					: 'border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent'}"
-				onclick={() => (style = opt.value)}
-				title={opt.label}
-				aria-label={opt.label}
-			>
-				<opt.icon class="h-4 w-4" />
-			</button>
-		{/each}
+	<div class="w-full max-w-[340px] sm:max-w-sm overflow-x-auto py-2 px-2 mx-auto">
+		<div class="inline-flex items-center gap-3 min-w-full justify-center px-1">
+			{#each STYLE_OPTIONS as opt (opt.value)}
+				<button
+					type="button"
+					class="h-8 w-8 rounded-full shrink-0 border transition-transform cursor-pointer flex items-center justify-center {style === opt.value
+						? 'border-primary bg-primary text-primary-foreground ring-5 ring-primary/30 scale-110 shadow-xs'
+						: 'border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent'}"
+					onclick={() => (style = opt.value)}
+					title={opt.label}
+					aria-label={opt.label}
+				>
+					<opt.icon class="h-4 w-4" />
+				</button>
+			{/each}
+		</div>
 	</div>
 
 	<!-- Color override -- one-off for this card, never written back to the bond -->
