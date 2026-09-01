@@ -4,20 +4,25 @@
 	import { getThemeComponent } from '$lib/components/themes/registry';
 	import { isRunningAsPWA } from '$lib/utils/pwa';
 	import SettingsSheet from '$lib/components/settings/SettingsSheet.svelte';
-	import ShareModal from '$lib/components/share/ShareModal.svelte';
+	import ShareModal, { type ShareHubView } from '$lib/components/share/ShareModal.svelte';
 	import PartnerInviteModal from '$lib/components/share/PartnerInviteModal.svelte';
 	import BondSwitcherDrawer from '$lib/components/bonds/BondSwitcherDrawer.svelte';
 	import BondPhotoPreloader from '$lib/components/bonds/BondPhotoPreloader.svelte';
 	import OnboardingFlow from '$lib/components/onboarding/OnboardingFlow.svelte';
 	import EnableNotificationsPrompt from '$lib/components/onboarding/EnableNotificationsPrompt.svelte';
+	import MilestoneCelebrationController from '$lib/components/celebration/MilestoneCelebrationController.svelte';
+	import { makePushMilestoneItem } from '$lib/utils/celebration';
+	import type { SWCelebrationMessage } from '$lib/types/time';
 	import { isPushSupported } from '$lib/push/client';
 	import type { Bond } from '$lib/types/bonds';
+	import Button from '$lib/components/ui/button';
 	import { Heart } from '@lucide/svelte';
 	import confetti from 'canvas-confetti';
 	import { decodeSharePayloadString, detectFullBackup } from '$lib/utils/share';
 
 	let isSettingsOpen = $state(false);
 	let isShareOpen = $state(false);
+	let shareInitialView = $state<ShareHubView>('menu');
 	let isInviteModalOpen = $state(false);
 	let isSwitcherOpen = $state(false);
 	let isNotificationsPromptOpen = $state(false);
@@ -27,6 +32,8 @@
 	let pendingPartnerNames = $state('');
 	let currentTime = $state(new Date());
 	let locale: string | undefined = $state();
+
+	let celebrationController: MilestoneCelebrationController | undefined = $state();
 
 	// Update live clock every second
 	$effect(() => {
@@ -58,18 +65,42 @@
 		}
 	});
 
-	// Handle URL query parameter `?bond=id` and Service Worker switch messages
+	// Handle URL query parameter `?bond=id&celebrate=title` and Service Worker switch messages
 	$effect(() => {
 		if (typeof window !== 'undefined') {
 			const params = new URLSearchParams(window.location.search);
 			const targetBond = params.get('bond');
-			if (targetBond && profileStore.isInitialized) {
-				void profileStore.setActiveBond(targetBond);
+			const celebrateTitle = params.get('celebrate');
+
+			// Clean stale ?celebrate param even if no ?bond is present
+			if (celebrateTitle && !targetBond) {
+				window.history.replaceState(null, '', window.location.pathname);
 			}
 
-			const handleMessage = (e: MessageEvent) => {
+			if (targetBond && profileStore.isInitialized) {
+				void profileStore.setActiveBond(targetBond).then(() => {
+					if (celebrateTitle) {
+						const bond = profileStore.activeBond;
+						const milestone = makePushMilestoneItem(celebrateTitle);
+						celebrationController?.triggerCelebration(bond, milestone);
+						window.history.replaceState(null, '', window.location.pathname);
+					}
+				});
+			}
+
+			const handleMessage = (e: MessageEvent<SWCelebrationMessage>) => {
 				if (e.data?.type === 'OPENLOVE_SWITCH_BOND' && e.data?.bondId) {
-					void profileStore.setActiveBond(e.data.bondId);
+					void profileStore.setActiveBond(e.data.bondId).then(() => {
+						if (e.data.celebrate) {
+							const bond = profileStore.activeBond;
+							const milestone = makePushMilestoneItem(
+								e.data.celebrate,
+								e.data.milestoneId || 'push_celebrate',
+								e.data.milestoneType || 'years'
+							);
+							celebrationController?.triggerCelebration(bond, milestone);
+						}
+					});
 				}
 			};
 			navigator.serviceWorker?.addEventListener('message', handleMessage);
@@ -245,7 +276,10 @@
 		nextMilestone={milestoneData.nextMilestone}
 		milestones={milestoneData.milestones}
 		onOpenSettings={() => (isSettingsOpen = true)}
-		onOpenShare={() => (isShareOpen = true)}
+		onOpenShare={() => {
+			shareInitialView = 'menu';
+			isShareOpen = true;
+		}}
 		onOpenSwitcher={() => (isSwitcherOpen = true)}
 	/>
 {/if}
@@ -265,6 +299,7 @@
 
 <ShareModal
 	bind:open={isShareOpen}
+	initialView={shareInitialView}
 	onclose={() => (isShareOpen = false)}
 />
 
@@ -287,4 +322,12 @@
 />
 
 <EnableNotificationsPrompt bind:open={isNotificationsPromptOpen} />
+
+<MilestoneCelebrationController
+	bind:this={celebrationController}
+	onShare={(view) => {
+		shareInitialView = view;
+		isShareOpen = true;
+	}}
+/>
 

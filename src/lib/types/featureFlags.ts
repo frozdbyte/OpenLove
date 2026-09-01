@@ -7,4 +7,6 @@
 export interface FeatureFlags {
 	/** Server-relayed encrypted photo sharing via QR/link (IMAGE_SHARING_PLAN.md, Stage 5). */
 	shareImages: boolean;
+	/** Developer & testing toolbar across the app. */
+	devMode: boolean;
 }

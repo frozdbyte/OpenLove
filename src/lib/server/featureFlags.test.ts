@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getFeatureFlags } from './featureFlags';
 
 describe('getFeatureFlags', () => {
-	const originalValue = process.env.FEATURE_SHARE_IMAGES;
+	const originalShareImages = process.env.FEATURE_SHARE_IMAGES;
+	const originalDevMode = process.env.FEATURE_DEV_MODE;
+	const originalDevModeFallback = process.env.DEV_MODE;
 	let warnSpy: ReturnType<typeof vi.spyOn>;
 
 	beforeEach(() => {
@@ -10,17 +12,45 @@ describe('getFeatureFlags', () => {
 	});
 
 	afterEach(() => {
-		if (originalValue === undefined) {
+		if (originalShareImages === undefined) {
 			delete process.env.FEATURE_SHARE_IMAGES;
 		} else {
-			process.env.FEATURE_SHARE_IMAGES = originalValue;
+			process.env.FEATURE_SHARE_IMAGES = originalShareImages;
 		}
+
+		if (originalDevMode === undefined) {
+			delete process.env.FEATURE_DEV_MODE;
+		} else {
+			process.env.FEATURE_DEV_MODE = originalDevMode;
+		}
+
+		if (originalDevModeFallback === undefined) {
+			delete process.env.DEV_MODE;
+		} else {
+			process.env.DEV_MODE = originalDevModeFallback;
+		}
+
 		warnSpy.mockRestore();
 	});
 
-	it('defaults to true when unset', () => {
+	it('defaults shareImages to true and devMode to false when unset', () => {
 		delete process.env.FEATURE_SHARE_IMAGES;
-		expect(getFeatureFlags().shareImages).toBe(true);
+		delete process.env.FEATURE_DEV_MODE;
+		delete process.env.DEV_MODE;
+		const flags = getFeatureFlags();
+		expect(flags.shareImages).toBe(true);
+		expect(flags.devMode).toBe(false);
+	});
+
+	it('resolves devMode to true when FEATURE_DEV_MODE is set to true', () => {
+		process.env.FEATURE_DEV_MODE = 'true';
+		expect(getFeatureFlags().devMode).toBe(true);
+	});
+
+	it('resolves devMode to true when DEV_MODE fallback is set to true', () => {
+		delete process.env.FEATURE_DEV_MODE;
+		process.env.DEV_MODE = 'true';
+		expect(getFeatureFlags().devMode).toBe(true);
 	});
 
 	it('defaults to true when set to an empty string', () => {

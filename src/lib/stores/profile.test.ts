@@ -355,3 +355,27 @@ describe('exportJSON sharedImage param / importJSON relay-photo attachment', () 
 		setPhotoSpy.mockRestore();
 	});
 });
+
+describe('autoCelebrateMilestones preference', () => {
+	it('defaults to true for normalized bonds and can be toggled per bond', async () => {
+		const bond = await profileStore.addBond({
+			id: 'celebrate_test_1',
+			type: 'romantic',
+			names: 'Test & Partner',
+			togetherSince: '2024-01-01',
+			customMilestones: [],
+			notificationsEnabled: true,
+			milestonePrefs: { years: true, months: true, days: 'all', custom: true }
+		});
+
+		expect(bond.autoCelebrateMilestones).toBe(true);
+
+		await profileStore.setAutoCelebrateMilestones(false, bond.id);
+		const updated = profileStore.state.bonds.find((b) => b.id === bond.id);
+		expect(updated?.autoCelebrateMilestones).toBe(false);
+
+		await profileStore.setAutoCelebrateMilestones(true, bond.id);
+		const updatedAgain = profileStore.state.bonds.find((b) => b.id === bond.id);
+		expect(updatedAgain?.autoCelebrateMilestones).toBe(true);
+	});
+});

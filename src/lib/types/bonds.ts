@@ -25,6 +25,7 @@ export interface Bond {
 	colorPalette?: ColorPalette;     // Per-bond accent color
 	colorMode?: ColorMode;           // Per-bond color appearance (system / light / dark)
 	showSeconds?: boolean;           // Per-bond ticking seconds toggle
+	autoCelebrateMilestones?: boolean; // Whether to auto-show full-screen celebration card on milestone days
 }
 
 export interface AppState {
@@ -40,6 +41,7 @@ export interface AppState {
 	/** Whether the post-onboarding "Enable Notifications?" prompt has already
 	 * been shown (accepted or dismissed) — shown at most once. */
 	notificationsPromptShown: boolean;
+	autoCelebrateMilestones?: boolean;
 }
 
 export const DEFAULT_MILESTONE_PREFS_ROMANTIC: MilestoneCategoryPrefs = {

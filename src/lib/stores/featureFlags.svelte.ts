@@ -10,7 +10,7 @@ const CACHE_KEY = 'openlove_feature_flags_v1';
  * since that module (and its `process.env` reads) must never end up in the
  * client bundle.
  */
-const DEFAULTS: FeatureFlags = { shareImages: true };
+const DEFAULTS: FeatureFlags = { shareImages: true, devMode: false };
 
 /**
  * Client-side cache + reactive access for server-resolved feature flags.

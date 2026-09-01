@@ -186,9 +186,16 @@ self.addEventListener('push', (event) => {
 					: payload.milestoneId || 'openlove-milestone',
 				renotify: true,
 				data: {
-					url: payload.bondId ? `/?bond=${payload.bondId}` : '/',
+					url: payload.bondId
+						? payload.milestoneTitle
+							? `/?bond=${payload.bondId}&celebrate=${encodeURIComponent(payload.milestoneTitle)}`
+							: `/?bond=${payload.bondId}`
+						: '/',
 					bondId: payload.bondId,
-					type: payload.type
+					type: payload.type,
+					milestoneTitle: payload.milestoneTitle,
+					milestoneType: payload.milestoneType,
+					milestoneId: payload.milestoneId
 				}
 			};
 
@@ -199,8 +206,18 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
 	event.notification.close();
-	const bondId = event.notification.data?.bondId;
-	const targetUrl = bondId ? `/?bond=${bondId}` : '/';
+	const data = event.notification.data || {};
+	const bondId = data.bondId;
+	const milestoneTitle = data.milestoneTitle;
+	const milestoneType = data.milestoneType;
+	const milestoneId = data.milestoneId;
+	const targetUrl =
+		data.url ||
+		(bondId
+			? milestoneTitle
+				? `/?bond=${bondId}&celebrate=${encodeURIComponent(milestoneTitle)}`
+				: `/?bond=${bondId}`
+			: '/');
 
 	event.waitUntil(
 		self.clients
@@ -209,7 +226,13 @@ self.addEventListener('notificationclick', (event) => {
 				for (const client of clientList) {
 					if (client.url && 'focus' in client) {
 						if (bondId) {
-							client.postMessage({ type: 'OPENLOVE_SWITCH_BOND', bondId });
+							client.postMessage({
+								type: 'OPENLOVE_SWITCH_BOND',
+								bondId,
+								celebrate: milestoneTitle,
+								milestoneType,
+								milestoneId
+							});
 						}
 						return client.focus();
 					}

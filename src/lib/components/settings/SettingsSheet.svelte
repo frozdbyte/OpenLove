@@ -6,7 +6,7 @@
 	import Modal from '$lib/components/ui/dialog/modal.svelte';
 	import Button from '$lib/components/ui/button';
 	import Switch from '$lib/components/ui/switch';
-	import { Trash2, Plus, QrCode, Users, Clock, BellOff, UserRound, Palette, Bell, Flag, Database, Info, ChevronRight } from '@lucide/svelte';
+	import { Trash2, Plus, QrCode, Users, Clock, BellOff, UserRound, Palette, Bell, Flag, Database, Info, ChevronRight, PartyPopper, Sparkles, Heart } from '@lucide/svelte';
 	import ScanImportModal from '$lib/components/share/ScanImportModal.svelte';
 	import ThemeSelector from '$lib/components/shared/ThemeSelector.svelte';
 	import ColorModeSelector from '$lib/components/shared/ColorModeSelector.svelte';
@@ -91,6 +91,7 @@
 	let bondColorPalette = $state<ColorPalette>('rose');
 	let bondColorMode = $state<ColorMode>('system');
 	let bondShowSeconds = $state(false);
+	let bondAutoCelebrate = $state(true);
 
 	let activeTheme = $derived<UIThemeId>(
 		isNewBond ? bondUiTheme : (currentBond.uiTheme ?? profileStore.state.uiTheme)
@@ -134,6 +135,7 @@
 				bondColorPalette = active.colorPalette ?? profileStore.state.colorPalette;
 				bondColorMode = active.colorMode ?? profileStore.state.colorMode;
 				bondShowSeconds = active.showSeconds ?? profileStore.state.showSeconds;
+				bondAutoCelebrate = active.autoCelebrateMilestones ?? true;
 			} else {
 				const b = currentBond;
 				bondType = b.type || 'romantic';
@@ -150,6 +152,7 @@
 				bondColorPalette = b.colorPalette ?? profileStore.state.colorPalette;
 				bondColorMode = b.colorMode ?? profileStore.state.colorMode;
 				bondShowSeconds = b.showSeconds ?? profileStore.state.showSeconds;
+				bondAutoCelebrate = b.autoCelebrateMilestones ?? true;
 			}
 		}
 	});
@@ -235,7 +238,8 @@
 			uiTheme: bondUiTheme,
 			colorPalette: bondColorPalette,
 			colorMode: bondColorMode,
-			showSeconds: bondShowSeconds
+			showSeconds: bondShowSeconds,
+			autoCelebrateMilestones: bondAutoCelebrate
 		};
 
 		await profileStore.addBond(newBond);
@@ -439,32 +443,112 @@
 		{/if}
 
 		{#if isNewBond || activeSection === 'notifications'}
-			<!-- Device Notifications (App-Wide) — moved above Bond Notifications so the
-			     master toggle a bond's alerts actually depend on is visible before it. -->
-			{#if showAppWideSettings && !isNewBond}
-				<PushNotificationPanel {currentBond} />
-			{/if}
+			<!-- In-App Milestone Celebration Cards Section -->
+			<div class="space-y-2.5">
+				<div class="px-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+					<Sparkles class="h-3.5 w-3.5 text-primary" />
+					<span>Milestone Celebration Cards</span>
+				</div>
 
-			<!-- Bond Notifications: meaningless without an active device subscription
-			     to actually deliver them, so only shown once one exists. -->
-			{#if profileStore.state.pushSubscribed}
-				<MilestonePrefsEditor
-					{isNewBond}
-					{currentBond}
-					bind:notificationsEnabled={bondNotificationsEnabled}
-					bind:years={bondYearsPref}
-					bind:months={bondMonthsPref}
-					bind:days={bondDaysPref}
-					bind:custom={bondCustomPref}
-					onNotificationsChange={(v) => handleLiveUpdate({ notificationsEnabled: v })}
-					onPrefsChange={(prefs) => handleLiveUpdate({ milestonePrefs: prefs })}
-				/>
-			{:else}
-				<section class="p-3.5 rounded-2xl bg-muted/40 border border-dashed border-border flex items-center gap-2.5 text-xs text-muted-foreground">
-					<BellOff class="h-4 w-4 shrink-0" />
-					<span>Turn on Device Notifications to choose which milestones alert you for this bond.</span>
-				</section>
-			{/if}
+				{#if showAppWideSettings && !isNewBond}
+					<!-- 1. Global Master Toggle -->
+					<section class="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border">
+						<div class="space-y-0.5 pr-2">
+							<div class="text-sm font-semibold text-foreground flex items-center gap-1.5">
+								<Sparkles class="h-4 w-4 text-primary shrink-0" />
+								<span>All Relationships</span>
+							</div>
+							<div class="text-xs text-muted-foreground">
+								Master switch to auto-show celebratory story cards across all bonds on milestone days
+							</div>
+						</div>
+						<Switch
+							checked={profileStore.state.autoCelebrateMilestones ?? true}
+							onchange={(val) => {
+								void profileStore.setGlobalAutoCelebrateMilestones(val);
+							}}
+						/>
+					</section>
+
+					<!-- 2. Per-Bond Toggle for active bond -->
+					<section class="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border {profileStore.state.autoCelebrateMilestones === false ? 'opacity-60' : ''}">
+						<div class="space-y-0.5 pr-2">
+							<div class="text-sm font-semibold text-foreground flex items-center gap-1.5">
+								<Heart class="h-4 w-4 text-rose-500 shrink-0" />
+								<span class="truncate">This Relationship ({currentBond.names})</span>
+							</div>
+							<div class="text-xs text-muted-foreground">
+								{#if profileStore.state.autoCelebrateMilestones === false}
+									<span class="text-amber-600 dark:text-amber-400 font-medium">Disabled by global switch above</span>
+								{:else}
+									Show celebration story cards for {currentBond.names}
+								{/if}
+							</div>
+						</div>
+						<Switch
+							checked={currentBond.autoCelebrateMilestones ?? true}
+							disabled={profileStore.state.autoCelebrateMilestones === false}
+							onchange={(val) => {
+								bondAutoCelebrate = val;
+								void profileStore.setAutoCelebrateMilestones(val, currentBond.id);
+							}}
+						/>
+					</section>
+				{:else}
+					<!-- Per-Bond Milestone Celebrations (When editing or creating a specific bond) -->
+					<section class="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border">
+						<div class="space-y-0.5 pr-2">
+							<div class="text-sm font-semibold text-foreground flex items-center gap-1.5">
+								<Heart class="h-4 w-4 text-primary shrink-0" />
+								<span>Celebrations for {isNewBond ? 'New Relationship' : currentBond.names}</span>
+							</div>
+							<div class="text-xs text-muted-foreground">Auto-show celebratory story cards on milestone days for this relationship</div>
+						</div>
+						<Switch
+							checked={isNewBond ? bondAutoCelebrate : (currentBond.autoCelebrateMilestones ?? true)}
+							onchange={(val) => {
+								bondAutoCelebrate = val;
+								if (!isNewBond) void profileStore.setAutoCelebrateMilestones(val, currentBond.id);
+							}}
+						/>
+					</section>
+				{/if}
+			</div>
+
+			<!-- Push Notifications Section -->
+			<div class="space-y-2.5 pt-1">
+				<div class="px-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+					<Bell class="h-3.5 w-3.5 text-primary" />
+					<span>Push Notifications</span>
+				</div>
+
+				<!-- Device Notifications (App-Wide) — moved above Bond Notifications so the
+				     master toggle a bond's alerts actually depend on is visible before it. -->
+				{#if showAppWideSettings && !isNewBond}
+					<PushNotificationPanel {currentBond} />
+				{/if}
+
+				<!-- Bond Notifications: meaningless without an active device subscription
+				     to actually deliver them, so only shown once one exists. -->
+				{#if profileStore.state.pushSubscribed}
+					<MilestonePrefsEditor
+						{isNewBond}
+						{currentBond}
+						bind:notificationsEnabled={bondNotificationsEnabled}
+						bind:years={bondYearsPref}
+						bind:months={bondMonthsPref}
+						bind:days={bondDaysPref}
+						bind:custom={bondCustomPref}
+						onNotificationsChange={(v) => handleLiveUpdate({ notificationsEnabled: v })}
+						onPrefsChange={(prefs) => handleLiveUpdate({ milestonePrefs: prefs })}
+					/>
+				{:else}
+					<section class="p-3.5 rounded-2xl bg-muted/40 border border-dashed border-border flex items-center gap-2.5 text-xs text-muted-foreground">
+						<BellOff class="h-4 w-4 shrink-0" />
+						<span>Turn on Device Notifications to choose which milestones alert you for this bond.</span>
+					</section>
+				{/if}
+			</div>
 		{/if}
 
 		{#if !isNewBond && activeSection === 'milestones'}

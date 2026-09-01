@@ -52,6 +52,7 @@ interface RawBondLike {
 	colorPalette?: ColorPalette;
 	colorMode?: ColorMode;
 	showSeconds?: boolean;
+	autoCelebrateMilestones?: boolean;
 	/** Inline base64 photo, present only in JSON *file* backups
 	 * (`exportBackupJSON`) — never in the compact QR/link/sync-code payload
 	 * `exportJSON` produces, which must stay small. See IMAGE_SHARING_PLAN.md.
@@ -104,6 +105,7 @@ type NormalizedBondCore = Pick<
 	| 'colorPalette'
 	| 'colorMode'
 	| 'showSeconds'
+	| 'autoCelebrateMilestones'
 >;
 
 /**
@@ -146,7 +148,8 @@ function normalizeIncomingBond(
 		uiTheme: raw.uiTheme || envelope.uiTheme || 'modern',
 		colorPalette: raw.colorPalette || envelope.colorPalette || 'rose',
 		colorMode: raw.colorMode || envelope.colorMode || 'system',
-		showSeconds: raw.showSeconds ?? envelope.showSeconds ?? true
+		showSeconds: raw.showSeconds ?? envelope.showSeconds ?? true,
+		autoCelebrateMilestones: raw.autoCelebrateMilestones ?? envelope.autoCelebrateMilestones ?? true
 	};
 }
 
@@ -180,7 +183,8 @@ class ProfileStore {
 			isConfigured: this.state.isConfigured,
 			pushSubscribed: this.state.pushSubscribed,
 			pushIntent: this.state.pushIntent,
-			customMilestones: active.customMilestones
+			customMilestones: active.customMilestones,
+			autoCelebrateMilestones: this.state.autoCelebrateMilestones ?? true
 		};
 	}
 
@@ -337,7 +341,8 @@ class ProfileStore {
 			uiTheme: newBond.uiTheme ?? currentActive.uiTheme ?? this.state.uiTheme,
 			colorPalette: newBond.colorPalette ?? currentActive.colorPalette ?? this.state.colorPalette,
 			colorMode: newBond.colorMode ?? currentActive.colorMode ?? this.state.colorMode,
-			showSeconds: newBond.showSeconds ?? currentActive.showSeconds ?? this.state.showSeconds
+			showSeconds: newBond.showSeconds ?? currentActive.showSeconds ?? this.state.showSeconds,
+			autoCelebrateMilestones: newBond.autoCelebrateMilestones ?? currentActive.autoCelebrateMilestones ?? true
 		};
 
 		const previous = { ...this.state };
@@ -398,12 +403,14 @@ class ProfileStore {
 			showSeconds,
 			isConfigured,
 			pushSubscribed,
-			pushIntent
+			pushIntent,
+			autoCelebrateMilestones
 		} = fields;
 
 		if (isConfigured !== undefined) this.state.isConfigured = isConfigured;
 		if (pushSubscribed !== undefined) this.state.pushSubscribed = pushSubscribed;
 		if (pushIntent !== undefined) this.state.pushIntent = pushIntent;
+		if (autoCelebrateMilestones !== undefined) this.state.autoCelebrateMilestones = autoCelebrateMilestones;
 
 		// Update active bond
 		this.state.bonds = this.state.bonds.map((b) => {
@@ -541,6 +548,14 @@ class ProfileStore {
 		}
 	}
 
+	async setAutoCelebrateMilestones(autoCelebrateMilestones: boolean, targetBondId?: string) {
+		const bondId = targetBondId || this.state.activeBondId;
+		await this.updateBond(bondId, { autoCelebrateMilestones });
+	}
+
+	async setGlobalAutoCelebrateMilestones(autoCelebrateMilestones: boolean) {
+		await this.update({ autoCelebrateMilestones });
+	}
 
 	async completeOnboarding() {
 		await this.update({ isConfigured: true });
@@ -595,7 +610,8 @@ class ProfileStore {
 					uiTheme: active.uiTheme ?? this.state.uiTheme,
 					colorPalette: active.colorPalette ?? this.state.colorPalette,
 					colorMode: active.colorMode ?? this.state.colorMode,
-					showSeconds: active.showSeconds ?? this.state.showSeconds
+					showSeconds: active.showSeconds ?? this.state.showSeconds,
+					autoCelebrateMilestones: active.autoCelebrateMilestones ?? true
 				},
 				uiTheme: active.uiTheme ?? this.state.uiTheme,
 				colorMode: active.colorMode ?? this.state.colorMode,

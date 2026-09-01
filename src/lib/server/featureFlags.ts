@@ -6,8 +6,12 @@ import type { FeatureFlags } from '$lib/types/featureFlags';
  * since `GET /api/share/config` and the client store both just pass the
  * whole resolved object through.
  */
-const FLAG_REGISTRY: Record<keyof FeatureFlags, { env: string; default: boolean }> = {
-	shareImages: { env: 'FEATURE_SHARE_IMAGES', default: true }
+const FLAG_REGISTRY: Record<
+	keyof FeatureFlags,
+	{ env: string; default: boolean; envFallback?: string }
+> = {
+	shareImages: { env: 'FEATURE_SHARE_IMAGES', default: true },
+	devMode: { env: 'FEATURE_DEV_MODE', default: false, envFallback: 'DEV_MODE' }
 };
 
 const TRUTHY = new Set(['true', '1', 'on', 'yes']);
@@ -41,8 +45,9 @@ function parseBooleanEnv(key: string, raw: string | undefined, fallback: boolean
 export function getFeatureFlags(): FeatureFlags {
 	const result = {} as FeatureFlags;
 	for (const key of Object.keys(FLAG_REGISTRY) as (keyof FeatureFlags)[]) {
-		const { env, default: fallback } = FLAG_REGISTRY[key];
-		result[key] = parseBooleanEnv(env, process.env[env], fallback);
+		const { env, default: fallback, envFallback } = FLAG_REGISTRY[key];
+		const raw = process.env[env] ?? (envFallback ? process.env[envFallback] : undefined);
+		result[key] = parseBooleanEnv(env, raw, fallback);
 	}
 	return result;
 }

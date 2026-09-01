@@ -11,6 +11,7 @@
     "icons:maskable": "node scripts/make-maskable-icons.js",
     "preview": "vite preview",
     "start": "node --env-file-if-exists=.env build/index.js",
+    "start:built": "pnpm build && node --env-file-if-exists=.env build/index.js",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",

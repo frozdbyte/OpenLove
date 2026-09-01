@@ -7,6 +7,7 @@
 	import Badge from '$lib/components/ui/badge';
 	import { Heart, Sparkles, Plus, Check, Edit3, Calendar } from '@lucide/svelte';
 	import { calculateTimeBreakdown } from '$lib/utils/time';
+	import { getTodayMilestoneForBond } from '$lib/utils/celebration';
 	import SettingsSheet from '$lib/components/settings/SettingsSheet.svelte';
 
 	interface Props {
@@ -57,6 +58,7 @@
 			{#each profileStore.state.bonds as bond (bond.id)}
 				{@const isActive = bond.id === profileStore.state.activeBondId}
 				{@const breakdown = calculateTimeBreakdown(bond.togetherSince)}
+				{@const todayMilestone = getTodayMilestoneForBond(bond)}
 
 				<div
 					class="w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all text-left cursor-pointer {isActive
@@ -103,7 +105,7 @@
 
 						<!-- Details -->
 						<div class="min-w-0 flex-1">
-							<div class="flex items-center gap-2">
+							<div class="flex items-center gap-1.5 flex-wrap">
 								<h3 class="font-bold text-sm text-foreground truncate">{bond.names}</h3>
 								<Badge
 									variant={bond.type === 'friendship' ? 'outline' : 'romantic'}
@@ -115,6 +117,11 @@
 										💖 Couple
 									{/if}
 								</Badge>
+								{#if todayMilestone}
+									<span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0">
+										🎉 {todayMilestone.title}
+									</span>
+								{/if}
 							</div>
 
 							<div class="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">

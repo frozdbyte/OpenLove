@@ -11,6 +11,7 @@ All notable changes to OpenLove are documented here. Format loosely follows
 
 - Sharing progress to social media as a story or post
 - "About" section in settings with info and changelog
+- Celebration Popup / Toast on special days
 
 ### Changed
 

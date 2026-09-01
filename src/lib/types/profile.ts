@@ -33,6 +33,7 @@ export interface CoupleProfile {
 	 */
 	pushIntent: boolean;
 	customMilestones: CustomMilestone[];
+	autoCelebrateMilestones?: boolean;
 }
 
 export interface ThemeProps {

@@ -28,7 +28,8 @@ export const DEFAULT_PRIMARY_BOND: Bond = {
 	uiTheme: 'modern',
 	colorPalette: 'rose',
 	colorMode: 'system',
-	showSeconds: true
+	showSeconds: true,
+	autoCelebrateMilestones: true
 };
 
 
@@ -42,7 +43,8 @@ export const DEFAULT_APP_STATE: AppState = {
 	isConfigured: false,
 	pushSubscribed: false,
 	pushIntent: false,
-	notificationsPromptShown: false
+	notificationsPromptShown: false,
+	autoCelebrateMilestones: true
 };
 
 export const DEFAULT_PROFILE: CoupleProfile = {
@@ -57,7 +59,8 @@ export const DEFAULT_PROFILE: CoupleProfile = {
 	isConfigured: DEFAULT_APP_STATE.isConfigured,
 	pushSubscribed: DEFAULT_APP_STATE.pushSubscribed,
 	pushIntent: DEFAULT_APP_STATE.pushIntent,
-	customMilestones: []
+	customMilestones: [],
+	autoCelebrateMilestones: DEFAULT_APP_STATE.autoCelebrateMilestones
 };
 
 /**
@@ -100,7 +103,8 @@ export async function loadAppStateFromStorage(): Promise<AppState> {
 						uiTheme: rawBond.uiTheme || rawState.uiTheme || 'modern',
 						colorPalette: rawBond.colorPalette || rawState.colorPalette || 'rose',
 						colorMode: rawBond.colorMode || rawState.colorMode || 'system',
-						showSeconds: rawBond.showSeconds ?? rawState.showSeconds ?? true
+						showSeconds: rawBond.showSeconds ?? rawState.showSeconds ?? true,
+						autoCelebrateMilestones: rawBond.autoCelebrateMilestones ?? true
 					};
 				})
 			);
@@ -143,7 +147,8 @@ export async function loadAppStateFromStorage(): Promise<AppState> {
 				uiTheme: legacyProfile.uiTheme || 'modern',
 				colorPalette: legacyProfile.colorPalette || 'rose',
 				colorMode: legacyProfile.colorMode || 'system',
-				showSeconds: legacyProfile.showSeconds ?? true
+				showSeconds: legacyProfile.showSeconds ?? true,
+				autoCelebrateMilestones: true
 			};
 
 
@@ -157,7 +162,8 @@ export async function loadAppStateFromStorage(): Promise<AppState> {
 				isConfigured: legacyProfile.isConfigured ?? false,
 				pushSubscribed: legacyProfile.pushSubscribed ?? false,
 				pushIntent: legacyProfile.pushIntent ?? false,
-				notificationsPromptShown: false
+				notificationsPromptShown: false,
+				autoCelebrateMilestones: true
 			};
 
 			// Persist migrated V2 state

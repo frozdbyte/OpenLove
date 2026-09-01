@@ -19,13 +19,15 @@
 	import Button from '$lib/components/ui/button';
 	import Switch from '$lib/components/ui/switch';
 	import { BellRing, CloudOff } from '@lucide/svelte';
-	import { dev } from '$app/environment';
+	import { isDevMode } from '$lib/utils/dev';
 
 	interface Props {
 		currentBond: Bond;
 	}
 
 	let { currentBond }: Props = $props();
+
+	const dev = $derived(isDevMode());
 
 	let isPushLoading = $state(false);
 	let pushStatusMessage = $state('');

@@ -19,6 +19,8 @@ export interface TimeBreakdown {
 	startDateFormatted: string; // e.g. "January 10, 2016"
 }
 
+export type MilestoneType = 'days' | 'months' | 'years' | 'custom';
+
 export interface MilestoneItem {
 	id: string;
 	title: string;
@@ -26,7 +28,7 @@ export interface MilestoneItem {
 	targetDate: Date;
 	isAchieved: boolean;
 	daysRemaining: number;
-	type: 'days' | 'months' | 'years' | 'custom';
+	type: MilestoneType;
 	iconName?: string;
 	/**
 	 * For `type: 'custom'` only: the milestone's own id as stored in
@@ -41,4 +43,12 @@ export interface NextMilestoneInfo {
 	milestone: MilestoneItem;
 	progressPercentage: number;
 	daysLeft: number;
+}
+
+export interface SWCelebrationMessage {
+	type: 'OPENLOVE_SWITCH_BOND';
+	bondId: string;
+	celebrate?: string;
+	milestoneType?: MilestoneType;
+	milestoneId?: string;
 }

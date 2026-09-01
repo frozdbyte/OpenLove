@@ -26,14 +26,21 @@
 	import { resolveQrColor, bondLogoDataUri } from '$lib/utils/qrTheme';
 	import ShareProgressView from './ShareProgressView.svelte';
 
+	export type ShareHubView = 'menu' | 'invite' | 'progress';
+
 	interface Props {
 		open?: boolean;
+		/**
+		 * The view to land on each time the modal opens (transitions from closed → open).
+		 * Changing this while the modal is already open has no effect — set it before
+		 * setting `open = true`. Defaults to 'menu'.
+		 */
+		initialView?: ShareHubView;
 		onclose?: () => void;
 	}
 
-	let { open = $bindable(false), onclose }: Props = $props();
+	let { open = $bindable(false), initialView = 'menu', onclose }: Props = $props();
 
-	type ShareHubView = 'menu' | 'invite' | 'progress';
 	let view = $state<ShareHubView>('menu');
 
 	// Feature-detected, not assumed from a user-agent/viewport check — true on
@@ -77,9 +84,8 @@
 
 	$effect(() => {
 		if (open) {
-			// Fresh session every time the modal opens — always lands back on the
-			// chooser rather than reopening on whichever branch was last shown.
-			view = 'menu';
+			// Fresh session every time the modal opens — lands on initialView (default: 'menu')
+			view = initialView;
 			includePhoto = false;
 			uploadingPhoto = false;
 			photoUploadFailed = false;
