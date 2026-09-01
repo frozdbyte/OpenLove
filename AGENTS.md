@@ -11,7 +11,7 @@ Welcome! This document is the **single source of truth** for human contributors 
 ### Core Values
 1. **Zero-Knowledge Privacy**: Couple names, anniversary start dates, high-resolution photo blobs, and personal notes are stored **strictly on the user's client device in IndexedDB**.
 2. **Anonymous Minimalist Backend**: The server SQLite database stores **only** anonymous Web Push tokens, together-since dates (for milestone computation), and subscriber timezones — plus, only when a user opts in to sharing a photo via QR/link, opaque client-encrypted ciphertext the server has no key to read, auto-deleted after a short TTL (see Invariant 11).
-3. **Aesthetic & Delightful UX**: Dual UI themes (**Modern** glassmorphic and nostalgic **Traditional** replica of classic "My Love"), dark mode, custom color accents, and full PWA installation support.
+3. **Aesthetic & Delightful UX**: 7 customizable UI themes (**Modern**, **Cover**, **Traditional**, **Polaroid**, **Monograph**, **Botanical**, **Constellation**), dark mode, custom color accents, celebration story cards, social progress card sharing, and full PWA installation support.
 4. **Frictionless Self-Hosting**: 1-command Docker/Podman deployment (`docker compose up -d`), genuine offline-first PWA (precached shell, self-hosted fonts, offline mutations), and Coolify/Homelab ready.
 
 ---
@@ -29,9 +29,10 @@ Welcome! This document is the **single source of truth** for human contributors 
 | **Scheduler** | Node Background Cron | Hourly timezone-aware milestone checker initialized in [`src/hooks.server.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/hooks.server.ts). |
 | **PWA & Offline** | `@vite-pwa/sveltekit` (`injectManifest`) + Workbox 7 | **One** service worker doing precaching, navigation fallback, push and sync. Prerendered SPA shell. See Invariant 7. |
 | **Offline Sync** | Hand-rolled IndexedDB outbox | One-directional client→server queue with coalescing, backoff and last-write-wins. See Invariant 8. |
-| **Sharing & Sync** | URL Hash + QR Code | `#share-<base64url(gzip(json))>` (legacy `#import-`, `#import/`, `#import=` all still accepted on import — see the `share-import-safety` skill §6) + QR camera scanner (`jsqr`) & QR generator (`qrcode`). Single-source encode/decode/detect logic lives in [`src/lib/utils/share.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/share.ts) — see Invariant 9. |
+| **Sharing & Sync** | URL Hash + QR Code + Story Cards | `#share-<base64url(gzip(json))>` (legacy `#import-`, `#import/`, `#import=` all still accepted on import — see the `share-import-safety` skill §6) + QR camera scanner (`jsqr`) & QR generator (`qrcode`) + Canvas-rendered social story/post cards (`shareCardImage.ts`). Single-source encode/decode/detect logic lives in [`src/lib/utils/share.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/share.ts) — see Invariant 9. |
 | **Photo Sharing** | Client-side AES-GCM + server relay | Opt-in per share (`ShareModal.svelte`'s toggle). `crypto.subtle` encrypts on-device; the server stores only ciphertext, TTL-swept. See Invariant 11. |
 | **Feature Flags** | Runtime env vars via a config endpoint | `GET /api/share/config`, not `$env/static/public` — see Invariant 12 for why. |
+| **UI Primitives** | Svelte 5 Native Components | Non-blocking accessible Toast system (`toast.svelte.ts` at `z-[60]`) and `ConfirmModal.svelte` (replacing `window.confirm()` and `window.alert()` for iOS PWA compatibility). |
 | **Containerization** | Multi-Arch Docker/Podman | Multi-stage build with `--platform=$BUILDPLATFORM` for native host compilation. |
 | **Testing** | Vitest | Pure-function unit tests only (no DOM) — date/milestone math, outbox coalescing, server sync conflict resolution, share-payload parsing, image crypto round trips. Run via `pnpm test`. See "Testing" under Common Commands. |
 
@@ -163,8 +164,8 @@ handlers. Keep it that way; a pull phase would reintroduce every problem this de
   theoretical one; it was one commit away from shipping in `ScanImportModal.svelte`.
 - The fixed reference pattern lives in `ScanImportModal.svelte`'s `handleImportData` and
   `+page.svelte`'s `handleImportHash`: an unconfigured device (nothing to lose) imports a full
-  backup directly; a configured device requires an explicit native `confirm()` naming the exact
-  bond count — the same pattern this codebase already uses for its other irreversible actions
+  backup directly; a configured device requires an explicit `ConfirmModal` dialog naming the exact
+  bond count — the same pattern this codebase uses for its other irreversible actions
   (`handleResetData`/`handleDeleteCurrentBond` in `SettingsSheet.svelte`), not a new UI convention.
 - See the `share-import-safety` skill before touching any of this code.
 
@@ -273,6 +274,8 @@ and a `+layout.server.ts` load function for anything that must reflect an env va
 OpenLove/
 ├── .agents/skills/             # Skill instructions (e.g. prisma-upgrade-v7)
 ├── data/                       # Persistent directory for SQLite (openlove.db) & VAPID keys (vapid.json)
+├── docs/                       # Static landing page & documentation
+│   └── build-changelog.mjs     # Generates docs/changelog.json from CHANGELOG.md
 ├── prisma/
 │   └── schema.prisma           # Prisma v7 schema: PushSubscription/SubscriptionBond
 │                                #   (Invariant 1) + SharedImage (Invariant 11)
@@ -291,27 +294,29 @@ OpenLove/
 │   ├── lib/
 │   │   ├── components/
 │   │   │   ├── bonds/          # BondSwitcherDrawer (multi-bond list, switch, add, edit entry point)
+│   │   │   ├── celebration/    # MilestoneCelebrationController, MilestoneCelebrationModal, MilestoneCelebrationToast
+│   │   │   ├── dev/            # DevToolsHub (milestone simulation, time travel, push test — FEATURE_DEV_MODE)
 │   │   │   ├── offline/        # SyncStatusPill (offline / N-changes-pending indicator)
 │   │   │   ├── onboarding/
 │   │   │   │   ├── OnboardingFlow.svelte  # Thin stepper shell: nav, footer, shared draft state
 │   │   │   │   └── steps/      # OverviewStep, PwaInstallStep, NamesStep, DateStep, PhotoStep, StyleStep
 │   │   │   ├── pwa/            # PWAToast: the single SW registration + update/offline-ready toast
 │   │   │   ├── settings/
-│   │   │   │   ├── SettingsSheet.svelte      # Thin orchestrator: mode resolution + composition
-│   │   │   │   ├── BondIdentityForm.svelte   # Type, names, date, photo
+│   │   │   │   ├── SettingsSheet.svelte      # 3-step wizard (new bonds) & 2-group navigation (existing)
+│   │   │   │   ├── BondIdentityForm.svelte   # Type, names, date, photo (with 10MB validation)
 │   │   │   │   ├── MilestonePrefsEditor.svelte # Per-bond notification toggle + category prefs
-│   │   │   │   ├── MilestonesList.svelte     # Milestone list + custom-milestone add/delete
+│   │   │   │   ├── MilestonesList.svelte     # Milestone list + custom-milestone add/delete + empty states
 │   │   │   │   ├── PushNotificationPanel.svelte # Device-wide push subscription card
-│   │   │   │   └── StorageBackupPanel.svelte # Storage estimate, backup/restore/reset
-│   │   │   ├── share/          # ShareModal, PartnerInviteModal, ScanImportModal (QR scanner)
+│   │   │   │   ├── StorageBackupPanel.svelte # Storage estimate, backup/restore/reset (ConfirmModal + Toast)
+│   │   │   │   └── AboutPanel.svelte         # App info, version details, and changelog viewer
+│   │   │   ├── share/          # ShareModal, ShareProgressView (social story card generator), PartnerInviteModal, ScanImportModal
 │   │   │   ├── shared/         # BondTypeSelector, ThemeSelector, ColorModeSelector,
-│   │   │   │                   #   ColorPaletteSelector — used by both SettingsSheet and
-│   │   │   │                   #   OnboardingFlow via `variant`/`layout` props (see H3/H5 below)
+│   │   │   │                   #   ColorPaletteSelector — used by SettingsSheet, OnboardingFlow, and ShareProgressView
 │   │   │   ├── themes/
-│   │   │   │   ├── shared/     # ThemeIconButton, HeroCounterCard, StatBreakdownGrid,
-│   │   │   │   │               #   NextMilestoneCard — used by both ModernTheme and CoverTheme
-│   │   │   │   ├── ModernTheme.svelte, CoverTheme.svelte, TraditionalTheme.svelte, registry.ts
-│   │   │   └── ui/             # shadcn-style UI atoms (Button, Card, Modal, Switch, Badge, etc.)
+│   │   │   │   ├── shared/     # ThemeIconButton, HeroCounterCard, StatBreakdownGrid, NextMilestoneCard
+│   │   │   │   ├── ModernTheme.svelte, CoverTheme.svelte, TraditionalTheme.svelte,
+│   │   │   │   ├── PolaroidTheme.svelte, MonographTheme.svelte, BotanicalTheme.svelte, ConstellationTheme.svelte, registry.ts
+│   │   │   └── ui/             # UI primitives (Button, Card, Modal, ConfirmModal, ToastContainer, Switch, Badge, etc.)
 │   │   ├── generated/prisma/   # Generated Prisma v7 client output
 │   │   ├── push/
 │   │   │   └── client.ts       # Push subscribe/unsubscribe as an *intent*; routes via the outbox
@@ -329,26 +334,31 @@ OpenLove/
 │   │   │   ├── featureFlags.svelte.ts # Client fetch/cache for server-resolved flags (Invariant 12)
 │   │   │   ├── network.svelte.ts # Online state + pending-sync count
 │   │   │   ├── profile.svelte.ts # Reactive profile store + onProfileMutation hook registry
-│   │   │   └── pwa.svelte.ts   # Install prompt, standalone detection, storage persistence
+│   │   │   ├── pwa.svelte.ts   # Install prompt, standalone detection, storage persistence
+│   │   │   └── toast.svelte.ts # General-purpose auto-dismissing toast notifications
 │   │   ├── sync/
 │   │   │   ├── core.ts         # Outbox delivery, backoff (DOM-free: SW imports it)
 │   │   │   └── index.ts        # Mutation funnel + platform flush triggers (window only)
-│   │   ├── types/              # TypeScript interfaces (profile, time, milestones, featureFlags)
+│   │   ├── types/              # TypeScript interfaces (bonds, profile, time, milestones, featureFlags)
 │   │   └── utils/
 │   │       ├── base64.ts       # VAPID key decoding (DOM-free: SW imports it)
+│   │       ├── celebration.ts  # Celebration triggers and milestone card helpers
+│   │       ├── changelog.ts    # CHANGELOG.md markdown parser
 │   │       ├── clipboard.ts    # Robust fallback clipboard copying
+│   │       ├── dev.ts          # Dev mode runtime detector
 │   │       ├── imageBase64.ts  # Blob<->base64 (backup photos) + shared byte-level primitives
 │   │       ├── imageCrypto.ts  # Client-side AES-GCM encrypt/decrypt for relayed photos (Invariant 11)
 │   │       ├── pwa.ts          # Standalone PWA detection (iOS Safari, Android, Desktop)
-│   │       ├── share.ts        # decodeSharePayloadString + detectFullBackup — single source of
-│   │       │                   #   truth for share-payload parsing (see Invariant 9)
+│   │       ├── share.ts        # decodeSharePayloadString + detectFullBackup — single source of truth (Invariant 9)
+│   │       ├── shareCardImage.ts # Canvas image generator for social media story/post cards
 │   │       ├── shareImage.ts   # uploadSharedImage/fetchSharedImage — fail-soft relay client (Invariant 11)
+│   │       ├── shareProgressPrefs.ts # Client-persisted preferences for social card customization
 │   │       ├── storage.ts      # navigator.storage persist()/estimate() helpers
 │   │       └── time.ts         # Exact calendar time & multi-category milestone calculations
 │   └── routes/
 │       ├── +layout.ts          # prerender = true, ssr = false (the precached SPA shell)
-│       ├── +layout.svelte      # Root layout: store init, sync triggers, PWA toast
-│       ├── +page.svelte        # Main route (switches between Onboarding and Active Theme)
+│       ├── +layout.svelte      # Root layout: store init, sync triggers, PWAToast + ToastContainer
+│       ├── +page.svelte        # Main route (switches between Onboarding and Active Theme, handles celebrations)
 │       └── api/
 │           ├── push/
 │           │   ├── sync/             # POST: Batch sync ops (upsert/delete), idempotent + LWW
@@ -367,6 +377,7 @@ OpenLove/
 ├── scripts/verify-precache.js  # Post-build assertion that the app is really offline-capable
 ├── prisma.config.ts            # Prisma 7 CLI configuration
 ├── package.json                # Project manifests, dependencies & devops scripts
+├── CHANGELOG.md                # Human-readable release history
 └── README.md                   # Public documentation & deployment guide
 ```
 
@@ -382,6 +393,10 @@ OpenLove/
   - **`modern`**: Glassmorphic cards, glowing avatar, accent color palettes (*Rose, Lavender, Terracotta, Sage, Midnight*).
   - **`cover`**: Full-bleed cover photo with clean top header and floating metric cards.
   - **`traditional`**: Authentic replica of classic "My Love" design with deep crimson header and serif typography.
+  - **`polaroid`**: Nostalgic analog photo card aesthetic with tape accents.
+  - **`monograph`**: Editorial typography and newspaper-inspired clean layout.
+  - **`botanical`**: Organic earthy tones and leaf embellishments.
+  - **`constellation`**: Cosmic starry sky backdrop with radiant glowing metrics.
 - **`modern` and `cover` compose from `themes/shared/`** (`ThemeIconButton`, `HeroCounterCard`,
   `StatBreakdownGrid`, `NextMilestoneCard`) rather than duplicating markup. These two themes use
   **different Tailwind tokens for the same-looking cards** (padding, icon size, `backdrop-blur-md`,
@@ -389,26 +404,25 @@ OpenLove/
   explicit `variant: 'default' | 'compact'` prop on each shared component. **Never** collapse that
   difference to "unify" the two themes further — see the `ui-refactor-verification` skill before
   touching any of these. `traditional`'s layout is different enough it doesn't share these.
-- **Per-Bond Customization**: Each `Bond` independently configures its own `uiTheme`, `colorPalette`, `colorMode`, `showSeconds`, `milestonePrefs`, and `notificationsEnabled`.
-- **Unified Settings**: [`SettingsSheet.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/settings/SettingsSheet.svelte)
-  is a thin orchestrator (mode resolution + composition) over `BondIdentityForm`,
-  `MilestonePrefsEditor`, `MilestonesList`, `PushNotificationPanel`, `StorageBackupPanel`, and the
-  `shared/` selectors — it provides scoped bond editing and applies progressive disclosure (omits
-  the Active Bond header when only 1 bond exists). **When adding a new settings control**, decide
-  which of those five components it belongs in (or whether it's genuinely a new one) rather than
-  adding directly to `SettingsSheet.svelte` — it was 1,212 lines before this split and is
-  deliberately kept thin now. The bond-type/theme/color-mode/palette pickers it uses are the same
-  `shared/` components `OnboardingFlow` uses — check there first before writing a new picker.
+- **Per-Bond Customization**: Each `Bond` independently configures its own `uiTheme`, `colorPalette`, `colorMode`, `showSeconds`, `milestonePrefs`, `notificationsEnabled`, and `autoCelebrateMilestones`.
+- **Structured Settings Information Architecture**: [`SettingsSheet.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/settings/SettingsSheet.svelte)
+  organizes settings into **Bond-specific** sections (`identity`, `appearance`, `milestones`, `alerts`)
+  and **App-wide** sections (`deviceNotifications`, `data`, `about`), with a visual divider. The active
+  bond name is dynamically displayed in the header. Scoped bond editing (from `BondSwitcherDrawer`) shows
+  only the bond-specific sections. Creating a new bond runs as a guided **3-step wizard** (`Identity` →
+  `Appearance` → `Review & Create`).
 
 ### 2. Multi-Category Milestone Engine ([`src/lib/utils/time.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/time.ts))
 - **Months**: 1st through 11th months, 18 months, 30 months, 42 months, etc.
 - **Years**: 1st anniversary, 2nd, 5th, 10th, 25th silver, 50th golden, etc.
-- **Days**: 50, 100, 150, 200, 500, 1000, 2500, 5000, 10000 days (supports 'all', 'major', or 'off' filters).
+- **Days**: 50, 100, 150, 200, 500, 1000, 2500, 5000, 10000 days (supports 'all', 'major', or 'off' filters with on/off switch).
 - **Custom**: User-created custom relationship events (*First Date, Moved In, Proposal*).
 - Sorted chronologically by target date with exact countdowns (`daysRemaining`).
 
-### 3. Progressive Partner Sharing & QR Code Import
-- **Share Modal ([`ShareModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/ShareModal.svelte))**: Generates instant QR code and share link encoded with `#share-<base64url(gzip(json))>` (built via `async buildShareUrl()` — never hand-write this string; see the `share-import-safety` skill §6 for why it's gzip-compressed base64url and not `encodeURIComponent(btoa(...))`). Also offers the native OS share sheet as the primary action when `navigator.share` is available (feature-detected, not device-sniffed), with the copy actions as fallbacks.
+### 3. Progressive Partner Sharing & Social Media Story Cards
+- **Share Modal ([`ShareModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/ShareModal.svelte))**: Hub offering two pathways:
+  1. **Partner Invite & Sync**: Instant QR code and share link encoded with `#share-<base64url(gzip(json))>` (built via `async buildShareUrl()`). Offers the native OS share sheet as primary action when `navigator.share` is available.
+  2. **Social Progress Sharing ([`ShareProgressView.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/ShareProgressView.svelte))**: Real-time canvas engine ([`shareCardImage.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/shareCardImage.ts)) rendering exportable 9:16 Story and 1:1 Post images with customizable visual themes, blur levels, and background photos.
 - **Partner Invite & Preview Modal ([`PartnerInviteModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/PartnerInviteModal.svelte))**:
   - **Unconfigured Users (A)**: Smart landing options (*Install App pre-synced, Copy Sync Code, Continue in Browser*).
   - **Single-Bond Users (B)**: Displays incoming preview with choices to **➕ Add as New Bond** or **🔄 Replace Current Bond**.
@@ -416,18 +430,15 @@ OpenLove/
   - This preview/replace/add flow is for **single-bond invites only**. It is never shown for a
     full multi-bond backup — see Invariant 9.
 - **QR Code Scanner ([`ScanImportModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/share/ScanImportModal.svelte))**: Real-time camera scanner (`jsqr`), image upload, and paste code handler with preview confirmation.
-- **Add Bond Integration**: Top-level action in the Add Bond sheet to directly scan or paste shared partner profiles.
 - **Encode/decode/detect logic** (`buildShareUrl()`, `decodeSharePayloadString()`, legacy `#import-`,
   `#import/`, and `#import=` URL parsing, bare base64 sync codes, full-backup detection) is centralized in
   [`src/lib/utils/share.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/utils/share.ts)
   and shared by `ScanImportModal.svelte`, `+page.svelte`'s hash effect, and
-  `profileStore.parseSharePayload`. **Do not** reimplement any of it inline at a new call site —
-  import from `share.ts`. See the `share-import-safety` skill before touching any of this.
+  `profileStore.parseSharePayload`. **Do not** reimplement any of it inline at a new call site.
 - **Optional photo sharing**: `ShareModal.svelte`'s "Share Photo" toggle (shown only when the
   active bond has a photo and `FEATURE_SHARE_IMAGES` is on) uploads it encrypted to the relay
   and embeds a small `{shareId,key,iv,mimeType}` reference — not the photo itself — in the same
-  compact payload. Greyed out while offline (`networkStore.isOnline`), matching
-  `PushNotificationPanel.svelte`'s identical pattern for the same reason. See Invariant 11.
+  compact payload. Greyed out while offline (`networkStore.isOnline`). See Invariant 11.
 
 ### 4. Onboarding Wizard
 - [`OnboardingFlow.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/onboarding/OnboardingFlow.svelte)
@@ -441,7 +452,7 @@ OpenLove/
   step state further down, check the `ui-refactor-verification` skill's state-ownership section.
 - `StyleStep` composes the same `shared/` `ThemeSelector`/`ColorModeSelector` components
   `SettingsSheet` uses, with `layout="detailed"` (icon + circular check badge) instead of Settings'
-  `layout="compact"` (label + inline check) — see subsystem 1 above.
+  `layout="compact"` (label + inline check).
 
 ### 5. JSON Backups & Photo Sharing (two different photo mechanisms, on purpose)
 Photos travel through this app two genuinely different ways, chosen per transport — see
@@ -450,18 +461,31 @@ Invariant 11 for the full reasoning, `share-import-safety` for the wire-shape de
 - **JSON *file* backups** (`StorageBackupPanel.svelte`'s "Download JSON Backup (All Bonds)",
   `ShareModal.svelte`'s "Download Bond JSON File", and both files' restore paths): each bond's
   photo travels **inline as base64** (`profileStore.exportBackupJSON()` / `importJSON()`'s
-  `photo` field). No server involvement, never expires, works fully offline — matches this
-  being the app's own "keep a backup, this is the only copy" safety net. **Not** gated by
-  `FEATURE_SHARE_IMAGES` — that flag only gates the public upload endpoint, and a user
-  downloading their own file to their own disk isn't a server-relay concern.
+  `photo` field). No server involvement, never expires, works fully offline. **Not** gated by
+  `FEATURE_SHARE_IMAGES`.
 - **QR/link/sync-code shares** (`ShareModal.svelte`'s toggle): the photo is relayed
-  encrypted through the server instead (`sharedImage` field) — see subsystem 3 and
-  Invariant 11.
+  encrypted through the server instead (`sharedImage` field) — see subsystem 3 and Invariant 11.
 - These two field names (`photo` vs `sharedImage`) are deliberately never handled by the same
   code path — `photo` is decoded synchronously inside `normalizeIncomingBond()` (used by the
   invite *preview* too); `sharedImage` is only ever resolved inside `importJSON()`'s Case 2,
-  at actual commit time. If a payload somehow carried both, `importJSON()` prefers the
-  already-decoded inline `photo` and never touches the relay.
+  at actual commit time.
+
+### 6. Milestone Celebrations & Developer Tools Hub
+- **Milestone Celebrations**: [`MilestoneCelebrationController.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/celebration/MilestoneCelebrationController.svelte)
+  evaluates anniversary dates and triggers an interactive story card modal ([`MilestoneCelebrationModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/celebration/MilestoneCelebrationModal.svelte))
+  or celebratory toasts ([`MilestoneCelebrationToast.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/celebration/MilestoneCelebrationToast.svelte))
+  with confetti on milestone days. Controlled via per-bond and global `autoCelebrateMilestones` switches.
+- **Developer Tools Hub**: [`DevToolsHub.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/dev/DevToolsHub.svelte)
+  is activated when `FEATURE_DEV_MODE=true` (or `DEV_MODE=true`). Provides milestone simulation, time
+  machine offsets, instant test pushes, and live scheduler triggering.
+
+### 7. UI Primitives (Toast & ConfirmModal)
+- **Toast System**: Svelte 5 rune singleton store [`toast.svelte.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/stores/toast.svelte.ts)
+  with `showToast(message, variant, durationMs)` and `dismissToast(id)`. Rendered at `z-[60]` via
+  [`ToastContainer.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/ui/toast/ToastContainer.svelte).
+- **ConfirmModal**: [`ConfirmModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/ui/dialog/ConfirmModal.svelte)
+  provides non-blocking, accessible destructive/confirmation prompts with full iOS standalone PWA
+  compatibility, completely replacing `window.confirm()` and `window.alert()`.
 
 ---
 
@@ -520,11 +544,18 @@ pnpm image:release
 
 ## 💡 Quick Tips for Future Agents
 
+- **When displaying user notifications or alerts**: Use `showToast(message, variant)`
+  from [`src/lib/stores/toast.svelte.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/stores/toast.svelte.ts)
+  instead of `window.alert()`. For destructive confirmation prompts, use
+  [`ConfirmModal.svelte`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/components/ui/dialog/ConfirmModal.svelte)
+  instead of `window.confirm()` — browser dialogs freeze or fail under iOS standalone PWA conditions.
+- **When generating draft default dates** (such as new bond creation forms): use local `Date`
+  components (`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`),
+  never `.toISOString().split('T')[0]`, to avoid timezone day offsets.
 - **When adding a new settings control**: Decide which of `BondIdentityForm`,
-  `MilestonePrefsEditor`, `MilestonesList`, `PushNotificationPanel`, or `StorageBackupPanel`
-  (all in `src/lib/components/settings/`) it belongs in — rather than adding directly to
-  `SettingsSheet.svelte`, which is deliberately kept thin (orchestration only) after being split
-  out of a 1,212-line file. Add reactive state in [`src/lib/stores/profile.svelte.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/stores/profile.svelte.ts)
+  `MilestonePrefsEditor`, `MilestonesList`, `PushNotificationPanel`, `StorageBackupPanel`, or
+  `AboutPanel` (all in `src/lib/components/settings/`) it belongs in — rather than adding directly to
+  `SettingsSheet.svelte`. Add reactive state in [`src/lib/stores/profile.svelte.ts`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/stores/profile.svelte.ts)
   and update `CoupleProfile`/`Bond` types in [`src/lib/types/`](file:///c:/Users/Jaro/Documents/GitHub/OpenLove/src/lib/types/) as needed.
 - **When adding a control that could appear in both Settings and Onboarding** (a picker/selector):
   check `src/lib/components/shared/` first (`BondTypeSelector`, `ThemeSelector`,

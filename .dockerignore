@@ -18,5 +18,7 @@ Thumbs.db
 .vscode
 *.md
 !README.md
+!CHANGELOG.md
 scripts
 pnpm-workspace.yaml
+

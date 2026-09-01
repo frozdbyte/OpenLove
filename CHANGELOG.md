@@ -9,17 +9,32 @@ All notable changes to OpenLove are documented here. Format loosely follows
 
 ### Added
 
-- Sharing progress to social media as a story or post
-- "About" section in settings with info and changelog
-- Celebration Popup / Toast on special days
+- Sharing progress to social media as a story or post with multiple customizable themes
+- Multi-step wizard for creating new relationship or friendship bonds
+- In-app milestone celebrations with interactive story card popup and toasts on special days
+- General-purpose accessible toast notification system (`showToast`)
+- Reusable `ConfirmModal` dialog replacing browser native dialogs for reliable iOS PWA usage
+- "About" section in settings with app version, what's new, and links
+- Developer Mode and Dev Tools Hub for milestone testing and system diagnostics
+- Empty state illustrations and prompts when filtering milestone categories
 
 ### Changed
 
+- Reorganized settings into distinct bond-specific and app-wide sections with active bond name in the header
 - Tapping "Share" now opens a selection prompt between sharing the bond with a partner or sharing progress on social media
+- Day Milestones preference updated to an on/off switch with a 2-option tier segment (All Days vs Major Only)
+- Elevated toast notifications to layer above open sheets and modals
+- Moved celebration cards toggle into per-bond and global settings
 
 ### Fixed
 
+- iOS Safari image generation and canvas export when sharing social cards
 - The "pending changes" drawer is no longer rendered behind bond statistics
+- Date initialization for new bonds now uses local calendar components instead of UTC
+- Photo upload now validates against a 10 MB limit with inline feedback and saving indicators
+- Scoped delete bond action now explicitly states the bond name before deleting
+- Added accessible screen-reader labels to settings attention indicators
+
 
 ## [1.6.1] - 2026-08-31
 

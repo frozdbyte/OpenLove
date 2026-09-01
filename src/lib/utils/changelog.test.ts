@@ -49,4 +49,14 @@ describe('parseChangelog', () => {
 			sections: [{ heading: 'Added', items: ['Thing'] }]
 		});
 	});
+
+	it('handles CRLF line endings correctly', () => {
+		const crlfFixture = FIXTURE.replace(/\n/g, '\r\n');
+		const entries = parseChangelog(crlfFixture);
+		expect(entries.length).toBe(2);
+		expect(entries[0].version).toBe('1.1.0');
+		expect(entries[0].sections[0].heading).toBe('Added');
+		expect(entries[0].sections[0].items).toEqual(['Widget support', 'Gadget support']);
+	});
 });
+

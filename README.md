@@ -14,11 +14,18 @@ OpenLove allows couples to track how long they have been together with live coun
 
 - 🔒 **Zero-Knowledge Privacy**: Names, anniversary dates, and high-resolution photos are stored locally on your device via **IndexedDB**. The server never stores your private memories or names — even if you opt in to sharing a photo with a partner (below), it's encrypted on your device first, so the server only ever holds unreadable ciphertext, briefly.
 - 💖 **Multiple Bonds Support**: Track romantic relationships (💖) and friendships (🌿) with custom milestone preferences and separate profiles.
-- 🎨 **Multiple UI Themes & Extensible Architecture**:
+- 🎨 **7 Distinct UI Themes & Extensible Architecture**:
   - **Modern UI** *(Default)*: Clean, glassmorphic cards, glowing couple avatar, accent color palettes (*Rose, Lavender, Terracotta, Sage, Midnight*).
   - **Cover Image**: Full-bleed cover photo with clean top header and floating metric cards.
   - **Traditional UI**: Authentic, nostalgic replica of the classic "My Love" design with deep crimson header and stacked time breakdown.
-  - *Per-Bond Customization*: Each bond can independently set its own UI theme, color palette, dark mode, and seconds display.
+  - **Polaroid**: Nostalgic analog photo card aesthetic with tape accents.
+  - **Monograph**: Editorial typography and newspaper-inspired clean layout.
+  - **Botanical**: Organic earthy tones with delicate botanical embellishments.
+  - **Constellation**: Cosmic starry sky backdrop with radiant glowing metrics.
+  - *Per-Bond Customization*: Each bond can independently set its own UI theme, color palette, dark mode, and live seconds display.
+- 📸 **Social Media Story & Post Sharing**: Export customized 9:16 Story and 1:1 Post cards rendered directly on-device via HTML5 Canvas with custom themes, photo blur controls, and milestone badges to share on Instagram, TikTok, WhatsApp, and more.
+- 🎉 **In-App Milestone Celebrations**: Interactive celebration story card popup and toasts with confetti whenever you open the app on special milestone days (configurable per bond and globally).
+- ⚙️ **Guided Creation Wizard & Refined Settings**: 3-step bond creation wizard (Identity, Appearance, Review) with settings organized into bond-specific sections and app-wide configuration.
 - 🌙 **Dark Mode Support**: Light, Dark, or System mode with crisp contrast across all views.
 - 🏆 **Comprehensive Milestone Engine**:
   - **Months**: 1st through 11th month, 18 months, 30 months, etc.
@@ -80,7 +87,7 @@ Ensure you have **Node.js 22+** and **pnpm** installed.
 pnpm install
 
 # 2. Initialize database
-pnpm prisma db push
+pnpm prisma:push
 
 # 3. Start development server
 pnpm dev
@@ -100,6 +107,7 @@ The dev server will run at [http://localhost:5173](http://localhost:5173).
 | `PRIVATE_VAPID_KEY` | *(Auto-generated)* | Private VAPID key for Web Push |
 | `VAPID_SUBJECT` | *(auto)* | Contact address in push tokens. Must be a **public** domain — Apple rejects `.local`, `.lan`, `localhost` and bare IPs with `403 BadJwtToken`, delivering nothing to iOS. Leave unset for a safe fallback. |
 | `FEATURE_SHARE_IMAGES` | `true` | Enables the optional encrypted photo-sharing relay (see Features above). Set to `false` to disable the public upload endpoint entirely; JSON backups still include photos regardless, since those never touch the server. |
+| `FEATURE_DEV_MODE` | `false` | Enables the Developer Tools toolbar (milestone simulation, time travel offset, and push notification testing). |
 | `SHARED_IMAGE_TTL_HOURS` | `24` | How long an uploaded encrypted photo stays available for a partner to fetch, in hours. Unlimited fetches within this window, not one-time-use. |
 
 All feature toggles are read fresh on every request — flipping one and restarting the container takes effect immediately, no rebuild needed.
