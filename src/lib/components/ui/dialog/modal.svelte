@@ -35,6 +35,26 @@
 	let startY = 0;
 	let startTime = 0;
 	let closeTimeout: ReturnType<typeof setTimeout> | null = null;
+	let scrollContainer = $state<HTMLElement | null>(null);
+
+	// Reset scroll position to top whenever navigating between views or when modal opens
+	$effect(() => {
+		// Track view changes
+		void title;
+		void description;
+		void onBack;
+		void open;
+
+		if (scrollContainer) {
+			scrollContainer.scrollTop = 0;
+			scrollContainer.scrollTo?.({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+			requestAnimationFrame(() => {
+				if (scrollContainer) {
+					scrollContainer.scrollTop = 0;
+				}
+			});
+		}
+	});
 
 	// Watch `open` prop changes from parent
 	$effect(() => {
@@ -211,7 +231,10 @@
 		</div>
 
 		<!-- Body with independent scroll containment -->
-		<div class={cn("overflow-y-auto pt-4 space-y-4 max-h-[75vh] overscroll-contain", className)}>
+		<div
+			bind:this={scrollContainer}
+			class={cn("overflow-y-auto pt-4 space-y-4 max-h-[75vh] overscroll-contain", className)}
+		>
 			{@render children?.()}
 		</div>
 	</div>
