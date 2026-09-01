@@ -170,25 +170,6 @@
 		{/each}
 	</div>
 
-	<!-- Style picker -->
-	<div class="inline-flex p-1 rounded-2xl bg-muted/60 border border-border/60 gap-1">
-		{#each STYLE_OPTIONS as opt (opt.value)}
-			<button
-				type="button"
-				class="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer {style === opt.value
-					? 'bg-card text-foreground shadow-sm'
-					: 'text-muted-foreground hover:text-foreground'}"
-				onclick={() => (style = opt.value)}
-			>
-				<opt.icon class="h-3.5 w-3.5" />
-				<span>{opt.label}</span>
-			</button>
-		{/each}
-	</div>
-
-	<!-- Color override -- one-off for this card, never written back to the bond -->
-	<ColorPaletteSelector value={cardColor} onchange={(palette) => (cardColor = palette)} label="Card Color (this share only)" />
-
 	<!-- Preview -->
 	<div
 		class="relative w-full max-w-[220px] mx-auto rounded-2xl overflow-hidden border border-border shadow-lg bg-muted {format === 'story'
@@ -217,6 +198,26 @@
 			</button>
 		</p>
 	{/if}
+
+	<!-- Style / Theme picker -->
+	<div class="flex items-center gap-3 px-2">
+		{#each STYLE_OPTIONS as opt (opt.value)}
+			<button
+				type="button"
+				class="h-8 w-8 rounded-full border transition-transform cursor-pointer flex items-center justify-center {style === opt.value
+					? 'border-primary bg-primary text-primary-foreground ring-5 ring-primary/30 scale-110 shadow-xs'
+					: 'border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent'}"
+				onclick={() => (style = opt.value)}
+				title={opt.label}
+				aria-label={opt.label}
+			>
+				<opt.icon class="h-4 w-4" />
+			</button>
+		{/each}
+	</div>
+
+	<!-- Color override -- one-off for this card, never written back to the bond -->
+	<ColorPaletteSelector value={cardColor} onchange={(palette) => (cardColor = palette)} label="Card Color (this share only)" />
 
 	<!-- Actions -->
 	<div class="w-full space-y-2 pt-1">
