@@ -301,7 +301,7 @@
 
 <Modal
 	bind:open
-	title={view === 'invite' ? 'Invite Partner' : view === 'progress' ? 'Share Progress' : 'Share'}
+	title={view === 'invite' ? `Invite ${profileStore.activeBond.type == 'romantic' ? 'Partner' : 'Friend'}` : view === 'progress' ? 'Share Milestone' : 'Share'}
 	description={view === 'invite'
 		? `Share '${profileStore.activeBond.names}' with your partner or friend`
 		: view === 'progress'
@@ -321,7 +321,7 @@
 					<Camera class="h-4 w-4" />
 				</div>
 				<div class="min-w-0 flex-1">
-					<div class="text-sm font-semibold text-foreground">Share Progress</div>
+					<div class="text-sm font-semibold text-foreground">Share Milestone</div>
 					<div class="text-xs text-muted-foreground truncate">Post your milestone as an Instagram Story or square image</div>
 				</div>
 				<ChevronRight class="h-4 w-4 text-muted-foreground shrink-0" />
@@ -335,7 +335,13 @@
 					<QrCode class="h-4 w-4" />
 				</div>
 				<div class="min-w-0 flex-1">
-					<div class="text-sm font-semibold text-foreground">Invite Partner</div>
+					<div class="text-sm font-semibold text-foreground">
+						{#if profileStore.activeBond.type == 'romantic'}
+							Invite Partner
+						{:else}
+							Invite Friend
+						{/if}
+					</div>
 					<div class="text-xs text-muted-foreground truncate">Share a QR code or link to sync this bond</div>
 				</div>
 				<ChevronRight class="h-4 w-4 text-muted-foreground shrink-0" />

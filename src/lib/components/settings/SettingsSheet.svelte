@@ -337,7 +337,7 @@
 					<div class="space-y-0.5 min-w-0">
 						<div class="text-xs font-bold text-foreground flex items-center gap-1.5">
 							<QrCode class="h-4 w-4 text-primary shrink-0" />
-							<span>Have a partner invite or QR code?</span>
+							<span>Have an invite or QR code?</span>
 						</div>
 						<p class="text-[11px] text-muted-foreground truncate">Import partner or friend profile directly</p>
 					</div>
